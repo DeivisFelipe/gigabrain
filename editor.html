@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GigaBrain — Editor de Diagrama</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#141414; --ink-muted:#5A5A58; --border:#D7D7D2; --bg:#EFEFEC; --panel:#FFFFFF;
+    --human:#A63D5C; --agent:#4A4FD6; --data:#1E8A82; --output:#B8862E; --accent:#2563EB;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Arimo',Arial,sans-serif;
+    display:flex; flex-direction:column;
+  }
+  header{
+    padding:12px 20px; background:var(--panel); border-bottom:1px solid var(--border);
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+  }
+  header h1{ font-size:15px; margin:0; font-weight:700; }
+  header p{ font-size:12px; color:var(--ink-muted); margin:0; }
+  header .spacer{ flex:1; }
+  button{
+    font-family:'Arimo',Arial,sans-serif; font-size:12.5px; font-weight:600;
+    padding:7px 14px; border-radius:6px; border:1px solid var(--border);
+    background:#fff; color:var(--ink); cursor:pointer;
+  }
+  button:hover{ background:#F5F5F3; }
+  button.primary{ background:var(--accent); color:#fff; border-color:var(--accent); }
+  button.primary:hover{ background:#1d4fd1; }
+  label.toggle{ font-size:12.5px; display:flex; align-items:center; gap:6px; color:var(--ink-muted); }
+
+  main{ flex:1; display:flex; min-height:0; }
+  .canvas-wrap{ flex:1; overflow:auto; background:
+      linear-gradient(90deg, rgba(0,0,0,0.035) 1px, transparent 1px) 0 0/20px 20px,
+      linear-gradient(rgba(0,0,0,0.035) 1px, transparent 1px) 0 0/20px 20px, #fff;
+    display:flex; align-items:flex-start; justify-content:flex-start; padding:24px;
+  }
+  svg#stage{ background:#fff; box-shadow:0 0 0 1px var(--border); flex-shrink:0; }
+
+  aside{
+    width:330px; flex-shrink:0; background:var(--panel); border-left:1px solid var(--border);
+    padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:14px;
+  }
+  aside h2{ font-size:12.5px; margin:0 0 6px; text-transform:uppercase; letter-spacing:0.05em; color:var(--ink-muted); }
+  .selected-box{
+    border:1px solid var(--border); border-radius:8px; padding:10px 12px; font-size:12.5px;
+    background:#FAFAF9; min-height:18px;
+  }
+  .selected-box b{ display:block; margin-bottom:2px; }
+  .selected-box span{ font-family:'IBM Plex Mono',monospace; color:var(--ink-muted); }
+  textarea{
+    width:100%; flex:1; min-height:260px; resize:vertical;
+    font-family:'IBM Plex Mono',monospace; font-size:11px; line-height:1.5;
+    border:1px solid var(--border); border-radius:8px; padding:10px;
+    background:#FAFAF9; color:var(--ink);
+  }
+  .hint{ font-size:11.5px; color:var(--ink-muted); line-height:1.5; }
+  .legend-row{ display:flex; flex-wrap:wrap; gap:10px; font-size:11.5px; color:var(--ink-muted); }
+  .legend-row span{ display:inline-flex; align-items:center; gap:5px; }
+  .legend-row i{ width:9px; height:9px; border-radius:2px; display:inline-block; }
+
+  .icon-human{ color:var(--human); } .icon-agent{ color:var(--agent); }
+  .icon-data{ color:var(--data); } .icon-output{ color:var(--output); } .icon-neutral{ color:var(--ink-muted); }
+  .card-agent{ fill:#fff; stroke:var(--agent); stroke-width:1.4; stroke-dasharray:5 4; }
+  .card-data{ fill:#fff; stroke:var(--data); stroke-width:1.4; stroke-dasharray:5 4; }
+  .card-human{ fill:#fff; stroke:var(--human); stroke-width:1.4; stroke-dasharray:5 4; }
+  .card-output{ fill:#fff; stroke:var(--output); stroke-width:1.4; stroke-dasharray:5 4; }
+  .card-neutral{ fill:#fff; stroke:var(--ink-muted); stroke-width:1.4; stroke-dasharray:5 4; }
+  .container-box{ fill:none; stroke:var(--ink); stroke-width:1.25; stroke-dasharray:2 6; }
+  .container-label{ font-family:'Arimo',Arial,sans-serif; font-weight:700; font-size:11.5px; letter-spacing:0.06em; fill:var(--ink); }
+  .container-sub{ font-family:'Arimo',Arial,sans-serif; font-style:italic; font-size:10.5px; fill:var(--ink-muted); }
+  .title{ font-family:'Arimo',Arial,sans-serif; font-weight:700; font-size:14px; fill:var(--ink); text-anchor:middle; }
+  .title-sm{ font-family:'Arimo',Arial,sans-serif; font-weight:700; font-size:12.5px; fill:var(--ink); text-anchor:middle; }
+  .sub{ font-family:'Arimo',Arial,sans-serif; font-style:italic; font-size:10.5px; fill:var(--ink-muted); text-anchor:middle; }
+  .flow{ stroke:var(--ink); stroke-width:1.25; fill:none; }
+  .flow-muted{ stroke:var(--ink-muted); stroke-width:1.15; fill:none; stroke-dasharray:4 4; }
+  .edge-label{ font-family:'Arimo',Arial,sans-serif; font-size:10.5px; fill:var(--ink-muted); }
+  .tag{ font-family:'Arimo',Arial,sans-serif; font-style:italic; font-size:9.5px; fill:var(--ink-muted); }
+  .node-hit{ cursor:grab; }
+  .node-hit:active{ cursor:grabbing; }
+  .node-hit.dragging .node-box-outline{ stroke:var(--accent); stroke-width:1.5; }
+  .debug-box{ fill:none; stroke:#e0392f; stroke-width:1; stroke-dasharray:2 2; opacity:0; }
+  .show-boxes .debug-box{ opacity:0.55; }
+
+  .modal-overlay{
+    position:fixed; inset:0; background:rgba(20,20,20,0.45);
+    display:none; align-items:center; justify-content:center; z-index:50;
+  }
+  .modal-overlay.open{ display:flex; }
+  .modal{
+    background:#fff; border-radius:14px; width:min(560px, 92vw); max-height:88vh; overflow-y:auto;
+    box-shadow:0 24px 60px rgba(0,0,0,0.25); padding:28px 30px;
+  }
+  .modal h2{ font-size:17px; margin:0 0 4px; }
+  .modal .modal-id{ font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-muted); margin:0 0 22px; }
+  .field{ margin-bottom:16px; }
+  .field label{ display:block; font-size:12px; font-weight:700; color:var(--ink-muted); margin-bottom:5px; text-transform:uppercase; letter-spacing:0.03em; }
+  .field input[type=text], .field textarea, .field select{
+    width:100%; font-family:'Arimo',Arial,sans-serif; font-size:14px; padding:9px 10px;
+    border:1px solid var(--border); border-radius:7px; background:#FAFAF9; color:var(--ink);
+  }
+  .field textarea{ font-family:'Arimo',Arial,sans-serif; resize:vertical; min-height:56px; }
+  .field-row{ display:flex; gap:12px; }
+  .field-row .field{ flex:1; }
+  .field input[type=number]{
+    width:100%; font-family:'IBM Plex Mono',monospace; font-size:14px; padding:9px 10px;
+    border:1px solid var(--border); border-radius:7px; background:#FAFAF9; color:var(--ink);
+  }
+  .field-hint{ font-size:11px; color:var(--ink-muted); margin-top:4px; }
+  .modal-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:24px; gap:10px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div>
+    <h1>GigaBrain — Editor de Diagrama</h1>
+    <p>Arraste os ícones e cards. As flechas e os quadros tracejados se ajustam sozinhos.</p>
+  </div>
+  <div class="spacer"></div>
+  <label class="toggle"><input type="checkbox" id="toggleBoxes"> mostrar áreas de colisão</label>
+  <label class="toggle"><input type="checkbox" id="toggleSnap" checked> ímã de 5px</label>
+  <button id="btnReset">Restaurar posições</button>
+</header>
+
+<main>
+  <div class="canvas-wrap">
+    <svg id="stage" xmlns="http://www.w3.org/2000/svg" width="1200" height="940" viewBox="0 0 1200 940">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.4" markerHeight="6.4" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--ink)"/>
+        </marker>
+        <marker id="arrow-muted" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5.8" markerHeight="5.8" orient="auto-start-reverse">
+          <path d="M0,0 L10,5 L0,10 z" style="fill:var(--ink-muted)"/>
+        </marker>
+        <g id="ic-person" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="7.5" r="4"/><path d="M5,21 C5,14.5 19,14.5 19,21"/>
+        </g>
+        <g id="ic-agent" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="6" y="8" width="12" height="10" rx="3"/><line x1="12" y1="8" x2="12" y2="4"/>
+          <circle cx="12" cy="3" r="1.3" fill="currentColor" stroke="none"/>
+          <circle cx="9.4" cy="13" r="1" fill="currentColor" stroke="none"/>
+          <circle cx="14.6" cy="13" r="1" fill="currentColor" stroke="none"/>
+          <line x1="9" y1="16" x2="15" y2="16"/>
+        </g>
+        <g id="ic-db" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <ellipse cx="12" cy="6" rx="7" ry="3"/><path d="M5,6 L5,18"/><path d="M19,6 L19,18"/>
+          <path d="M5,12 A7,3 0 0 0 19,12"/><path d="M5,18 A7,3 0 0 0 19,18"/>
+        </g>
+        <g id="ic-doc" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M6,3 L15,3 L19,7 L19,21 L6,21 Z"/><path d="M15,3 L15,7 L19,7 Z"/>
+          <line x1="9" y1="11.5" x2="16" y2="11.5"/><line x1="9" y1="14.5" x2="16" y2="14.5"/><line x1="9" y1="17.5" x2="13" y2="17.5"/>
+        </g>
+        <g id="ic-code" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M9,7 L4,12 L9,17"/><path d="M15,7 L20,12 L15,17"/>
+        </g>
+        <g id="ic-globe" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="8"/><ellipse cx="12" cy="12" rx="3.2" ry="8"/><line x1="4" y1="12" x2="20" y2="12"/>
+        </g>
+      </defs>
+      <g id="layer-containers"></g>
+      <g id="layer-edges"></g>
+      <g id="layer-nodes"></g>
+    </svg>
+  </div>
+
+  <div class="modal-overlay" id="modalOverlay">
+    <div class="modal" id="modalBox">
+      <h2 id="modalTitle">Editar nó</h2>
+      <p class="modal-id" id="modalId">id</p>
+
+      <div class="field">
+        <label for="fTitle">Texto principal (uma linha por linha do título)</label>
+        <textarea id="fTitle" rows="2"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="fSub">Subtítulo (opcional)</label>
+        <input type="text" id="fSub">
+      </div>
+
+      <div class="field-row">
+        <div class="field">
+          <label for="fColor">Categoria (cor)</label>
+          <select id="fColor">
+            <option value="human">humano</option>
+            <option value="agent">agente</option>
+            <option value="data">base de conhecimento</option>
+            <option value="output">artefato de saída</option>
+            <option value="neutral">neutro / externo</option>
+          </select>
+        </div>
+        <div class="field" id="fIconWrap">
+          <label for="fIcon">Ícone</label>
+          <select id="fIcon">
+            <option value="person">pessoa</option>
+            <option value="agent">agente (robô)</option>
+            <option value="db">banco de dados</option>
+            <option value="doc">documento</option>
+            <option value="code">código</option>
+            <option value="globe">globo</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="field-row">
+        <div class="field"><label for="fX">X</label><input type="number" id="fX"></div>
+        <div class="field"><label for="fY">Y</label><input type="number" id="fY"></div>
+      </div>
+      <div class="field-row" id="fSizeWrap">
+        <div class="field"><label for="fW">Largura</label><input type="number" id="fW"></div>
+        <div class="field"><label for="fH">Altura</label><input type="number" id="fH"></div>
+      </div>
+      <p class="field-hint">Ícones usam X/Y como o centro do ícone. Cards (tracejados) usam X/Y como o canto superior esquerdo.</p>
+
+      <div class="modal-actions">
+        <button id="btnDelete" style="border-color:#e0392f; color:#e0392f;">Excluir nó</button>
+        <div style="display:flex; gap:10px;">
+          <button id="btnCancel">Cancelar</button>
+          <button id="btnSave" class="primary">Salvar</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <aside>
+    <div>
+      <h2>Selecionado</h2>
+      <div class="selected-box" id="selBox">nenhum — clique e arraste um nó</div>
+    </div>
+
+    <div class="legend-row">
+      <span><i style="background:var(--human)"></i>humano</span>
+      <span><i style="background:var(--agent)"></i>agente</span>
+      <span><i style="background:var(--data)"></i>RAG</span>
+      <span><i style="background:var(--output)"></i>saída</span>
+    </div>
+
+    <div style="display:flex; flex-direction:column; flex:1; min-height:0;">
+      <h2>Posições atuais (JSON)</h2>
+      <textarea id="jsonOut" readonly></textarea>
+      <p class="hint">Copie tudo (clique dentro, Ctrl+A, Ctrl+C) e cole na conversa — eu aplico essas posições de volta no <code>arquitetura.html</code>.</p>
+    </div>
+  </aside>
+</main>
+
+<script>
+const SVG_NS = 'http://www.w3.org/2000/svg';
+const stage = document.getElementById('stage');
+const layerContainers = document.getElementById('layer-containers');
+const layerEdges = document.getElementById('layer-edges');
+const layerNodes = document.getElementById('layer-nodes');
+const selBox = document.getElementById('selBox');
+const jsonOut = document.getElementById('jsonOut');
+const toggleBoxes = document.getElementById('toggleBoxes');
+const toggleSnap = document.getElementById('toggleSnap');
+
+// ---- data model -----------------------------------------------------
+// icon nodes: x,y = center. card nodes: x,y = top-left, w,h = size.
+const INITIAL_NODES = [
+  {id:'po',     type:'icon', icon:'person', color:'human',  x:205, y:125, group:'delib',   lines:['PO Real'], sub:'humano · dono do produto'},
+  {id:'gemeo',  type:'icon', icon:'agent',  color:'agent',  x:585, y:125, group:'delib',   lines:['Gêmeo Digital'], sub:'agente principal do PO'},
+  {id:'output', type:'icon', icon:'doc',    color:'output', x:980, y:125, group:'delib',   lines:['Requisito Definido'], sub:'alinhado ao mercado'},
+
+  {id:'lider',  type:'icon', icon:'agent',  color:'agent',  x:585, y:340, group:'consult', lines:['Líder do Conselho','Consultivo'], sub:'gerente · sempre existe'},
+  {id:'maindb', type:'icon', icon:'db',     color:'data',   x:950, y:340, group:'consult', lines:['Banco de Dados Principal'], sub:'RAG · estrutura & registro'},
+
+  {id:'esp1',   type:'icon', icon:'agent',  color:'agent',  x:245, y:500, group:'consult', lines:['Especialista · Pagamentos'], sub:'conhecimento do domínio'},
+  {id:'esp2',   type:'icon', icon:'agent',  color:'agent',  x:585, y:500, group:'consult', lines:['Especialista · Notificações'], sub:'conhecimento do domínio'},
+  {id:'esp3',   type:'card', color:'agent', x:780, y:480, w:280, h:86, group:'consult', lines:['+ Novo Especialista'], sub:'criado sob demanda'},
+
+  {id:'rag1',   type:'icon', icon:'db', color:'data', x:245, y:650, group:'consult', lines:['RAG · Pagamentos']},
+  {id:'rag2',   type:'icon', icon:'db', color:'data', x:585, y:650, group:'consult', lines:['RAG · Notificações']},
+  {id:'rag3',   type:'card', color:'data', x:780, y:630, w:280, h:70, group:'consult', lines:['RAG do especialista']},
+
+  {id:'code',   type:'icon', icon:'code',  color:'neutral', x:785,  y:830, group:'ext', lines:['Código-fonte'], sub:'estudo do sistema atual'},
+  {id:'web',    type:'icon', icon:'globe', color:'neutral', x:1050, y:830, group:'ext', lines:['Pesquisa na Web'], sub:'quando o domínio é novo'},
+];
+
+let EDGES = [
+  {from:'po', to:'gemeo', bidir:true, label:'perguntas & sugestões'},
+  {from:'gemeo', to:'output', label:'quando aprovam'},
+  {from:'gemeo', to:'lider', offsetPerp:-11, label:'consulta conhecimento', labelSide:-1},
+  {from:'lider', to:'gemeo', offsetPerp:-11, label:'resposta consolidada', labelSide:1},
+  {from:'lider', to:'maindb', bidir:true, label:'consulta & registro'},
+  {from:'lider', to:'esp1', bidir:true},
+  {from:'lider', to:'esp2', bidir:true},
+  {from:'lider', to:'esp3', muted:true, label:'cria se não existir no registro'},
+  {from:'esp1', to:'rag1'},
+  {from:'esp2', to:'rag2'},
+  {from:'esp3', to:'rag3', muted:true},
+  {from:'code', to:'rag3', muted:true},
+  {from:'web', to:'rag3', muted:true},
+];
+const INITIAL_EDGES = JSON.parse(JSON.stringify(EDGES));
+
+const GROUPS = {
+  delib:   {label:'CONSELHO DELIBERATIVO', sub:'decidem juntos quando o requisito está pronto'},
+  consult: {label:'CONSELHO CONSULTIVO', sub:'cresce ao longo do tempo · trabalho assíncrono'},
+};
+
+let nodes = JSON.parse(JSON.stringify(INITIAL_NODES));
+const GAP = 8;      // clearance between an arrow tip and the node it approaches
+const PAD = 10;     // padding added around a node's measured content for its collision box
+
+function nodeById(id){ return nodes.find(n => n.id === id); }
+
+// ---- geometry helpers -------------------------------------------------
+function boxExit(cx, cy, dx, dy, box){
+  let tx = Infinity, ty = Infinity;
+  if (dx > 0) tx = (box.right - cx) / dx;
+  else if (dx < 0) tx = (box.left - cx) / dx;
+  if (dy > 0) ty = (box.bottom - cy) / dy;
+  else if (dy < 0) ty = (box.top - cy) / dy;
+  const t = Math.max(0, Math.min(tx, ty));
+  return { x: cx + dx * t, y: cy + dy * t };
+}
+
+// ---- rendering ----------------------------------------------------------
+function clear(el){ while (el.firstChild) el.removeChild(el.firstChild); }
+function el(tag, attrs){
+  const e = document.createElementNS(SVG_NS, tag);
+  for (const k in attrs) e.setAttribute(k, attrs[k]);
+  return e;
+}
+function textEl(x, y, str, cls){
+  const t = el('text', {x, y, class:cls});
+  t.textContent = str;
+  return t;
+}
+
+function renderNode(node){
+  const g = el('g', {class:'node-hit', 'data-id':node.id});
+
+  if (node.type === 'icon'){
+    const s = 2.2, r = 12*s;
+    const use = el('use', {href:'#ic-'+node.icon, class:'icon-'+node.color,
+      transform:`translate(${node.x-r},${node.y-r}) scale(${s})`});
+    g.appendChild(use);
+    node.lines.forEach((line,i) => g.appendChild(textEl(node.x, node.y+40+i*16, line, node.lines.length>1?'title-sm':'title')));
+    if (node.sub) g.appendChild(textEl(node.x, node.y+40+node.lines.length*16, node.sub, 'sub'));
+  } else {
+    const rect = el('rect', {x:node.x, y:node.y, width:node.w, height:node.h, rx:4, class:'card-'+node.color});
+    g.appendChild(rect);
+    const blockH = node.lines.length*16 + (node.sub?16:0);
+    let ty = node.y + (node.h - blockH)/2 + 12;
+    const cx = node.x + node.w/2;
+    node.lines.forEach(line => { g.appendChild(textEl(cx, ty, line, 'title-sm')); ty += 16; });
+    if (node.sub) g.appendChild(textEl(cx, ty, node.sub, 'sub'));
+  }
+
+  layerNodes.appendChild(g);
+
+  const bb = g.getBBox();
+  if (node.type === 'card'){
+    node._center = {x:node.x+node.w/2, y:node.y+node.h/2};
+    node._box = {left:node.x, right:node.x+node.w, top:node.y, bottom:node.y+node.h};
+  } else {
+    node._center = {x:node.x, y:node.y};
+    node._box = {left:bb.x-PAD, right:bb.x+bb.width+PAD, top:bb.y-PAD, bottom:bb.y+bb.height+PAD};
+  }
+
+  const dbg = el('rect', {x:node._box.left, y:node._box.top,
+    width:node._box.right-node._box.left, height:node._box.bottom-node._box.top, class:'debug-box'});
+  g.appendChild(dbg);
+
+  g.addEventListener('pointerdown', e => { if (e.button === 0) startDrag(e, node, g); });
+  g.addEventListener('contextmenu', e => { e.preventDefault(); openModal(node); });
+  return g;
+}
+
+function renderEdge(edge){
+  const n1 = nodeById(edge.from), n2 = nodeById(edge.to);
+  if (!n1 || !n2) return;
+  let c1 = {...n1._center}, c2 = {...n2._center};
+
+  if (edge.offsetPerp){
+    const dx = c2.x-c1.x, dy = c2.y-c1.y;
+    const len = Math.hypot(dx,dy) || 1;
+    const px = -dy/len, py = dx/len;
+    c1 = {x:c1.x+px*edge.offsetPerp, y:c1.y+py*edge.offsetPerp};
+    c2 = {x:c2.x+px*edge.offsetPerp, y:c2.y+py*edge.offsetPerp};
+  }
+
+  const dx = c2.x-c1.x, dy = c2.y-c1.y;
+  const p1 = boxExit(c1.x, c1.y, dx, dy, n1._box);
+  const p2 = boxExit(c2.x, c2.y, -dx, -dy, n2._box);
+  // pull both ends back by GAP so the tip doesn't touch the node
+  const len2 = Math.hypot(p2.x-p1.x, p2.y-p1.y) || 1;
+  const ux = (p2.x-p1.x)/len2, uy = (p2.y-p1.y)/len2;
+  const start = {x:p1.x+ux*GAP, y:p1.y+uy*GAP};
+  const end   = {x:p2.x-ux*GAP, y:p2.y-uy*GAP};
+
+  const line = el('line', {
+    x1:start.x, y1:start.y, x2:end.x, y2:end.y,
+    class: edge.muted ? 'flow-muted' : 'flow',
+    'marker-end': `url(#${edge.muted?'arrow-muted':'arrow'})`,
+  });
+  if (edge.bidir) line.setAttribute('marker-start', `url(#${edge.muted?'arrow-muted':'arrow'})`);
+  layerEdges.appendChild(line);
+
+  if (edge.label){
+    const mx = (start.x+end.x)/2, my = (start.y+end.y)/2;
+    const len3 = Math.hypot(end.x-start.x, end.y-start.y) || 1;
+    const nx = -(end.y-start.y)/len3, ny = (end.x-start.x)/len3; // unit normal
+    const side = edge.labelSide || -1;
+    const off = 14 * side;
+    const cls = edge.muted ? 'tag' : 'edge-label';
+    const t = textEl(mx + nx*off, my + ny*off, edge.label, cls);
+    t.setAttribute('text-anchor', 'middle');
+    layerEdges.appendChild(t);
+  }
+}
+
+function renderGroup(groupId){
+  const info = GROUPS[groupId];
+  const members = nodes.filter(n => n.group === groupId);
+  if (!members.length) return;
+  const PADX = 40, PADTOP = 46, PADBOTTOM = 26;
+  let left=Infinity, right=-Infinity, top=Infinity, bottom=-Infinity;
+  members.forEach(n => {
+    left = Math.min(left, n._box.left); right = Math.max(right, n._box.right);
+    top = Math.min(top, n._box.top); bottom = Math.max(bottom, n._box.bottom);
+  });
+  left -= PADX; right += PADX; top -= PADTOP; bottom += PADBOTTOM;
+
+  layerContainers.appendChild(el('rect', {x:left, y:top, width:right-left, height:bottom-top, class:'container-box'}));
+  layerContainers.appendChild(textEl(left+22, top+24, info.label, 'container-label'));
+  layerContainers.appendChild(textEl(left+22, top+40, info.sub, 'container-sub'));
+}
+
+function renderAll(){
+  clear(layerNodes); clear(layerEdges); clear(layerContainers);
+  nodes.forEach(renderNode);
+  Object.keys(GROUPS).forEach(renderGroup);
+  EDGES.forEach(renderEdge);
+  updateJson();
+}
+
+// ---- drag handling --------------------------------------------------
+let dragging = null;
+function toSvgPoint(evt){
+  const pt = stage.createSVGPoint();
+  pt.x = evt.clientX; pt.y = evt.clientY;
+  return pt.matrixTransform(stage.getScreenCTM().inverse());
+}
+function startDrag(evt, node, g){
+  evt.preventDefault();
+  const p = toSvgPoint(evt);
+  dragging = { node, g, dx: node.x - p.x, dy: node.y - p.y };
+  g.classList.add('dragging');
+  g.setPointerCapture(evt.pointerId);
+  showSelected(node);
+}
+stage.addEventListener('pointermove', evt => {
+  if (!dragging) return;
+  const p = toSvgPoint(evt);
+  let nx = p.x + dragging.dx, ny = p.y + dragging.dy;
+  if (toggleSnap.checked){ nx = Math.round(nx/5)*5; ny = Math.round(ny/5)*5; }
+  dragging.node.x = nx; dragging.node.y = ny;
+  renderAll();
+  showSelected(dragging.node);
+  const gNow = layerNodes.querySelector(`[data-id="${dragging.node.id}"]`);
+  if (gNow) gNow.classList.add('dragging');
+});
+stage.addEventListener('pointerup', () => { dragging = null; });
+stage.addEventListener('pointerleave', () => { dragging = null; });
+
+function showSelected(node){
+  const posStr = node.type === 'card'
+    ? `x: ${node.x}, y: ${node.y}, w: ${node.w}, h: ${node.h}`
+    : `x: ${node.x}, y: ${node.y}`;
+  selBox.innerHTML = `<b>${node.lines[0]}</b><span>${node.id} — ${posStr}</span>`;
+}
+
+function updateJson(){
+  const out = {};
+  nodes.forEach(n => {
+    out[n.id] = n.type === 'card' ? {x:n.x, y:n.y, w:n.w, h:n.h} : {x:n.x, y:n.y};
+  });
+  jsonOut.value = JSON.stringify(out, null, 2);
+}
+
+document.getElementById('btnReset').addEventListener('click', () => {
+  nodes = JSON.parse(JSON.stringify(INITIAL_NODES));
+  EDGES = JSON.parse(JSON.stringify(INITIAL_EDGES));
+  renderAll();
+  selBox.textContent = 'nenhum — clique e arraste um nó';
+});
+toggleBoxes.addEventListener('change', () => {
+  stage.classList.toggle('show-boxes', toggleBoxes.checked);
+});
+
+// ---- edit modal (botão direito num nó) --------------------------------
+const modalOverlay = document.getElementById('modalOverlay');
+const modalTitle = document.getElementById('modalTitle');
+const modalId = document.getElementById('modalId');
+const fTitle = document.getElementById('fTitle');
+const fSub = document.getElementById('fSub');
+const fColor = document.getElementById('fColor');
+const fIcon = document.getElementById('fIcon');
+const fIconWrap = document.getElementById('fIconWrap');
+const fX = document.getElementById('fX');
+const fY = document.getElementById('fY');
+const fW = document.getElementById('fW');
+const fH = document.getElementById('fH');
+const fSizeWrap = document.getElementById('fSizeWrap');
+let editingNode = null;
+
+function openModal(node){
+  editingNode = node;
+  modalTitle.textContent = node.type === 'card' ? 'Editar card' : 'Editar ícone';
+  modalId.textContent = node.id;
+  fTitle.value = node.lines.join('\n');
+  fSub.value = node.sub || '';
+  fColor.value = node.color;
+  fIconWrap.style.display = node.type === 'icon' ? '' : 'none';
+  if (node.type === 'icon') fIcon.value = node.icon;
+  fX.value = node.x;
+  fY.value = node.y;
+  fSizeWrap.style.display = node.type === 'card' ? '' : 'none';
+  if (node.type === 'card'){ fW.value = node.w; fH.value = node.h; }
+  modalOverlay.classList.add('open');
+  fTitle.focus();
+}
+function closeModal(){
+  modalOverlay.classList.remove('open');
+  editingNode = null;
+}
+document.getElementById('btnCancel').addEventListener('click', closeModal);
+modalOverlay.addEventListener('click', e => { if (e.target === modalOverlay) closeModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && modalOverlay.classList.contains('open')) closeModal(); });
+
+document.getElementById('btnSave').addEventListener('click', () => {
+  if (!editingNode) return;
+  const lines = fTitle.value.split('\n').map(s => s.trim()).filter(Boolean);
+  editingNode.lines = lines.length ? lines : ['(sem título)'];
+  editingNode.sub = fSub.value.trim();
+  editingNode.color = fColor.value;
+  if (editingNode.type === 'icon') editingNode.icon = fIcon.value;
+  editingNode.x = Number(fX.value) || 0;
+  editingNode.y = Number(fY.value) || 0;
+  if (editingNode.type === 'card'){
+    editingNode.w = Number(fW.value) || 100;
+    editingNode.h = Number(fH.value) || 60;
+  }
+  closeModal();
+  renderAll();
+});
+
+document.getElementById('btnDelete').addEventListener('click', () => {
+  if (!editingNode) return;
+  if (!confirm(`Excluir "${editingNode.lines[0]}"? As flechas ligadas a ele também somem.`)) return;
+  const id = editingNode.id;
+  nodes = nodes.filter(n => n.id !== id);
+  EDGES = EDGES.filter(e => e.from !== id && e.to !== id);
+  closeModal();
+  renderAll();
+});
+
+renderAll();
+</script>
+</body>
+</html>
