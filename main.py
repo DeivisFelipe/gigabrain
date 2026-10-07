@@ -4,7 +4,7 @@ Comandos:
     python main.py conversar              conversa com o Gêmeo Digital (DeepSeek)
     python main.py conversar --simulado   idem, sem chamar API (respostas por regras)
     python main.py demo                   roda conversas prontas e popula dados-demo/
-    python main.py painel                 abre o painel visual no navegador
+    python main.py painel                 painel visual com todas as pastas de dados (seletor no topo)
     python main.py requisitos             lista os requisitos
     python main.py trilha R3              mostra como se chegou no R3
     python main.py especialistas          lista os especialistas
@@ -84,7 +84,9 @@ def cmd_demo(args) -> None:
 
 def cmd_painel(args) -> None:
     from gigabrain.painel.servidor import servir
-    servir(args.dados, args.porta, abrir_navegador=not args.sem_navegador)
+    # Sem --dados, o painel mostra todas as pastas de dados do projeto (com seletor).
+    raiz = args.dados if args.dados != "dados" else RAIZ
+    servir(raiz, args.porta, abrir_navegador=not args.sem_navegador)
 
 
 def cmd_requisitos(args) -> None:

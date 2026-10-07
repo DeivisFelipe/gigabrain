@@ -130,7 +130,7 @@ pip install -r requirements.txt
 
 # Sem chave de API: conversas prontas com o provedor simulado
 python main.py demo
-python main.py --dados dados-demo painel
+python main.py painel                   # um painel para todas as pastas (seletor no topo)
 
 # Conversa de verdade com a DeepSeek
 $env:DEEPSEEK_API_KEY="sua-chave"        # PowerShell

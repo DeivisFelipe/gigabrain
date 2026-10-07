@@ -27,6 +27,11 @@ nav { display: flex; gap: 4px; flex-wrap: wrap; }
 nav button { border: 0; background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
 nav button.ativo { background: var(--bg); color: var(--ink); font-weight: 600; }
 .stats { margin-left: auto; color: var(--muted); font-size: 13px; }
+#fonte { max-width: 340px; }
+.delta-bom { color: var(--ok); } .delta-ruim { color: var(--bad); }
+.cmp { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.cmp span { font-variant-numeric: tabular-nums; }
+tr.clicavel { cursor: pointer; } tr.clicavel:hover td { background: var(--bg); }
 main { padding: 20px; max-width: 1280px; margin: 0 auto; }
 .aba { display: none; } .aba.ativa { display: block; }
 .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
@@ -83,7 +88,9 @@ th { color: var(--muted); font-weight: 500; }
 <body>
 <header>
   <h1>GigaBrain <span>· painel</span></h1>
+  <select id="fonte" title="pasta de dados"></select>
   <nav>
+    <button data-aba="benchmark" id="btn-benchmark" hidden>Benchmark</button>
     <button data-aba="arquitetura" class="ativo">Arquitetura</button>
     <button data-aba="conversas">Conversas</button>
     <button data-aba="requisitos">Requisitos</button>
@@ -148,6 +155,25 @@ th { color: var(--muted); font-weight: 500; }
       <div class="card" id="esp-detalhe"><div class="vazio">Escolha um especialista.</div></div>
     </div>
   </section>
+  <!-- BENCHMARK: todos os projetos avaliados, conselho x agente único -->
+  <section class="aba" id="aba-benchmark">
+    <div class="card" style="margin-bottom:16px">
+      <div class="controles">
+        <h2 style="margin:0">Conselho × agente único</h2>
+        <select id="bm-provedor"></select>
+        <button class="b" id="bm-atualizar">Atualizar</button>
+        <span class="muted" id="bm-status"></span>
+      </div>
+      <div class="metricas" id="bm-medias"></div>
+    </div>
+    <div class="card" style="margin-bottom:16px">
+      <h2>F1 por projeto</h2>
+      <svg id="bm-grafico"></svg>
+      <div class="legenda"><span><i style="background:var(--lider)"></i>conselho</span><span><i style="background:var(--gemeo)"></i>agente único</span></div>
+    </div>
+    <div class="card"><h2>Todas as execuções <span class="muted">(clique numa linha para abrir a avaliação)</span></h2><div class="tabela-rolagem" id="bm-tabela"></div></div>
+  </section>
+
   <!-- AVALIAÇÃO: comparação com o gabarito do dataset -->
   <section class="aba" id="aba-avaliacao">
     <div class="card" style="margin-bottom:16px" id="av-topo"></div>
@@ -167,7 +193,8 @@ th { color: var(--muted); font-weight: 500; }
 
 <script>
 const $ = (s) => document.querySelector(s);
-const api = (url) => fetch(url).then((r) => r.json());
+let FONTE = "", FONTES = [];
+const api = (url) => fetch(url + (url.includes("?") ? "&" : "?") + "fonte=" + encodeURIComponent(FONTE)).then((r) => r.json());
 const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
 const hora = (m) => (m || "").slice(11, 19);
 const cor = (p) => ({ po: "var(--po)", gemeo: "var(--gemeo)", lider: "var(--lider)", sistema: "var(--sistema)", todos: "var(--sistema)", llm: "var(--llm)" }[p] || (p.startsWith("especialista") ? "var(--esp)" : "var(--muted)"));
@@ -192,11 +219,15 @@ function resumo(ev) {
 }
 
 // ------------------------------------------------------------------ abas
-document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
-  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("ativo", x === b));
-  document.querySelectorAll(".aba").forEach((a) => a.classList.toggle("ativa", a.id === "aba-" + b.dataset.aba));
-  ({ requisitos: carregarRequisitos, especialistas: carregarEspecialistas, conversas: carregarConversas, avaliacao: carregarAvaliacao }[b.dataset.aba] || (() => {}))();
-}));
+let ABA = "arquitetura";
+function abrirAba(nome) {
+  ABA = nome;
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("ativo", x.dataset.aba === nome));
+  document.querySelectorAll(".aba").forEach((a) => a.classList.toggle("ativa", a.id === "aba-" + nome));
+  ({ requisitos: carregarRequisitos, especialistas: carregarEspecialistas, conversas: carregarConversas,
+     avaliacao: carregarAvaliacao, benchmark: carregarBenchmark }[nome] || (() => {}))();
+}
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => abrirAba(b.dataset.aba)));
 
 let RESUMO = null;
 async function carregarResumo() {
@@ -494,8 +525,104 @@ function mostrarTabelaAvaliacao() {
 $("#av-filtro").addEventListener("change", mostrarTabelaAvaliacao);
 
 // ------------------------------------------------------------------ início
-carregarResumo().then(carregarArquitetura);
-api("/api/avaliacao").then((a) => { if (a.metricas) $("#btn-avaliacao").hidden = false; });
+// ------------------------------------------------------------------ benchmark
+let BENCH = null;
+const COR_MODO = { conselho: "var(--lider)", agente_unico: "var(--gemeo)" };
+const NOME_MODO = { conselho: "conselho", agente_unico: "agente único" };
+
+async function carregarBenchmark() {
+  BENCH = await fetch("/api/benchmark").then((r) => r.json());
+  const provs = [...new Set(BENCH.linhas.map((l) => l.provedor))].sort((a, b) => (a === "simulado") - (b === "simulado"));
+  const atual = $("#bm-provedor").value;
+  $("#bm-provedor").innerHTML = provs.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  if (provs.includes(atual)) $("#bm-provedor").value = atual;
+  mostrarBenchmark();
+}
+
+function mostrarBenchmark() {
+  const prov = $("#bm-provedor").value;
+  const linhas = BENCH.linhas.filter((l) => l.provedor === prov);
+  const porProjeto = {};
+  linhas.forEach((l) => { (porProjeto[l.projeto] ||= {})[l.modo] = l; });
+  // Média só sobre projetos que rodaram nos dois modos, para a comparação ser justa.
+  const pareados = Object.values(porProjeto).filter((p) => p.conselho && p.agente_unico);
+  const andamento = BENCH.em_andamento.filter((f) => f.includes("/" + prov + "/")).length;
+  $("#bm-status").textContent = `${pareados.length} projeto(s) com os dois modos` + (andamento ? ` · ${andamento} execução(ões) em andamento` : "");
+
+  const media = (modo, k) => { const v = pareados.map((p) => p[modo][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  $("#bm-medias").innerHTML = METRICAS.map(([k, nomeM]) => {
+    const c = media("conselho", k), a = media("agente_unico", k);
+    const d = c != null && a != null ? c - a : null;
+    const melhor = d == null || Math.abs(d) < 0.005 ? "" : (k === "sem_respaldo" ? d < 0 : d > 0) ? "delta-bom" : "delta-ruim";
+    return `<div class="metrica"><small>${nomeM}</small>
+      <div class="cmp"><span style="color:var(--lider)"><b>${pct(c)}</b></span><span style="color:var(--gemeo)">${pct(a)}</span></div>
+      <small class="${melhor}">${d == null ? "" : (d >= 0 ? "+" : "") + Math.round(d * 100) + " pts para o conselho"}</small></div>`;
+  }).join("");
+
+  // Gráfico: duas barras de F1 por projeto.
+  const projetos = Object.keys(porProjeto).sort(), alt = 30, esq = 170, larg = 1000;
+  let g = "";
+  [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
+    const x = esq + t * (larg - esq - 50);
+    g += `<line x1="${x}" y1="0" x2="${x}" y2="${projetos.length * alt}" stroke="var(--line)"/><text x="${x}" y="${projetos.length * alt + 16}" text-anchor="middle" style="font-size:11px;fill:var(--muted)">${t * 100}%</text>`;
+  });
+  projetos.forEach((nomeP, i) => {
+    const y = i * alt;
+    g += `<text x="${esq - 8}" y="${y + 19}" text-anchor="end" style="font-size:12px">${esc(nomeP)}</text>`;
+    ["conselho", "agente_unico"].forEach((m, j) => {
+      const l = porProjeto[nomeP][m]; if (!l) return;
+      const w = (l.f1 || 0) * (larg - esq - 50);
+      g += `<rect x="${esq}" y="${y + 4 + j * 11}" width="${w}" height="10" rx="2" fill="${COR_MODO[m]}" style="cursor:pointer" onclick="abrirFonte('${l.fonte}')"><title>${esc(nomeP)} · ${NOME_MODO[m]} · F1 ${pct(l.f1)}</title></rect>`;
+      g += `<text x="${esq + w + 4}" y="${y + 13 + j * 11}" style="font-size:10px;fill:var(--muted)">${pct(l.f1)}</text>`;
+    });
+  });
+  $("#bm-grafico").setAttribute("viewBox", `0 0 ${larg} ${projetos.length * alt + 24}`);
+  $("#bm-grafico").innerHTML = projetos.length ? g : `<text x="500" y="20" text-anchor="middle" style="fill:var(--muted)">nenhuma avaliação ainda</text>`;
+
+  const cols = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"];
+  const fmt = (k, v) => v == null ? "–" : ["previstos", "gabarito", "acertos"].includes(k) ? v : pct(v);
+  $("#bm-tabela").innerHTML = `<table><tr><th>projeto</th><th>modo</th>${cols.map((c) => `<th>${c.replace("_", " ")}</th>`).join("")}</tr>` +
+    projetos.flatMap((nomeP) => ["conselho", "agente_unico"].map((m) => porProjeto[nomeP][m]).filter(Boolean)).map((l) =>
+      `<tr class="clicavel" onclick="abrirFonte('${l.fonte}')"><td>${esc(l.projeto)}</td><td style="color:${COR_MODO[l.modo]}">${NOME_MODO[l.modo] || l.modo}</td>${cols.map((c) => `<td>${fmt(c, l[c])}</td>`).join("")}</tr>`).join("") + "</table>";
+}
+$("#bm-provedor").addEventListener("change", mostrarBenchmark);
+$("#bm-atualizar").addEventListener("click", carregarBenchmark);
+
+// ------------------------------------------------------------------ pastas de dados
+async function carregarFontes() {
+  FONTES = await fetch("/api/fontes").then((r) => r.json());
+  const grupos = {};
+  FONTES.forEach((f) => (grupos[f.grupo] ||= []).push(f));
+  $("#fonte").innerHTML = Object.entries(grupos).map(([g, fs]) => `<optgroup label="${esc(g)}">${fs.map((f) =>
+    `<option value="${esc(f.id)}">${esc(f.rotulo)}${f.avaliacao ? " ✓" : ""}</option>`).join("")}</optgroup>`).join("");
+  $("#btn-benchmark").hidden = !FONTES.some((f) => f.id.startsWith("dados-avaliacao/"));
+}
+
+async function definirFonte(id) {
+  FONTE = id;
+  $("#fonte").value = id;
+  try { localStorage.setItem("gigabrain-fonte", id); } catch (e) {}
+  CONV_SEL = REQ_SEL = ESP_SEL = null;
+  ["#conv-eventos", "#req-detalhe", "#esp-detalhe"].forEach((s) => { $(s).className = "vazio"; $(s).innerHTML = "Escolha um item."; });
+  const temAvaliacao = FONTES.find((f) => f.id === id)?.avaliacao;
+  $("#btn-avaliacao").hidden = !temAvaliacao;
+  await carregarResumo();
+  await carregarArquitetura();
+  if (ABA === "avaliacao" && !temAvaliacao) return abrirAba("arquitetura");
+  if (ABA !== "arquitetura" && ABA !== "benchmark") abrirAba(ABA);
+}
+
+function abrirFonte(id) { definirFonte(id).then(() => abrirAba("avaliacao")); }
+$("#fonte").addEventListener("change", () => definirFonte($("#fonte").value));
+
+(async () => {
+  await carregarFontes();
+  if (!FONTES.length) { $("#stats").textContent = "Nenhuma pasta de dados encontrada. Rode: python main.py demo"; return; }
+  let salva = null;
+  try { salva = localStorage.getItem("gigabrain-fonte"); } catch (e) {}
+  const padrao = FONTES.find((f) => f.id === salva) || FONTES.find((f) => f.id === "dados") || FONTES[0];
+  await definirFonte(padrao.id);
+})();
 </script>
 </body>
 </html>
