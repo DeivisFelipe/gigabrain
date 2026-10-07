@@ -64,8 +64,9 @@ seu arquivo de conhecimento. Para cada candidato decida:
 - "manter":   está correto e tem respaldo nas falas citadas
 - "corrigir": tem respaldo, mas o texto, a classe (FR/NFR) ou o subtipo precisam de ajuste
 - "remover":  é duplicado de outro candidato (diga qual) ou não tem respaldo nas falas
-Não invente requisitos e não reescreva além do necessário: mantenha as palavras originais
-e o idioma da transcrição. Aponte também ligações entre candidatos do seu tema
+Não invente requisitos e não reescreva além do necessário: mantenha as palavras originais.
+IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza; traduzir
+não é uma correção. Corrija o texto só se ele distorce o que foi dito. Aponte também ligações entre candidatos do seu tema
 (depende_de, conflita_com, refina), usando os índices.
 
 Responda com um único objeto JSON:
@@ -149,12 +150,13 @@ class Especialista(Agente):
 
     # ------------------------------------------------------------------ revisão de transcrição
 
-    def revisar(self, candidatos: list[dict], falas: dict[str, str]) -> dict:
+    def revisar(self, candidatos: list[dict], falas: dict[str, str], idioma: str = "en") -> dict:
         """Revisa candidatos do seu tema. Devolve {"candidatos": [...ajustados], "ligacoes": [...]}."""
         self.sincronizar()
         citadas = {t: falas[t] for c in candidatos for t in c["turnos"] if t in falas}
         resposta = self.chamar_llm("especialista_revisar", PROMPT_REVISAR, [{"role": "user", "content": como_json({
             "tema": self.tema,
+            "idioma": idioma,
             "conhecimento": self.ler_conhecimento(),
             "candidatos": [{k: c[k] for k in ("indice", "texto", "classe", "subtipo", "turnos")} for c in candidatos],
             "falas": citadas,

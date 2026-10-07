@@ -82,8 +82,11 @@ Regras:
 - Um requisito por obrigação distinta. Uma fala pode conter mais de um requisito.
 - O Analyst só conduz e confirma ("Just to confirm, ..."): não duplique o que ele repete.
 - Ignore falas fora do tópico (problemas de conexão, microfone, risadas).
-- Escreva cada requisito no MESMO idioma da transcrição, como frase declarativa, mantendo
-  as palavras originais e tirando só hesitações (uh, erm, you know, i mean) e repetições.
+- IDIOMA: escreva "texto" no idioma do campo "idioma" (en = inglês). NUNCA traduza,
+  mesmo que estas instruções estejam em português. Copie as palavras do stakeholder,
+  tirando só hesitações (uh, erm, you know, i mean), repetições ("the the") e o início
+  coloquial ("I'd like", "we'd need to be able to"). Ex.: fala "Uh, I'd like the the
+  system to export reports to PDF" -> texto "The system shall export reports to PDF".
 - "classe": "FR" (funcional) ou "NFR" (não funcional).
 - "subtipo" só para NFR: PE (desempenho), SE (segurança), US (usabilidade),
   LF (aparência), A (disponibilidade), SA (safety), PO (portabilidade),
@@ -147,6 +150,7 @@ class GemeoDigital(Agente):
             bloco = turnos[max(0, inicio - 2):inicio + TURNOS_POR_BLOCO]
             resposta = self.chamar_llm("gemeo_extrair", PROMPT_EXTRAIR, [{"role": "user", "content": como_json({
                 "projeto": projeto["titulo"],
+                "idioma": projeto.get("idioma", "en"),
                 "extrair_a_partir_de": turnos[inicio]["id"],
                 "transcricao": "\n".join(f"[{t['id']}] {t['falante']}: {t['texto']}" for t in bloco),
             })}])

@@ -42,7 +42,7 @@ def processar(ctx: Contexto, projeto: dict, com_conselho: bool = True) -> dict:
     ligacoes = []
     if com_conselho:
         falas = {t["id"]: t["texto"] for t in projeto["turnos"]}
-        revisao = Lider(ctx).revisar_extracao(candidatos, falas)
+        revisao = Lider(ctx).revisar_extracao(candidatos, falas, projeto.get("idioma", "en"))
         candidatos, ligacoes = revisao["candidatos"], revisao["ligacoes"]
 
     # Salva cada requisito e guarda o mapa índice do candidato -> R<n>.

@@ -16,6 +16,7 @@ from __future__ import annotations
 import csv
 import json
 import os
+import re
 
 PASTA_PADRAO = os.environ.get(
     "GIGABRAIN_ENTRADAS",
@@ -75,12 +76,25 @@ def carregar_projeto(projeto: str, pasta: str = PASTA_PADRAO) -> dict:
         if r.get("trace", {}).get("reachable", True)
     ]
     return {
+        "idioma": detectar_idioma(transcricao),
         "id": gabarito["doc_id"],
         "pasta": projeto,
         "titulo": gabarito.get("doc_title", projeto),
         "turnos": turnos,
         "gabarito": requisitos,
     }
+
+
+PALAVRAS_EN = {"the", "and", "we", "to", "of", "is", "that", "it", "should", "would", "need", "what", "you"}
+PALAVRAS_PT = {"o", "de", "que", "e", "do", "da", "em", "um", "para", "precisa", "deve", "você", "não"}
+
+
+def detectar_idioma(texto: str) -> str:
+    """"en" ou "pt", contando palavras muito comuns de cada idioma."""
+    palavras = re.findall(r"[a-zà-ú]+", texto.lower())
+    en = sum(p in PALAVRAS_EN for p in palavras)
+    pt = sum(p in PALAVRAS_PT for p in palavras)
+    return "pt" if pt > en else "en"
 
 
 def transcricao_com_turnos(projeto: dict) -> str:

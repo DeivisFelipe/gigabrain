@@ -81,7 +81,7 @@ class Lider(Agente):
         self.enviar(GEMEO, "resposta_consolidada", consolidada)
         return consolidada
 
-    def revisar_extracao(self, candidatos: list[dict], falas: dict[str, str]) -> dict:
+    def revisar_extracao(self, candidatos: list[dict], falas: dict[str, str], idioma: str = "en") -> dict:
         """Distribui os candidatos por tema e pede a revisão de cada especialista."""
         por_tema: dict[str, list[dict]] = {}
         for c in candidatos:
@@ -99,7 +99,7 @@ class Lider(Agente):
                 revisados += grupo
                 continue
             self.enviar(especialista(esp.id), "consulta", {"pergunta": f"revisar {len(grupo)} candidato(s)", "tema": esp.tema})
-            resultado = esp.revisar(grupo, falas)
+            resultado = esp.revisar(grupo, falas, idioma)
             revisados += resultado["candidatos"]
             ligacoes += resultado["ligacoes"]
         revisados.sort(key=lambda c: c["indice"])
