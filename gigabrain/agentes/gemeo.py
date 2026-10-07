@@ -80,8 +80,12 @@ anteriores como contexto e os requisitos que você já salvou nesta reunião. Ra
 requisitos de software ditos NESTA fala: pode ser nenhum, um ou mais.
 
 Regras:
-- Um requisito por obrigação distinta. Fala sem requisito (contexto, cumprimento,
-  problema de conexão, confirmação) -> lista vazia.
+- Granularidade: um requisito por funcionalidade ou regra dita na fala, do jeito que o
+  stakeholder a formulou. NÃO quebre uma frase em vários requisitos: uma lista de campos,
+  opções ou exemplos da mesma funcionalidade é UM requisito só. Frases diferentes com
+  obrigações diferentes são requisitos diferentes.
+- Fala sem requisito -> lista vazia: apresentação geral do produto (o que ele é, para que
+  serve, licença), cumprimentos, problemas de conexão, confirmações.
 - Não rascunhe de novo algo que já está em "ja_salvos". Um detalhe novo sobre o mesmo
   assunto é outro requisito.
 - IDIOMA: escreva "texto" no idioma do campo "idioma" (en = inglês). NUNCA traduza,
@@ -122,8 +126,8 @@ seu rascunho e fez uma recomendação. Decida:
 - salvar o requisito (aplicando ou não as correções e ligações sugeridas), ou
 - descartá-lo (por exemplo, se repete um requisito já salvo ou não tem respaldo nas falas).
 Siga a recomendação quando ela se apoia nas falas; rejeite-a quando contraria o que foi dito.
-Só descarte por duplicado se o rascunho diz exatamente a mesma obrigação de um requisito
-salvo; se acrescenta ou detalha algo, salve e ligue com "refina".
+Descarte por duplicado quando o rascunho diz o mesmo que um requisito salvo, mesmo com
+outras palavras; salve e ligue com "refina" só quando ele traz informação nova.
 IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza.
 
 Responda com um único objeto JSON:

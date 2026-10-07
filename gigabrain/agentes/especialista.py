@@ -76,13 +76,15 @@ parecidos de outros temas. Você só RECOMENDA; quem decide é o Gêmeo Digital.
 Recomende uma ação:
 - "manter":    correto e com respaldo nas falas
 - "corrigir":  tem respaldo, mas o texto, a classe (FR/NFR) ou o subtipo precisam de ajuste
-- "descartar": só em dois casos:
-    1. DUPLICADO: diz a MESMA obrigação que um requisito já salvo, sem nada novo
-       (diga qual em "duplicado_de"). Se o rascunho acrescenta, restringe, detalha ou
-       exemplifica algo de um requisito salvo, ele NÃO é duplicado: recomende "manter"
-       com a ligação "refina" para o salvo.
+- "descartar": em dois casos:
+    1. DUPLICADO: diz o mesmo que um requisito já salvo, mesmo com outras palavras
+       ("must" x "needs to", "the user shall" x "the system shall allow the user to")
+       ou com "como eu disse antes" na frente (diga qual em "duplicado_de").
+       Compare o CONTEÚDO: se não há nenhuma informação nova, é duplicado.
     2. SEM RESPALDO: as falas citadas não dizem isso.
-Na dúvida, recomende "manter". Aponte ligações com requisitos já salvos ("alvo": "R3"):
+Só é "refina" (recomende "manter" com a ligação) quando o rascunho traz informação
+NOVA sobre um requisito salvo: um campo, uma condição, um limite ou um caso a mais.
+Se não há duplicado nem informação nova a ligar, recomende "manter". Aponte ligações com requisitos já salvos ("alvo": "R3"):
 depende_de, conflita_com, refina. Mudança de um requisito salvo (outro valor, outra regra)
 é "conflita_com" ou, se o PO claramente trocou a regra, "substitui".
 Não invente requisitos e mantenha as palavras originais.
