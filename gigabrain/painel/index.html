@@ -4,427 +4,860 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GigaBrain · Painel</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 :root {
-  --bg: #f6f7f9; --card: #ffffff; --ink: #1d2433; --muted: #6b7385; --line: #dfe3ea;
-  --po: #475569; --gemeo: #0891b2; --lider: #9333ea; --esp: #d97706; --sistema: #64748b; --llm: #94a3b8;
-  --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --info: #2563eb;
+  --bg: #f4f5f8; --surface: #ffffff; --surface-2: #f8f9fb; --ink: #151a24; --ink-2: #3b4352; --muted: #6b7385;
+  --line: #e3e6ec; --line-2: #d3d8e1; --focus: #3b82f6;
+  --po: #475569; --gemeo: #0e9fb8; --lider: #7c3aed; --esp: #d97706; --sistema: #64748b; --llm: #94a3b8;
+  --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7; --bad: #b91c1c; --bad-bg: #fee2e2;
+  --info: #2563eb; --info-bg: #dbeafe; --neutral-bg: #eef0f4;
   --add: #dcfce7; --del: #fee2e2;
+  --radius: 12px; --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
-    --bg: #0f131a; --card: #171c25; --ink: #e6e9ef; --muted: #8b93a5; --line: #2a3140;
-    --po: #cbd5e1; --gemeo: #22d3ee; --lider: #c084fc; --esp: #fbbf24; --sistema: #94a3b8; --llm: #64748b;
-    --add: #14361f; --del: #3d1a1a;
+    --bg: #0c0f15; --surface: #141922; --surface-2: #10141c; --ink: #eef1f6; --ink-2: #c3c9d4; --muted: #8890a0;
+    --line: #232a36; --line-2: #2f3846; --focus: #60a5fa;
+    --po: #cbd5e1; --gemeo: #22d3ee; --lider: #a78bfa; --esp: #fbbf24; --sistema: #94a3b8; --llm: #64748b;
+    --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #36290b; --bad: #f87171; --bad-bg: #3a1717;
+    --info: #60a5fa; --info-bg: #142a4a; --neutral-bg: #1c222d;
+    --add: #12301f; --del: #3a1717; --shadow: none;
   }
 }
+:root[data-theme="dark"] {
+  --bg: #0c0f15; --surface: #141922; --surface-2: #10141c; --ink: #eef1f6; --ink-2: #c3c9d4; --muted: #8890a0;
+  --line: #232a36; --line-2: #2f3846; --focus: #60a5fa;
+  --po: #cbd5e1; --gemeo: #22d3ee; --lider: #a78bfa; --esp: #fbbf24; --sistema: #94a3b8; --llm: #64748b;
+  --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #36290b; --bad: #f87171; --bad-bg: #3a1717;
+  --info: #60a5fa; --info-bg: #142a4a; --neutral-bg: #1c222d;
+  --add: #12301f; --del: #3a1717; --shadow: none;
+}
+
 * { box-sizing: border-box; }
-body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
-header { display: flex; align-items: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
-header h1 { font-size: 17px; margin: 0; }
-header h1 span { color: var(--muted); font-weight: 400; }
-nav { display: flex; gap: 4px; flex-wrap: wrap; }
-nav button { border: 0; background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
-nav button.ativo { background: var(--bg); color: var(--ink); font-weight: 600; }
-.stats { margin-left: auto; color: var(--muted); font-size: 13px; }
-#fonte { max-width: 340px; }
-.delta-bom { color: var(--ok); } .delta-ruim { color: var(--bad); }
-.cmp { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
-.cmp span { font-variant-numeric: tabular-nums; }
-tr.clicavel { cursor: pointer; } tr.clicavel:hover td { background: var(--bg); }
-main { padding: 20px; max-width: 1280px; margin: 0 auto; }
-.aba { display: none; } .aba.ativa { display: block; }
-.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
-.grade { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
-@media (max-width: 800px) { .grade { grid-template-columns: 1fr; } main { padding: 16px; } }
-.lista { display: flex; flex-direction: column; gap: 6px; max-height: 75vh; overflow: auto; }
-.item { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--card); }
-.item:hover { border-color: var(--muted); }
-.item.sel { outline: 2px solid var(--info); border-color: transparent; }
-.item small { color: var(--muted); display: block; }
-.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid currentColor; }
-.st-ativo { color: var(--ok); } .st-em_revisao { color: var(--warn); }
-.st-substituido, .st-dividido, .st-unido { color: var(--muted); }
-h2 { font-size: 15px; margin: 0 0 12px; } h3 { font-size: 14px; margin: 16px 0 6px; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; }
+button, select, input { font: inherit; color: inherit; }
+a { color: var(--info); }
+
+/* ------------------------------------------------ layout */
+.app { display: grid; grid-template-columns: 264px 1fr; min-height: 100vh; }
+aside { background: var(--surface); border-right: 1px solid var(--line); padding: 20px 16px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; overflow: auto; }
+.marca { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.marca .logo { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--lider), var(--gemeo)); display: grid; place-items: center; color: #fff; font-weight: 700; }
+.marca b { font-size: 17px; display: block; line-height: 1.2; }
+.marca small { color: var(--muted); font-size: 12px; }
+.rotulo { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 6px; margin-bottom: 6px; }
+.menu { display: flex; flex-direction: column; gap: 2px; }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 9px 10px; border-radius: 8px; cursor: pointer; color: var(--ink-2); text-align: left; font-weight: 500; }
+.menu button svg { width: 18px; height: 18px; flex: none; opacity: .75; }
+.menu button:hover { background: var(--surface-2); color: var(--ink); }
+.menu button.ativo { background: var(--info-bg); color: var(--info); }
+.menu button.ativo svg { opacity: 1; }
+.menu button[hidden] { display: none; }
+.lateral-rodape { margin-top: auto; font-size: 12px; color: var(--muted); padding: 0 6px; }
+.lateral-rodape div { display: flex; justify-content: space-between; padding: 3px 0; }
+.lateral-rodape b { color: var(--ink-2); font-weight: 600; }
+main { padding: 28px 32px 48px; min-width: 0; }
+.pagina { display: none; max-width: 1360px; margin: 0 auto; }
+.pagina.ativa { display: block; }
+.cabeca { margin-bottom: 20px; }
+.cabeca h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -.01em; }
+.cabeca p { margin: 0; color: var(--muted); max-width: 820px; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; gap: 12px; }
+  .menu { flex-direction: row; flex-wrap: wrap; }
+  .menu button { width: auto; }
+  .lateral-rodape { display: none; }
+  main { padding: 20px 16px 40px; }
+}
+
+/* ------------------------------------------------ componentes */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card-pad { padding: 18px 20px; }
+.card h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.card-cabeca { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.card-cabeca .dica { color: var(--muted); font-size: 13px; }
+.pilha { display: flex; flex-direction: column; gap: 18px; }
+.duas { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .duas { grid-template-columns: 1fr; } }
+.campo { height: 36px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); }
+.campo:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.botao { height: 36px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.botao:hover { background: var(--surface-2); }
+.botao.primario { background: var(--info); border-color: var(--info); color: #fff; }
+.botao.primario:hover { filter: brightness(1.08); }
+.segmentos { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; padding: 2px; background: var(--surface-2); flex-wrap: wrap; }
+.segmentos button { border: 0; background: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; }
+.segmentos button.ativo { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.chave { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.chave input { width: 16px; height: 16px; accent-color: var(--info); }
+.selo { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--neutral-bg); color: var(--ink-2); }
+.selo.ok { background: var(--ok-bg); color: var(--ok); } .selo.warn { background: var(--warn-bg); color: var(--warn); }
+.selo.bad { background: var(--bad-bg); color: var(--bad); } .selo.info { background: var(--info-bg); color: var(--info); }
+.tema { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; background: var(--neutral-bg); color: var(--ink-2); margin: 2px 4px 2px 0; }
 .muted { color: var(--muted); }
-.controles { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
-select, button.b { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
-button.b:hover { border-color: var(--muted); }
-svg { width: 100%; height: auto; display: block; }
-svg text { fill: var(--ink); font: 13px system-ui, sans-serif; }
-.legenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
-.legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
-.msg-atual { margin-top: 12px; min-height: 120px; }
-.evento { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
-.evento .hora { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
-.quem { font-weight: 600; } .tipo { color: var(--muted); font-size: 12px; margin-left: 6px; }
-details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
-pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; font-size: 12px; margin: 6px 0 0; white-space: pre-wrap; }
-.md h1 { font-size: 16px; } .md h2 { font-size: 14px; margin: 14px 0 4px; } .md blockquote { margin: 0; color: var(--muted); }
-.md ul { margin: 4px 0; padding-left: 20px; }
-.diff div { font: 12px ui-monospace, Consolas, monospace; padding: 1px 6px; white-space: pre-wrap; }
-.diff .add { background: var(--add); } .diff .del { background: var(--del); text-decoration: line-through; }
-.trilha { border-left: 2px solid var(--line); margin-left: 6px; padding-left: 14px; }
-.trilha div { position: relative; padding: 4px 0; }
-.trilha div::before { content: ""; position: absolute; left: -20px; top: 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--info); }
-.trilha div.lig::before { background: var(--lider); }
-.vazio { padding: 40px; text-align: center; color: var(--muted); }
-.versoes { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
-.versoes button { font-size: 12px; }
-.versoes button.sel { outline: 2px solid var(--info); }
-.metricas { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
-.metrica { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
-.metrica b { font-size: 22px; display: block; font-variant-numeric: tabular-nums; }
-.metrica small { color: var(--muted); }
-.barra { height: 6px; border-radius: 3px; background: var(--line); margin: 6px 0 4px; overflow: hidden; }
-.barra i { display: block; height: 100%; background: var(--info); }
-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
-th { color: var(--muted); font-weight: 500; }
-.ok { color: var(--ok); } .erro { color: var(--bad); }
+.vazio { padding: 48px 24px; text-align: center; color: var(--muted); }
+.vazio b { display: block; color: var(--ink-2); font-size: 15px; margin-bottom: 4px; }
+
+/* listas mestre/detalhe */
+.lista { display: flex; flex-direction: column; max-height: calc(100vh - 230px); overflow: auto; }
+.lista .item { padding: 12px 18px; border-bottom: 1px solid var(--line); cursor: pointer; display: block; }
+.lista .item:last-child { border-bottom: 0; }
+.lista .item:hover { background: var(--surface-2); }
+.lista .item.sel { background: var(--info-bg); box-shadow: inset 3px 0 0 var(--info); }
+.item-topo { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.item-titulo { font-weight: 600; }
+.item-texto { color: var(--ink-2); font-size: 14px; margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.item-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.busca { padding: 12px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; flex-wrap: wrap; }
+.busca .campo { flex: 1; min-width: 140px; }
+
+/* detalhe */
+.detalhe { padding: 22px 24px; }
+.detalhe h3 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+.titulo-grande { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin: 6px 0; }
+.bloco { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+ul.limpa { list-style: none; padding: 0; margin: 0; }
+ul.limpa li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+ul.limpa li:last-child { border-bottom: 0; }
+.link-req { color: var(--info); cursor: pointer; font-weight: 600; text-decoration: none; }
+.link-req:hover { text-decoration: underline; }
+
+/* linha do tempo */
+.trilha { position: relative; padding-left: 26px; }
+.trilha::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--line-2); }
+.trilha .passo { position: relative; padding: 4px 0 14px; }
+.trilha .passo::before { content: ""; position: absolute; left: -24px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--info); }
+.trilha .passo.lig::before { border-color: var(--lider); }
+.trilha .passo small { color: var(--muted); display: block; }
+
+/* métricas */
+.metricas { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.metrica { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.metrica .nome { font-size: 13px; color: var(--muted); font-weight: 500; }
+.metrica .valor { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 4px; }
+.metrica .dica { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.4; }
+.barra { height: 6px; border-radius: 3px; background: var(--neutral-bg); margin-top: 10px; overflow: hidden; }
+.barra i { display: block; height: 100%; border-radius: 3px; background: var(--info); }
+.par-valores { display: flex; align-items: baseline; gap: 12px; margin-top: 4px; font-variant-numeric: tabular-nums; }
+.par-valores .a { font-size: 26px; font-weight: 700; color: var(--lider); }
+.par-valores .b { font-size: 18px; font-weight: 600; color: var(--gemeo); }
+.delta { font-size: 12px; font-weight: 600; margin-top: 6px; }
+.delta.bom { color: var(--ok); } .delta.ruim { color: var(--bad); } .delta.igual { color: var(--muted); }
+
+/* tabelas */
 .tabela-rolagem { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+tr.clicavel { cursor: pointer; } tr.clicavel:hover td { background: var(--surface-2); }
+.ok-txt { color: var(--ok); font-weight: 600; } .erro-txt { color: var(--bad); font-weight: 600; }
+
+/* arquitetura */
+.palco { padding: 8px 12px 4px; }
+.palco svg { width: 100%; height: auto; display: block; }
+svg text { fill: var(--ink); font-family: Inter, system-ui, sans-serif; }
+.controles { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.controles .crescer { flex: 1; min-width: 160px; }
+input[type=range] { accent-color: var(--info); width: 100%; }
+.arq-baixo { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; margin-top: 18px; align-items: start; }
+@media (max-width: 1100px) { .arq-baixo { grid-template-columns: 1fr; } }
+.passos { max-height: 460px; overflow: auto; }
+.passos .p { display: grid; grid-template-columns: 34px 1fr; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+.passos .p:hover { background: var(--surface-2); }
+.passos .p.atual { background: var(--info-bg); }
+.passos .p .n { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.legenda { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); padding: 10px 20px 16px; }
+.legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+
+/* mensagem / conversa */
+.msg { display: grid; grid-template-columns: 40px 1fr; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.msg:last-child { border-bottom: 0; }
+.avatar { width: 36px; height: 36px; border-radius: 10px; display: inline-grid; place-items: center; font-weight: 700; font-size: 12px; color: #fff; flex: none; }
+.msg-topo { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.msg-topo .seta { color: var(--muted); }
+.msg-topo .hora { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.msg-corpo { margin-top: 4px; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+details.json { margin-top: 8px; }
+details.json summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 500; }
+details.json pre { background: var(--surface-2); border: 1px solid var(--line); padding: 12px; border-radius: 8px; overflow: auto; font-size: 12px; margin: 8px 0 0; max-height: 360px; white-space: pre-wrap; }
+.msg-atual { padding: 18px 20px; }
+.msg-atual .msg-corpo { font-size: 15px; color: var(--ink); }
+
+/* conhecimento */
+.md { font-size: 15px; line-height: 1.65; }
+.md h1 { font-size: 20px; margin: 0 0 6px; }
+.md blockquote { margin: 0 0 8px; color: var(--muted); border-left: 3px solid var(--line-2); padding-left: 12px; }
+.md h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 22px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.md ul { margin: 0; padding-left: 20px; }
+.md li { margin: 4px 0; }
+.md li.vazio-md { list-style: none; margin-left: -20px; color: var(--muted); font-style: italic; }
+.md p { margin: 6px 0; }
+.diff { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.diff div { padding: 2px 12px; white-space: pre-wrap; word-break: break-word; }
+.diff .add { background: var(--add); } .diff .del { background: var(--del); text-decoration: line-through; opacity: .85; }
+.diff .igual { color: var(--muted); }
+.versoes { display: flex; gap: 6px; flex-wrap: wrap; }
+.versoes button { border: 1px solid var(--line-2); background: var(--surface); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: left; font-size: 12px; min-width: 64px; }
+.versoes button b { display: block; font-size: 14px; }
+.versoes button span { color: var(--muted); }
+.versoes button.sel { border-color: var(--info); background: var(--info-bg); }
+.cards-esp { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.card-esp { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 14px 16px; cursor: pointer; border-top: 3px solid var(--esp); }
+.card-esp:hover { border-color: var(--line-2); border-top-color: var(--esp); box-shadow: var(--shadow); }
+.card-esp.sel { outline: 2px solid var(--info); }
+.card-esp b { display: block; font-size: 15px; }
+.card-esp .num { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.card-esp .num strong { color: var(--ink); font-size: 14px; }
+
+/* mapa de ligações */
+.mapa { overflow-x: auto; padding: 8px 0; }
+.mapa svg { display: block; }
+.no-req { cursor: pointer; }
+.no-req:hover rect { stroke-width: 3; }
 </style>
 </head>
 <body>
-<header>
-  <h1>GigaBrain <span>· painel</span></h1>
-  <select id="fonte" title="pasta de dados"></select>
-  <nav>
-    <button data-aba="benchmark" id="btn-benchmark" hidden>Benchmark</button>
-    <button data-aba="arquitetura" class="ativo">Arquitetura</button>
-    <button data-aba="conversas">Conversas</button>
-    <button data-aba="requisitos">Requisitos</button>
-    <button data-aba="especialistas">Especialistas</button>
-    <button data-aba="avaliacao" id="btn-avaliacao" hidden>Avaliação</button>
-  </nav>
-  <div class="stats" id="stats"></div>
-</header>
-
-<main>
-  <!-- ARQUITETURA: diagrama + reprodução de uma conversa -->
-  <section class="aba ativa" id="aba-arquitetura">
-    <div class="card">
-      <div class="controles">
-        <select id="arq-conversa"></select>
-        <button class="b" id="arq-voltar">◀</button>
-        <button class="b" id="arq-play">▶ Reproduzir</button>
-        <button class="b" id="arq-avancar">▶|</button>
-        <label class="muted"><input type="checkbox" id="arq-llm"> mostrar chamadas ao LLM</label>
-        <span class="muted" id="arq-pos"></span>
-      </div>
-      <svg id="arq-svg" viewBox="0 0 1000 520"></svg>
-      <div class="legenda">
-        <span><i style="background:var(--po)"></i>PO real</span>
-        <span><i style="background:var(--gemeo)"></i>Conselho Deliberativo</span>
-        <span><i style="background:var(--lider)"></i>Líder</span>
-        <span><i style="background:var(--esp)"></i>Especialistas (um por tema)</span>
-        <span><i style="background:var(--sistema)"></i>Banco local (requisitos, registro, log)</span>
-      </div>
-      <div class="msg-atual" id="arq-msg"><p class="muted">Escolha uma conversa e clique em Reproduzir para ver, passo a passo, quem fala com quem.</p></div>
+<div class="app">
+  <aside>
+    <div class="marca"><div class="logo">G</div><div><b>GigaBrain</b><small>painel do conselho</small></div></div>
+    <div>
+      <div class="rotulo">Pasta de dados</div>
+      <select id="fonte" class="campo" style="width:100%"></select>
     </div>
-  </section>
+    <div>
+      <div class="rotulo">Visões</div>
+      <nav class="menu" id="menu">
+        <button data-aba="benchmark" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Benchmark</button>
+        <button data-aba="arquitetura"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="2.5"/><circle cx="12" cy="5" r="2.5"/><circle cx="19" cy="12" r="2.5"/><circle cx="12" cy="19" r="2.5"/><path d="M7 11l3-4M14 7l3 3M17 14l-3 3M10 17l-3-3"/></svg>Arquitetura</button>
+        <button data-aba="conversas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>Conversas</button>
+        <button data-aba="requisitos"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Requisitos</button>
+        <button data-aba="especialistas"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M22 20c0-3-2-5.2-5-5.8"/></svg>Especialistas</button>
+        <button data-aba="avaliacao" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Avaliação</button>
+      </nav>
+    </div>
+    <div class="lateral-rodape" id="rodape"></div>
+  </aside>
 
-  <!-- CONVERSAS: linha do tempo das mensagens JSON -->
-  <section class="aba" id="aba-conversas">
-    <div class="grade">
-      <div class="card"><h2>Conversas</h2><div class="lista" id="conv-lista"></div></div>
+  <main>
+    <!-- BENCHMARK -->
+    <section class="pagina" id="pg-benchmark">
+      <div class="cabeca"><h1>Benchmark</h1><p>Todas as reuniões do dataset avaliadas contra o gabarito. Compara o GigaBrain completo (<b style="color:var(--lider)">conselho</b>) com o Gêmeo sozinho (<b style="color:var(--gemeo)">agente único</b>). As médias usam só os projetos que rodaram nos dois modos.</p></div>
+      <div class="pilha">
+        <div class="card">
+          <div class="card-cabeca">
+            <h2>Médias</h2>
+            <select id="bm-provedor" class="campo"></select>
+            <button class="botao" id="bm-atualizar">↻ Atualizar</button>
+            <span class="dica" id="bm-status"></span>
+          </div>
+          <div class="card-pad"><div class="metricas" id="bm-medias"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-cabeca"><h2>Por projeto</h2>
+            <div class="segmentos" id="bm-metrica"></div>
+            <span class="dica">clique numa barra para abrir a avaliação</span></div>
+          <div class="card-pad"><svg id="bm-grafico" style="width:100%;height:auto"></svg></div>
+        </div>
+        <div class="card">
+          <div class="card-cabeca"><h2>Todas as execuções</h2></div>
+          <div class="tabela-rolagem" id="bm-tabela"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ARQUITETURA -->
+    <section class="pagina" id="pg-arquitetura">
+      <div class="cabeca"><h1>Arquitetura em ação</h1><p>Escolha uma conversa e reproduza, passo a passo, quem fala com quem. Cada passo é uma mensagem JSON registrada no log.</p></div>
       <div class="card">
-        <div class="controles"><label class="muted"><input type="checkbox" id="conv-llm"> mostrar chamadas ao LLM</label></div>
-        <div id="conv-eventos" class="vazio">Escolha uma conversa.</div>
+        <div class="card-cabeca controles">
+          <select id="arq-conversa" class="campo" style="max-width:340px"></select>
+          <button class="botao" id="arq-voltar" title="passo anterior">◀</button>
+          <button class="botao primario" id="arq-play">▶ Reproduzir</button>
+          <button class="botao" id="arq-avancar" title="próximo passo">▶</button>
+          <select id="arq-vel" class="campo" title="velocidade"><option value="2000">0,5×</option><option value="1100" selected>1×</option><option value="550">2×</option><option value="250">4×</option></select>
+          <div class="crescer"><input type="range" id="arq-pos" min="0" max="0" value="0"></div>
+          <span class="muted mono" id="arq-contador" style="font-size:13px"></span>
+          <label class="chave"><input type="checkbox" id="arq-llm">chamadas ao LLM</label>
+        </div>
+        <div class="palco"><svg id="arq-svg"></svg></div>
+        <div class="legenda">
+          <span><i style="background:var(--po)"></i>PO real</span>
+          <span><i style="background:var(--gemeo)"></i>Gêmeo Digital (Conselho Deliberativo)</span>
+          <span><i style="background:var(--lider)"></i>Líder (Conselho Consultivo)</span>
+          <span><i style="background:var(--esp)"></i>Especialistas por tema</span>
+          <span><i style="background:var(--sistema)"></i>Banco local</span>
+        </div>
       </div>
-    </div>
-  </section>
-
-  <!-- REQUISITOS: grafo de ligações + detalhe -->
-  <section class="aba" id="aba-requisitos">
-    <div class="card" style="margin-bottom:16px">
-      <h2>Ligações entre requisitos</h2>
-      <svg id="req-grafo"></svg>
-      <div class="legenda" id="req-legenda"></div>
-    </div>
-    <div class="grade">
-      <div class="card"><h2>Repositório de Requisitos</h2><div class="lista" id="req-lista"></div></div>
-      <div class="card" id="req-detalhe"><div class="vazio">Escolha um requisito.</div></div>
-    </div>
-  </section>
-
-  <!-- ESPECIALISTAS: registro + arquivo de conhecimento + versões -->
-  <section class="aba" id="aba-especialistas">
-    <div class="grade">
-      <div class="card"><h2>Registro de Especialistas</h2><div class="lista" id="esp-lista"></div></div>
-      <div class="card" id="esp-detalhe"><div class="vazio">Escolha um especialista.</div></div>
-    </div>
-  </section>
-  <!-- BENCHMARK: todos os projetos avaliados, conselho x agente único -->
-  <section class="aba" id="aba-benchmark">
-    <div class="card" style="margin-bottom:16px">
-      <div class="controles">
-        <h2 style="margin:0">Conselho × agente único</h2>
-        <select id="bm-provedor"></select>
-        <button class="b" id="bm-atualizar">Atualizar</button>
-        <span class="muted" id="bm-status"></span>
+      <div class="arq-baixo">
+        <div class="card" id="arq-msg"></div>
+        <div class="card"><div class="card-cabeca"><h2>Passos</h2><span class="dica" id="arq-npassos"></span></div><div class="passos" id="arq-passos"></div></div>
       </div>
-      <div class="metricas" id="bm-medias"></div>
-    </div>
-    <div class="card" style="margin-bottom:16px">
-      <h2>F1 por projeto</h2>
-      <svg id="bm-grafico"></svg>
-      <div class="legenda"><span><i style="background:var(--lider)"></i>conselho</span><span><i style="background:var(--gemeo)"></i>agente único</span></div>
-    </div>
-    <div class="card"><h2>Todas as execuções <span class="muted">(clique numa linha para abrir a avaliação)</span></h2><div class="tabela-rolagem" id="bm-tabela"></div></div>
-  </section>
+    </section>
 
-  <!-- AVALIAÇÃO: comparação com o gabarito do dataset -->
-  <section class="aba" id="aba-avaliacao">
-    <div class="card" style="margin-bottom:16px" id="av-topo"></div>
-    <div class="card">
-      <div class="controles">
-        <select id="av-filtro">
-          <option value="todos">todos os requisitos do gabarito</option>
-          <option value="perdidos">só os não encontrados</option>
-          <option value="classe">só os com classe errada</option>
-          <option value="extras">requisitos extraídos que não existem no gabarito</option>
-        </select>
+    <!-- CONVERSAS -->
+    <section class="pagina" id="pg-conversas">
+      <div class="cabeca"><h1>Conversas</h1><p>Todas as mensagens trocadas entre o PO e os agentes, na ordem em que aconteceram.</p></div>
+      <div class="duas">
+        <div class="card"><div class="card-cabeca"><h2>Sessões</h2></div><div class="lista" id="conv-lista"></div></div>
+        <div class="card">
+          <div class="card-cabeca">
+            <h2 id="conv-titulo">Mensagens</h2>
+            <span style="margin-left:auto"></span>
+            <label class="chave"><input type="checkbox" id="conv-llm">chamadas ao LLM</label>
+          </div>
+          <div id="conv-eventos"></div>
+        </div>
       </div>
-      <div id="av-tabela"></div>
-    </div>
-  </section>
-</main>
+    </section>
+
+    <!-- REQUISITOS -->
+    <section class="pagina" id="pg-requisitos">
+      <div class="cabeca"><h1>Repositório de Requisitos</h1><p>Requisitos aprovados, com versões, ligações e a origem de cada informação.</p></div>
+      <div class="pilha">
+        <div class="card">
+          <div class="card-cabeca"><h2>Mapa de ligações</h2><span class="dica" id="mapa-dica"></span></div>
+          <div class="mapa" id="mapa"></div>
+          <div class="legenda" id="mapa-legenda"></div>
+        </div>
+        <div class="duas">
+          <div class="card">
+            <div class="busca">
+              <input id="req-busca" class="campo" placeholder="Buscar por id, texto ou tema">
+              <select id="req-status" class="campo"></select>
+            </div>
+            <div class="lista" id="req-lista"></div>
+          </div>
+          <div class="card" id="req-detalhe"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ESPECIALISTAS -->
+    <section class="pagina" id="pg-especialistas">
+      <div class="cabeca"><h1>Especialistas</h1><p>Um agente por tema de negócio. O que cada um sabe está num arquivo Markdown versionado: toda mudança guarda o motivo.</p></div>
+      <div class="pilha">
+        <div class="cards-esp" id="esp-cards"></div>
+        <div class="card" id="esp-detalhe"></div>
+      </div>
+    </section>
+
+    <!-- AVALIAÇÃO -->
+    <section class="pagina" id="pg-avaliacao">
+      <div class="cabeca"><h1>Avaliação contra o gabarito</h1><p id="av-sub"></p></div>
+      <div class="pilha">
+        <div class="metricas" id="av-metricas"></div>
+        <div class="card">
+          <div class="card-cabeca">
+            <div class="segmentos" id="av-filtro">
+              <button data-f="todos" class="ativo">Todos</button>
+              <button data-f="perdidos">Não encontrados</button>
+              <button data-f="classe">Classe errada</button>
+              <button data-f="extras">Extras (sem par)</button>
+            </div>
+            <span class="dica" id="av-contagem"></span>
+          </div>
+          <div class="tabela-rolagem" id="av-tabela"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
 
 <script>
+// ============================================================ utilidades
 const $ = (s) => document.querySelector(s);
-let FONTE = "", FONTES = [];
-const api = (url) => fetch(url + (url.includes("?") ? "&" : "?") + "fonte=" + encodeURIComponent(FONTE)).then((r) => r.json());
-const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
 const hora = (m) => (m || "").slice(11, 19);
-const cor = (p) => ({ po: "var(--po)", gemeo: "var(--gemeo)", lider: "var(--lider)", sistema: "var(--sistema)", todos: "var(--sistema)", llm: "var(--llm)" }[p] || (p.startsWith("especialista") ? "var(--esp)" : "var(--muted)"));
-const NOMES = { po: "PO", gemeo: "Gêmeo Digital", lider: "Líder", sistema: "Sistema", todos: "todos", llm: "LLM" };
-const nome = (p) => NOMES[p] || p.replace("especialista:", "Esp. ");
+const quando = (m) => (m || "").replace("T", " ").slice(0, 16);
+const corta = (t, n) => { t = String(t ?? ""); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+const vazio = (titulo, texto = "") => `<div class="vazio"><b>${titulo}</b>${texto}</div>`;
+function guardar(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function lembrar(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+const PARTICIPANTE = {
+  po: { nome: "PO", cor: "var(--po)", sigla: "PO" },
+  gemeo: { nome: "Gêmeo Digital", cor: "var(--gemeo)", sigla: "GD" },
+  lider: { nome: "Líder", cor: "var(--lider)", sigla: "L" },
+  sistema: { nome: "Sistema", cor: "var(--sistema)", sigla: "S" },
+  todos: { nome: "todos", cor: "var(--sistema)", sigla: "S" },
+  llm: { nome: "LLM", cor: "var(--llm)", sigla: "AI" },
+};
+function quem(p) {
+  if (PARTICIPANTE[p]) return PARTICIPANTE[p];
+  if (p.startsWith("especialista:")) { const n = p.slice(13); return { nome: "Especialista · " + n, curto: n, cor: "var(--esp)", sigla: n.slice(0, 2).toUpperCase() }; }
+  return { nome: p, cor: "var(--muted)", sigla: "?" };
+}
+const NOME_TIPO = {
+  pedido_po: "pedido do PO", pergunta_ao_po: "pergunta ao PO", proposta: "proposta", aprovacao: "aprovação",
+  consulta: "consulta", decomposicao: "decomposição", resposta_especialista: "resposta do especialista",
+  resposta_consolidada: "resposta consolidada", especialista_criado: "especialista criado", pendencia: "pendência",
+  requisito_salvo: "requisito salvo", requisito_em_revisao: "requisito em revisão", conhecimento_atualizado: "conhecimento atualizado",
+  chamada_llm: "chamada ao LLM", erro: "erro", transcricao: "transcrição", extracao: "extração", revisao: "revisão",
+};
 const TIPO_LIG = {
-  refina: { cor: "#2563eb", txt: "refina" }, divide: { cor: "#9333ea", txt: "divide" }, junta: { cor: "#0891b2", txt: "junta" },
+  refina: { cor: "#2563eb", txt: "refina" }, divide: { cor: "#7c3aed", txt: "divide" }, junta: { cor: "#0891b2", txt: "junta" },
   substitui: { cor: "#dc2626", txt: "substitui" }, depende_de: { cor: "#d97706", txt: "depende de" }, conflita_com: { cor: "#db2777", txt: "conflita com" },
 };
+const EVOLUCAO = ["refina", "divide", "junta", "substitui"];
+const STATUS = {
+  ativo: { txt: "ativo", cls: "ok" }, em_revisao: { txt: "em revisão", cls: "warn" },
+  substituido: { txt: "substituído", cls: "" }, dividido: { txt: "dividido", cls: "" }, unido: { txt: "unido", cls: "" },
+};
+const selo = (status) => { const s = STATUS[status] || { txt: status, cls: "" }; return `<span class="selo ${s.cls}">${s.txt}</span>`; };
+const classeTxt = (x) => x.classe + (x.subtipo ? " · " + x.subtipo : "");
 
 function resumo(ev) {
   const c = ev.conteudo || {};
-  if (ev.tipo === "decomposicao") return "temas: " + (c.subconsultas || []).map((s) => s.tema).join(", ");
-  if (ev.tipo === "chamada_llm") return `${c.papel} · ${c.duracao_ms} ms` + (c.tokens_entrada ? ` · ${c.tokens_entrada}+${c.tokens_saida} tokens` : "");
-  if (ev.tipo === "requisito_salvo") return `${c.requisito_id} v${c.versao}` + (c.ligacoes?.length ? " · " + c.ligacoes.map((l) => `${l.tipo} ${l.destino}`).join(", ") : "");
-  if (ev.tipo === "conhecimento_atualizado") return `${c.especialista_id} v${c.versao}: ${c.motivo}`;
-  if (ev.tipo === "especialista_criado") return `novo especialista "${c.especialista_id}"`;
-  if (ev.tipo === "requisito_em_revisao") return `${c.requisito_id} em revisão por causa de ${c.por_causa_de}`;
-  if (ev.tipo === "proposta") return (c.requisitos || []).map((r) => r.titulo).join(" · ");
+  switch (ev.tipo) {
+    case "decomposicao": return "Temas: " + (c.subconsultas || []).map((s) => s.tema + (s.candidatos ? ` (${s.candidatos})` : "")).join(", ");
+    case "chamada_llm": return `${c.papel} · ${c.duracao_ms} ms` + (c.tokens_entrada ? ` · ${c.tokens_entrada} + ${c.tokens_saida} tokens` : "");
+    case "requisito_salvo": return (c.versao ? `${c.requisito_id} v${c.versao}` : c.requisito_id) + (c.ligacoes?.length ? " · " + c.ligacoes.map((l) => `${l.tipo.replace("_", " ")} ${l.destino}`).join(", ") : "");
+    case "conhecimento_atualizado": return `${c.especialista_id} → v${c.versao} · ${c.motivo}`;
+    case "especialista_criado": return `Novo especialista "${c.especialista_id}": ${c.descricao || ""}`;
+    case "requisito_em_revisao": return `${c.requisito_id} entrou em revisão por causa de ${c.por_causa_de}`;
+    case "proposta": return (c.texto ? c.texto + "\n" : "") + (c.requisitos || []).map((r) => "• " + r.titulo).join("\n");
+    case "extracao": return `${(c.requisitos || []).length} requisito(s) candidato(s) extraído(s) de ${c.projeto}`;
+    case "revisao": return `${c.tema}: ${c.mantidos} mantido(s), ${(c.removidos || []).length} removido(s), ${(c.corrigidos || []).length} corrigido(s)`;
+    case "transcricao": return `${c.titulo} · ${c.turnos} turnos`;
+    case "pendencia": return `${c.motivo} (${c.tema})`;
+  }
   for (const k of ["texto", "pergunta", "resumo", "resposta", "motivo", "erro"]) if (c[k]) return c[k];
   return "";
 }
 
-// ------------------------------------------------------------------ abas
-let ABA = "arquitetura";
+// ============================================================ estado e API
+const E = { fonte: "", fontes: [], aba: "arquitetura" };
+const api = (url) => fetch(url + (url.includes("?") ? "&" : "?") + "fonte=" + encodeURIComponent(E.fonte)).then((r) => r.ok ? r.json() : null);
+const apiGlobal = (url) => fetch(url).then((r) => r.json());
+
 function abrirAba(nome) {
-  ABA = nome;
-  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("ativo", x.dataset.aba === nome));
-  document.querySelectorAll(".aba").forEach((a) => a.classList.toggle("ativa", a.id === "aba-" + nome));
-  ({ requisitos: carregarRequisitos, especialistas: carregarEspecialistas, conversas: carregarConversas,
-     avaliacao: carregarAvaliacao, benchmark: carregarBenchmark }[nome] || (() => {}))();
+  E.aba = nome;
+  guardar("gigabrain-aba", nome);
+  $$("#menu button").forEach((b) => b.classList.toggle("ativo", b.dataset.aba === nome));
+  $$(".pagina").forEach((p) => p.classList.toggle("ativa", p.id === "pg-" + nome));
+  ({ benchmark: carregarBenchmark, arquitetura: carregarArquitetura, conversas: carregarConversas,
+     requisitos: carregarRequisitos, especialistas: carregarEspecialistas, avaliacao: carregarAvaliacao }[nome])();
 }
-document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => abrirAba(b.dataset.aba)));
+$$("#menu button").forEach((b) => b.addEventListener("click", () => abrirAba(b.dataset.aba)));
 
-let RESUMO = null;
-async function carregarResumo() {
-  RESUMO = await api("/api/resumo");
-  const st = Object.entries(RESUMO.por_status).map(([s, n]) => `${n} ${s.replace("_", " ")}`).join(", ");
-  $("#stats").textContent = `${RESUMO.conversas.length} conversas · ${RESUMO.requisitos} requisitos${st ? " (" + st + ")" : ""} · ${RESUMO.especialistas} especialistas`;
+async function carregarRodape() {
+  const r = await api("/api/resumo");
+  if (!r) return;
+  const st = Object.entries(r.por_status).map(([s, n]) => `<div><span>${(STATUS[s] || { txt: s }).txt}</span><b>${n}</b></div>`).join("");
+  $("#rodape").innerHTML = `<div class="rotulo" style="padding:0;margin-bottom:6px">Nesta pasta</div>
+    <div><span>conversas</span><b>${r.conversas.length}</b></div><div><span>requisitos</span><b>${r.requisitos}</b></div>${st}
+    <div><span>ligações</span><b>${r.ligacoes}</b></div><div><span>especialistas</span><b>${r.especialistas}</b></div>`;
 }
 
-// ------------------------------------------------------------------ arquitetura
-const ARQ = { eventos: [], pos: -1, timer: null, especialistas: [] };
+// ============================================================ pastas de dados
+async function carregarFontes() {
+  E.fontes = await apiGlobal("/api/fontes");
+  const grupos = {};
+  E.fontes.forEach((f) => (grupos[f.grupo] ||= []).push(f));
+  $("#fonte").innerHTML = Object.entries(grupos).map(([g, fs]) => `<optgroup label="${esc(g)}">${fs.map((f) =>
+    `<option value="${esc(f.id)}">${esc(f.rotulo.replace("agente_unico", "agente único"))}${f.avaliacao ? "  ✓" : ""}</option>`).join("")}</optgroup>`).join("");
+  $('[data-aba="benchmark"]').hidden = !E.fontes.some((f) => f.id.startsWith("dados-avaliacao/"));
+}
 
-function posicoes() {
-  const p = {
-    po: { x: 80, y: 190, rot: "PO real", cor: "var(--po)" },
-    gemeo: { x: 300, y: 190, rot: "Gêmeo Digital", cor: "var(--gemeo)" },
-    lider: { x: 560, y: 190, rot: "Líder", cor: "var(--lider)" },
-    llm: { x: 300, y: 420, rot: "LLM", cor: "var(--llm)" },
-    sistema: { x: 560, y: 420, rot: "Banco local", cor: "var(--sistema)" },
-  };
-  const n = Math.max(ARQ.especialistas.length, 1);
-  const passo = Math.min(90, 440 / n);
-  ARQ.especialistas.forEach((e, i) => {
-    p["especialista:" + e.id] = { x: 850, y: 40 + passo / 2 + i * passo + (440 - passo * n) / 2, rot: e.tema, cor: "var(--esp)", sub: `v${e.versao_conhecimento}` };
+async function definirFonte(id, aba) {
+  E.fonte = id;
+  $("#fonte").value = id;
+  guardar("gigabrain-fonte", id);
+  REQ.sel = ESP.sel = CONV.sel = null;
+  const temAvaliacao = E.fontes.find((f) => f.id === id)?.avaliacao;
+  $('[data-aba="avaliacao"]').hidden = !temAvaliacao;
+  carregarRodape();
+  let destino = aba || E.aba;
+  if (destino === "avaliacao" && !temAvaliacao) destino = "arquitetura";
+  abrirAba(destino);
+}
+$("#fonte").addEventListener("change", () => definirFonte($("#fonte").value));
+function abrirFonte(id) { definirFonte(id, "avaliacao"); }
+
+// ============================================================ benchmark
+const BM = { dados: null, metrica: "f1" };
+const METRICAS = [
+  ["f1", "F1", "equilíbrio entre precisão e revocação"],
+  ["precisao", "Precisão", "do que foi extraído, quanto existe no gabarito"],
+  ["revocacao", "Revocação", "do gabarito, quanto foi encontrado"],
+  ["classe", "Classe FR/NFR", "acerto entre os pares encontrados"],
+  ["subtipo", "Subtipo NFR", "acerto entre os NFR encontrados"],
+  ["rastreio", "Rastreio", "citou o turno onde o requisito foi dito"],
+  ["sem_respaldo", "Sem respaldo", "extraídos sem apoio nas falas · menor é melhor"],
+];
+const COR_MODO = { conselho: "var(--lider)", agente_unico: "var(--gemeo)" };
+const NOME_MODO = { conselho: "conselho", agente_unico: "agente único" };
+$("#bm-metrica").innerHTML = METRICAS.map(([k, n]) => `<button data-m="${k}" class="${k === "f1" ? "ativo" : ""}">${n}</button>`).join("");
+$$("#bm-metrica button").forEach((b) => b.addEventListener("click", () => {
+  BM.metrica = b.dataset.m; $$("#bm-metrica button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharBenchmark();
+}));
+
+async function carregarBenchmark() {
+  BM.dados = await apiGlobal("/api/benchmark");
+  const provs = [...new Set(BM.dados.linhas.map((l) => l.provedor))].sort((a, b) => (a === "simulado") - (b === "simulado"));
+  const atual = $("#bm-provedor").value;
+  $("#bm-provedor").innerHTML = provs.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  if (provs.includes(atual)) $("#bm-provedor").value = atual;
+  desenharBenchmark();
+}
+$("#bm-provedor").addEventListener("change", desenharBenchmark);
+$("#bm-atualizar").addEventListener("click", carregarBenchmark);
+
+function desenharBenchmark() {
+  const prov = $("#bm-provedor").value;
+  const linhas = BM.dados.linhas.filter((l) => l.provedor === prov);
+  const porProjeto = {};
+  linhas.forEach((l) => { (porProjeto[l.projeto] ||= {})[l.modo] = l; });
+  const pareados = Object.values(porProjeto).filter((p) => p.conselho && p.agente_unico);
+  const andamento = BM.dados.em_andamento.filter((f) => f.includes("/" + prov + "/")).length;
+  $("#bm-status").textContent = `${pareados.length} projeto(s) nos dois modos` + (andamento ? ` · ${andamento} em andamento` : "");
+
+  const media = (modo, k) => { const v = pareados.map((p) => p[modo][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  $("#bm-medias").innerHTML = METRICAS.map(([k, nomeM, dica]) => {
+    const c = media("conselho", k), a = media("agente_unico", k);
+    const d = c != null && a != null ? c - a : null;
+    const melhor = d == null || Math.abs(d) < 0.005 ? "igual" : (k === "sem_respaldo" ? d < 0 : d > 0) ? "bom" : "ruim";
+    const txt = d == null ? "" : melhor === "igual" ? "empate" : `${d > 0 ? "+" : "−"}${Math.abs(Math.round(d * 100))} pts para o conselho`;
+    return `<div class="metrica"><div class="nome">${nomeM}</div>
+      <div class="par-valores"><span class="a" title="conselho">${pct(c)}</span><span class="b" title="agente único">${pct(a)}</span></div>
+      <div class="delta ${melhor}">${txt}</div><div class="dica">${dica}</div></div>`;
+  }).join("");
+
+  // Barras agrupadas: uma linha por projeto, conselho em cima e agente único embaixo.
+  const k = BM.metrica, projetos = Object.keys(porProjeto).sort();
+  const L = 1000, esq = 190, dir = 60, alt = 44, topo = 8, w = L - esq - dir;
+  let g = "";
+  [0, .25, .5, .75, 1].forEach((t) => {
+    const x = esq + t * w;
+    g += `<line x1="${x}" y1="${topo}" x2="${x}" y2="${topo + projetos.length * alt}" stroke="var(--line)"/>
+      <text x="${x}" y="${topo + projetos.length * alt + 18}" text-anchor="middle" font-size="12" fill="var(--muted)">${t * 100}%</text>`;
   });
-  p.todos = p.sistema;
-  return p;
+  projetos.forEach((nomeP, i) => {
+    const y = topo + i * alt;
+    g += `<text x="${esq - 12}" y="${y + 26}" text-anchor="end" font-size="14" font-weight="500">${esc(nomeP)}</text>`;
+    ["conselho", "agente_unico"].forEach((m, j) => {
+      const l = porProjeto[nomeP][m]; if (!l) return;
+      const v = l[k] ?? 0, larg = Math.max(2, v * w), yy = y + 7 + j * 16;
+      g += `<g style="cursor:pointer" onclick="abrirFonte('${l.fonte}')"><title>${esc(nomeP)} · ${NOME_MODO[m]} · ${pct(l[k])}</title>
+        <rect x="${esq}" y="${yy}" width="${larg}" height="13" rx="3" fill="${COR_MODO[m]}"/>
+        <text x="${esq + larg + 6}" y="${yy + 11}" font-size="12" fill="var(--muted)">${pct(l[k])}</text></g>`;
+    });
+  });
+  $("#bm-grafico").setAttribute("viewBox", `0 0 ${L} ${topo + projetos.length * alt + 26}`);
+  $("#bm-grafico").innerHTML = projetos.length ? g : "";
+
+  const cols = [["previstos", "extraídos"], ["gabarito", "gabarito"], ["acertos", "pares"], ["precisao", "precisão"], ["revocacao", "revocação"], ["f1", "F1"], ["classe", "classe"], ["subtipo", "subtipo"], ["rastreio", "rastreio"], ["sem_respaldo", "sem respaldo"]];
+  const fmt = (c, v) => v == null ? "–" : ["previstos", "gabarito", "acertos"].includes(c) ? v : pct(v);
+  $("#bm-tabela").innerHTML = linhas.length ? `<table><tr><th>projeto</th><th>modo</th>${cols.map(([, n]) => `<th class="num">${n}</th>`).join("")}</tr>` +
+    projetos.flatMap((nomeP) => ["conselho", "agente_unico"].map((m) => porProjeto[nomeP][m]).filter(Boolean)).map((l) =>
+      `<tr class="clicavel" onclick="abrirFonte('${l.fonte}')"><td><b>${esc(l.projeto)}</b></td><td><span class="selo" style="color:${COR_MODO[l.modo]}">${NOME_MODO[l.modo] || l.modo}</span></td>${cols.map(([c]) => `<td class="num">${fmt(c, l[c])}</td>`).join("")}</tr>`).join("") + "</table>"
+    : vazio("Nenhuma avaliação ainda", "Rode: python main.py avaliar todos");
 }
 
-function desenharArquitetura(ativo) {
-  const P = posicoes();
-  const linha = (a, b, extra = "") => `<line x1="${P[a].x}" y1="${P[a].y}" x2="${P[b].x}" y2="${P[b].y}" stroke="var(--line)" stroke-width="2" ${extra}/>`;
-  let s = `<defs><marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--info)"/></marker></defs>`;
-  // Molduras dos dois conselhos
-  s += `<rect x="20" y="110" width="400" height="160" rx="14" fill="none" stroke="var(--gemeo)" stroke-dasharray="5 5" opacity=".5"/>`;
-  s += `<text x="34" y="132" class="muted" style="fill:var(--gemeo);font-size:12px">Conselho Deliberativo</text>`;
-  s += `<rect x="470" y="20" width="510" height="480" rx="14" fill="none" stroke="var(--lider)" stroke-dasharray="5 5" opacity=".5"/>`;
-  s += `<text x="484" y="42" style="fill:var(--lider);font-size:12px">Conselho Consultivo</text>`;
-  s += linha("po", "gemeo") + linha("gemeo", "lider") + linha("lider", "sistema") + linha("gemeo", "llm", 'stroke-dasharray="3 4"');
-  ARQ.especialistas.forEach((e) => { s += linha("lider", "especialista:" + e.id); });
+// ============================================================ arquitetura
+const ARQ = { todos: [], eventos: [], pos: -1, timer: null, especialistas: [], conversas: [] };
 
-  if (ativo) {
-    const de = P[ativo.de], para = P[ativo.para] || P.sistema;
+function layoutArquitetura() {
+  // Especialistas em 1, 2 ou 3 colunas conforme a quantidade, sempre com tamanho legível;
+  // o desenho cresce (e o SVG é reduzido para caber) em vez de espremer os nomes.
+  const n = ARQ.especialistas.length;
+  const cols = n <= 7 ? 1 : n <= 16 ? 2 : 3;
+  const linhas = Math.max(1, Math.ceil(n / cols));
+  const espW = 190, espH = 50, gapX = 16, gapY = 12, xEsp0 = 770;
+  const L = xEsp0 + cols * espW + (cols - 1) * gapX + 30;
+  const altEsp = linhas * espH + (linhas - 1) * gapY;
+  const H = Math.max(500, altEsp + 110);
+  const cy = Math.max(200, H / 2 - 50);
+  const P = {
+    po: { x: 90, y: cy, w: 130, rot: "PO real", sub: "decide e aprova", cor: "var(--po)" },
+    gemeo: { x: 330, y: cy, w: 170, rot: "Gêmeo Digital", sub: "conversa e propõe", cor: "var(--gemeo)" },
+    lider: { x: 590, y: cy, w: 150, rot: "Líder", sub: "decompõe e consolida", cor: "var(--lider)" },
+    llm: { x: 330, y: H - 70, w: 150, rot: "LLM", sub: "DeepSeek ou simulado", cor: "var(--llm)" },
+    sistema: { x: 590, y: H - 70, w: 170, rot: "Banco local", sub: "requisitos · registro · log", cor: "var(--sistema)" },
+  };
+  const y0 = (H - 70) / 2 - altEsp / 2 + 10;
+  ARQ.especialistas.forEach((e, i) => {
+    const c = Math.floor(i / linhas), r = i % linhas;
+    P["especialista:" + e.id] = { x: xEsp0 + c * (espW + gapX) + espW / 2, y: y0 + r * (espH + gapY) + espH / 2, w: espW, h: espH,
+      rot: e.tema, sub: `conhecimento v${e.versao_conhecimento} · ${e.consultas} consulta(s)`, cor: "var(--esp)" };
+  });
+  P.todos = P.sistema;
+  return { P, L, H, xEsp0, espW, y0, altEsp };
+}
+
+function desenharArquitetura(ev) {
+  const { P, L, H, xEsp0, espW, y0, altEsp } = layoutArquitetura();
+  const borda = (p, alvo) => { // ponto na borda do retângulo de p, na direção de alvo
+    const dx = alvo.x - p.x, dy = alvo.y - p.y, hw = (p.w || 150) / 2, hh = (p.h || 56) / 2;
+    const t = Math.min(Math.abs(dx) ? hw / Math.abs(dx) : Infinity, Math.abs(dy) ? hh / Math.abs(dy) : Infinity);
+    return { x: p.x + dx * t, y: p.y + dy * t };
+  };
+  let s = `<defs><marker id="ponta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--info)"/></marker></defs>`;
+  s += `<rect x="16" y="${P.po.y - 92}" width="440" height="184" rx="18" fill="var(--gemeo)" fill-opacity=".05" stroke="var(--gemeo)" stroke-opacity=".35" stroke-dasharray="6 6"/>
+    <text x="34" y="${P.po.y - 66}" font-size="13" font-weight="600" fill="var(--gemeo)">Conselho Deliberativo</text>
+    <rect x="490" y="16" width="${L - 506}" height="${H - 32}" rx="18" fill="var(--lider)" fill-opacity=".04" stroke="var(--lider)" stroke-opacity=".35" stroke-dasharray="6 6"/>
+    <text x="510" y="44" font-size="13" font-weight="600" fill="var(--lider)">Conselho Consultivo</text>`;
+  const fio = (a, b, extra = "") => { const p1 = borda(P[a], P[b]), p2 = borda(P[b], P[a]); return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="var(--line-2)" stroke-width="2" ${extra}/>`; };
+  s += fio("po", "gemeo") + fio("gemeo", "lider") + fio("lider", "sistema") + fio("gemeo", "llm", 'stroke-dasharray="4 5"');
+  // Barramento do Líder até a coluna de especialistas, em vez de dezenas de linhas cruzadas.
+  if (ARQ.especialistas.length) {
+    const xb = xEsp0 - 26;
+    s += `<line x1="${P.lider.x + P.lider.w / 2}" y1="${P.lider.y}" x2="${xb}" y2="${P.lider.y}" stroke="var(--line-2)" stroke-width="2"/>
+      <line x1="${xb}" y1="${Math.min(y0 + 25, P.lider.y)}" x2="${xb}" y2="${Math.max(y0 + altEsp - 25, P.lider.y)}" stroke="var(--line-2)" stroke-width="2"/>`;
+    ARQ.especialistas.forEach((e) => { const p = P["especialista:" + e.id]; if (p.x - espW / 2 === xEsp0) s += `<line x1="${xb}" y1="${p.y}" x2="${xEsp0}" y2="${p.y}" stroke="var(--line-2)" stroke-width="2"/>`; });
+  }
+  if (ev) {
+    const de = P[ev.de], para = P[ev.para] || P.sistema;
+    const rotulo = NOME_TIPO[ev.tipo] || ev.tipo, lw = rotulo.length * 7.4 + 22;
     if (de && para && de !== para) {
-      s += `<line x1="${de.x}" y1="${de.y}" x2="${para.x}" y2="${para.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#seta)" opacity=".9"/>`;
-      s += `<text x="${(de.x + para.x) / 2}" y="${(de.y + para.y) / 2 - 10}" text-anchor="middle" style="font-weight:600;fill:var(--info)">${esc(ativo.tipo)}</text>`;
+      const a = borda(de, para), b = borda(para, de), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#ponta)"/>
+        <rect x="${mx - lw / 2}" y="${my - 26}" width="${lw}" height="24" rx="12" fill="var(--info)"/>
+        <text x="${mx}" y="${my - 9}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#fff">${esc(rotulo)}</text>`;
     } else if (de) {
-      s += `<circle cx="${de.x}" cy="${de.y}" r="44" fill="none" stroke="var(--info)" stroke-width="3"/>`;
-      s += `<text x="${de.x}" y="${de.y - 52}" text-anchor="middle" style="font-weight:600;fill:var(--info)">${esc(ativo.tipo)}</text>`;
+      s += `<rect x="${de.x - (de.w || 150) / 2 - 8}" y="${de.y - 36}" width="${(de.w || 150) + 16}" height="72" rx="16" fill="none" stroke="var(--info)" stroke-width="3" stroke-dasharray="5 4"/>
+        <rect x="${de.x - lw / 2}" y="${de.y - 64}" width="${lw}" height="24" rx="12" fill="var(--info)"/>
+        <text x="${de.x}" y="${de.y - 47}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#fff">${esc(rotulo)}</text>`;
     }
   }
-  const envolvidos = ativo ? [ativo.de, ativo.para] : [];
+  const ativos = ev ? [ev.de, ev.para === "todos" ? "sistema" : ev.para] : [];
   for (const [id, n] of Object.entries(P)) {
     if (id === "todos") continue;
-    const on = envolvidos.includes(id) || (id === "sistema" && envolvidos.includes("todos"));
-    const larg = id.startsWith("especialista") ? 130 : 120;
-    s += `<g opacity="${ativo && !on ? 0.45 : 1}">
-      <rect x="${n.x - larg / 2}" y="${n.y - 22}" width="${larg}" height="44" rx="10" fill="var(--card)" stroke="${n.cor}" stroke-width="${on ? 4 : 2}"/>
-      <text x="${n.x}" y="${n.y + (n.sub ? -1 : 5)}" text-anchor="middle" style="font-weight:600">${esc(n.rot)}</text>
-      ${n.sub ? `<text x="${n.x}" y="${n.y + 14}" text-anchor="middle" class="muted" style="font-size:11px;fill:var(--muted)">conhecimento ${n.sub}</text>` : ""}
-    </g>`;
+    const on = ativos.includes(id), w = n.w || 150, h = n.h || 56, ehEsp = id.startsWith("especialista:");
+    const maxCh = Math.floor(w / 8.2);
+    s += `<g opacity="${ev && !on ? 0.4 : 1}"><title>${esc(n.rot)} · ${esc(n.sub)}</title>
+      <rect x="${n.x - w / 2}" y="${n.y - h / 2}" width="${w}" height="${h}" rx="12" fill="var(--surface)" stroke="${n.cor}" stroke-width="${on ? 3.5 : 1.5}"/>
+      <rect x="${n.x - w / 2}" y="${n.y - h / 2 + 8}" width="4" height="${h - 16}" rx="2" fill="${n.cor}"/>
+      <text x="${n.x + 2}" y="${n.y - 3}" text-anchor="middle" font-size="${ehEsp ? 14 : 15}" font-weight="600">${esc(corta(n.rot, maxCh))}</text>
+      <text x="${n.x + 2}" y="${n.y + 15}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${esc(corta(n.sub, maxCh + 4))}</text></g>`;
   }
-  if (!ARQ.especialistas.length) s += `<text x="850" y="200" text-anchor="middle" style="fill:var(--muted)">nenhum especialista ainda</text>`;
+  if (!ARQ.especialistas.length) s += `<text x="${xEsp0 + 95}" y="${P.lider.y + 5}" text-anchor="middle" font-size="13" fill="var(--muted)">nenhum especialista ainda</text>`;
+  $("#arq-svg").setAttribute("viewBox", `0 0 ${L} ${H}`);
   $("#arq-svg").innerHTML = s;
 }
 
-function eventosVisiveis(lista, comLlm) { return lista.filter((e) => comLlm || e.tipo !== "chamada_llm"); }
+function cartaoMensagem(ev) {
+  const de = quem(ev.de), para = quem(ev.para);
+  return `<div class="msg-atual"><div class="msg-topo">
+      <span class="avatar" style="background:${de.cor}">${de.sigla}</span>
+      <b style="color:${de.cor}">${esc(de.nome)}</b><span class="seta">→</span><b style="color:${para.cor}">${esc(para.nome)}</b>
+      <span class="selo info">${esc(NOME_TIPO[ev.tipo] || ev.tipo)}</span><span class="hora">${hora(ev.momento)}</span></div>
+    <div class="msg-corpo" style="margin-top:12px">${esc(resumo(ev)) || '<span class="muted">(sem texto)</span>'}</div>
+    <details class="json"><summary>ver mensagem JSON</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details></div>`;
+}
 
 function mostrarPasso() {
   const ev = ARQ.eventos[ARQ.pos];
   desenharArquitetura(ev);
-  $("#arq-pos").textContent = ARQ.eventos.length ? `passo ${ARQ.pos + 1} de ${ARQ.eventos.length}` : "";
-  if (!ev) return;
-  $("#arq-msg").innerHTML = `<div class="card">
-    <span class="quem" style="color:${cor(ev.de)}">${esc(nome(ev.de))}</span> → <span class="quem" style="color:${cor(ev.para)}">${esc(nome(ev.para))}</span>
-    <span class="tipo">${esc(ev.tipo)} · ${hora(ev.momento)}</span>
-    <div style="margin-top:6px;white-space:pre-wrap">${esc(resumo(ev))}</div>
-    <details><summary>mensagem JSON</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details></div>`;
+  $("#arq-pos").max = Math.max(0, ARQ.eventos.length - 1);
+  $("#arq-pos").value = Math.max(0, ARQ.pos);
+  $("#arq-contador").textContent = ARQ.eventos.length ? `${Math.max(0, ARQ.pos + 1)} / ${ARQ.eventos.length}` : "";
+  $("#arq-msg").innerHTML = ev ? cartaoMensagem(ev) : vazio("Nenhum passo selecionado", "Clique em Reproduzir ou escolha um passo na lista.");
+  $$("#arq-passos .p").forEach((el, i) => el.classList.toggle("atual", i === ARQ.pos));
+  // Rola só a lista de passos (scrollIntoView arrastaria a página inteira).
+  const atual = $$("#arq-passos .p")[ARQ.pos], caixa = $("#arq-passos");
+  if (atual) {
+    const topo = atual.offsetTop - caixa.offsetTop;
+    if (topo < caixa.scrollTop) caixa.scrollTop = topo;
+    else if (topo + atual.offsetHeight > caixa.scrollTop + caixa.clientHeight) caixa.scrollTop = topo + atual.offsetHeight - caixa.clientHeight;
+  }
 }
+
+function listarPassos() {
+  $("#arq-npassos").textContent = `${ARQ.eventos.length} mensagens`;
+  $("#arq-passos").innerHTML = ARQ.eventos.map((ev, i) => {
+    const de = quem(ev.de), para = quem(ev.para);
+    return `<div class="p" data-i="${i}"><span class="n">${i + 1}</span><span><b style="color:${de.cor}">${esc(de.curto || de.nome)}</b> → <span style="color:${para.cor}">${esc(para.curto || para.nome)}</span><br><span class="muted">${esc(NOME_TIPO[ev.tipo] || ev.tipo)}</span></span></div>`;
+  }).join("") || vazio("Sem mensagens");
+  $$("#arq-passos .p").forEach((el) => el.addEventListener("click", () => { parar(); ARQ.pos = +el.dataset.i; mostrarPasso(); }));
+}
+
+const filtraLlm = (lista, com) => lista.filter((e) => com || e.tipo !== "chamada_llm");
 
 async function carregarArquitetura() {
-  ARQ.especialistas = await api("/api/especialistas");
-  const sel = $("#arq-conversa");
-  sel.innerHTML = RESUMO.conversas.map((c) => `<option value="${c.id}">${c.id} · ${c.modo} · ${c.status}</option>`).join("") || "<option>nenhuma conversa</option>";
-  await escolherConversaArq();
+  const [especialistas, resumoF] = await Promise.all([api("/api/especialistas"), api("/api/resumo")]);
+  ARQ.especialistas = especialistas || [];
+  ARQ.conversas = resumoF?.conversas || [];
+  const atual = $("#arq-conversa").value;
+  $("#arq-conversa").innerHTML = ARQ.conversas.map((c) => `<option value="${c.id}">${c.id} · ${c.modo.replaceAll("_", " ")} · ${c.eventos} msgs</option>`).join("") || "<option value=''>nenhuma conversa</option>";
+  if (ARQ.conversas.some((c) => c.id === atual)) $("#arq-conversa").value = atual;
+  await escolherConversa();
 }
-
-async function escolherConversaArq() {
+async function escolherConversa() {
   parar();
   const id = $("#arq-conversa").value;
-  ARQ.todos = id ? await api("/api/eventos?conversa=" + encodeURIComponent(id)) : [];
-  ARQ.eventos = eventosVisiveis(ARQ.todos, $("#arq-llm").checked);
+  ARQ.todos = id ? (await api("/api/eventos?conversa=" + encodeURIComponent(id))) || [] : [];
+  ARQ.eventos = filtraLlm(ARQ.todos, $("#arq-llm").checked);
   ARQ.pos = -1;
+  listarPassos();
   mostrarPasso();
 }
-
 function parar() { clearInterval(ARQ.timer); ARQ.timer = null; $("#arq-play").textContent = "▶ Reproduzir"; }
 function avancar() { if (ARQ.pos < ARQ.eventos.length - 1) { ARQ.pos++; mostrarPasso(); } else parar(); }
-$("#arq-conversa").addEventListener("change", escolherConversaArq);
-$("#arq-llm").addEventListener("change", () => { ARQ.eventos = eventosVisiveis(ARQ.todos, $("#arq-llm").checked); ARQ.pos = -1; mostrarPasso(); });
-$("#arq-avancar").addEventListener("click", () => { parar(); avancar(); });
-$("#arq-voltar").addEventListener("click", () => { parar(); if (ARQ.pos > 0) { ARQ.pos--; mostrarPasso(); } });
-$("#arq-play").addEventListener("click", () => {
-  if (ARQ.timer) return parar();
+function tocar() {
   if (ARQ.pos >= ARQ.eventos.length - 1) ARQ.pos = -1;
   $("#arq-play").textContent = "❚❚ Pausar";
   avancar();
-  ARQ.timer = setInterval(avancar, 1400);
-});
+  ARQ.timer = setInterval(avancar, +$("#arq-vel").value);
+}
+$("#arq-conversa").addEventListener("change", escolherConversa);
+$("#arq-llm").addEventListener("change", () => { ARQ.eventos = filtraLlm(ARQ.todos, $("#arq-llm").checked); ARQ.pos = -1; listarPassos(); mostrarPasso(); });
+$("#arq-avancar").addEventListener("click", () => { parar(); avancar(); });
+$("#arq-voltar").addEventListener("click", () => { parar(); if (ARQ.pos > 0) { ARQ.pos--; mostrarPasso(); } });
+$("#arq-play").addEventListener("click", () => ARQ.timer ? parar() : tocar());
+$("#arq-vel").addEventListener("change", () => { if (ARQ.timer) { parar(); tocar(); } });
+$("#arq-pos").addEventListener("input", () => { parar(); ARQ.pos = +$("#arq-pos").value; mostrarPasso(); });
 
-// ------------------------------------------------------------------ conversas
-let CONV_SEL = null;
+// ============================================================ conversas
+const CONV = { sel: null, conversas: [] };
 async function carregarConversas() {
-  await carregarResumo();
-  $("#conv-lista").innerHTML = RESUMO.conversas.map((c) => `<div class="item ${c.id === CONV_SEL ? "sel" : ""}" data-id="${c.id}">
-    <b>${c.id}</b><small>${c.modo} · ${c.status} · ${c.eventos} mensagens</small></div>`).join("") || `<div class="muted">Nenhuma conversa ainda.</div>`;
-  document.querySelectorAll("#conv-lista .item").forEach((el) => el.addEventListener("click", () => { CONV_SEL = el.dataset.id; carregarConversas(); mostrarConversa(); }));
+  const r = await api("/api/resumo");
+  CONV.conversas = r?.conversas || [];
+  if (!CONV.sel && CONV.conversas.length) CONV.sel = CONV.conversas[0].id;
+  $("#conv-lista").innerHTML = CONV.conversas.map((c) => `<div class="item ${c.id === CONV.sel ? "sel" : ""}" data-id="${c.id}">
+      <div class="item-topo"><span class="item-titulo mono" style="font-size:13px">${c.id}</span>${c.status === "aprovada" ? '<span class="selo ok">aprovada</span>' : `<span class="selo">${esc(c.status)}</span>`}</div>
+      <div class="item-meta">${esc(c.modo.replaceAll("_", " "))} · ${c.eventos} mensagens · ${quando(c.iniciada_em)}</div></div>`).join("") || vazio("Nenhuma conversa");
+  $$("#conv-lista .item").forEach((el) => el.addEventListener("click", () => { CONV.sel = el.dataset.id; carregarConversas(); }));
+  mostrarConversa();
 }
 async function mostrarConversa() {
-  if (!CONV_SEL) return;
-  const eventos = eventosVisiveis(await api("/api/eventos?conversa=" + encodeURIComponent(CONV_SEL)), $("#conv-llm").checked);
-  $("#conv-eventos").className = "";
-  $("#conv-eventos").innerHTML = eventos.map((ev) => `<div class="evento">
-    <div class="hora">${hora(ev.momento)}</div>
-    <div><span class="quem" style="color:${cor(ev.de)}">${esc(nome(ev.de))}</span> → <span style="color:${cor(ev.para)}">${esc(nome(ev.para))}</span><span class="tipo">${esc(ev.tipo)}</span>
-    <div style="white-space:pre-wrap">${esc(resumo(ev))}</div>
-    <details><summary>JSON</summary><pre>${esc(JSON.stringify(ev.conteudo, null, 2))}</pre></details></div></div>`).join("");
+  if (!CONV.sel) { $("#conv-eventos").innerHTML = vazio("Escolha uma sessão", "As mensagens aparecem aqui."); return; }
+  const eventos = filtraLlm((await api("/api/eventos?conversa=" + encodeURIComponent(CONV.sel))) || [], $("#conv-llm").checked);
+  $("#conv-titulo").textContent = `Mensagens · ${eventos.length}`;
+  $("#conv-eventos").innerHTML = eventos.map((ev) => {
+    const de = quem(ev.de), para = quem(ev.para);
+    return `<div class="msg"><span class="avatar" style="background:${de.cor}">${de.sigla}</span><div>
+      <div class="msg-topo"><b style="color:${de.cor}">${esc(de.nome)}</b><span class="seta">→</span><span style="color:${para.cor}">${esc(para.nome)}</span>
+        <span class="selo">${esc(NOME_TIPO[ev.tipo] || ev.tipo)}</span><span class="hora">${hora(ev.momento)}</span></div>
+      <div class="msg-corpo">${esc(corta(resumo(ev), 900))}</div>
+      <details class="json"><summary>JSON</summary><pre>${esc(JSON.stringify(ev.conteudo, null, 2))}</pre></details></div></div>`;
+  }).join("") || vazio("Sem mensagens");
 }
 $("#conv-llm").addEventListener("change", mostrarConversa);
 
-// ------------------------------------------------------------------ requisitos
-let REQ_SEL = null;
+// ============================================================ requisitos
+const REQ = { sel: null, lista: [], ligacoes: [] };
 async function carregarRequisitos() {
-  const { requisitos, ligacoes } = await api("/api/requisitos");
-  $("#req-lista").innerHTML = requisitos.map((r) => `<div class="item ${r.id === REQ_SEL ? "sel" : ""}" data-id="${r.id}">
-    <b>${r.id}</b> <span class="badge st-${r.status}">${r.status.replace("_", " ")}</span> <span class="muted">v${r.versao_atual}</span>
-    <div>${esc(r.titulo)}</div><small>${r.temas.join(", ")}</small></div>`).join("") || `<div class="muted">Nenhum requisito ainda.</div>`;
-  document.querySelectorAll("#req-lista .item").forEach((el) => el.addEventListener("click", () => { REQ_SEL = el.dataset.id; carregarRequisitos(); mostrarRequisito(); }));
-  desenharGrafo(requisitos, ligacoes);
+  const r = await api("/api/requisitos");
+  REQ.lista = r?.requisitos || [];
+  REQ.ligacoes = r?.ligacoes || [];
+  const status = [...new Set(REQ.lista.map((x) => x.status))];
+  const atual = $("#req-status").value;
+  $("#req-status").innerHTML = `<option value="">todos os status (${REQ.lista.length})</option>` +
+    status.map((s) => `<option value="${s}">${(STATUS[s] || { txt: s }).txt} (${REQ.lista.filter((x) => x.status === s).length})</option>`).join("");
+  if (status.includes(atual)) $("#req-status").value = atual;
+  listarRequisitos();
+  desenharMapa();
+  if (REQ.sel) mostrarRequisito(); else $("#req-detalhe").innerHTML = vazio("Escolha um requisito", "Na lista ou no mapa.");
 }
+function textoReq(r) { return r.conteudo.texto || r.conteudo.historia || r.titulo; }
+function listarRequisitos() {
+  const q = $("#req-busca").value.trim().toLowerCase(), st = $("#req-status").value;
+  const filtrados = REQ.lista.filter((r) => (!st || r.status === st) &&
+    (!q || [r.id, r.titulo, textoReq(r), ...r.temas].join(" ").toLowerCase().includes(q)));
+  $("#req-lista").innerHTML = filtrados.map((r) => `<div class="item ${r.id === REQ.sel ? "sel" : ""}" data-id="${r.id}">
+      <div class="item-topo"><span class="item-titulo">${r.id} <span class="muted" style="font-weight:500">v${r.versao_atual}</span></span>${selo(r.status)}</div>
+      <div class="item-texto">${esc(textoReq(r))}</div>
+      <div class="item-meta">${r.temas.map((t) => esc(t)).join(" · ")}${r.conteudo.classe ? " · " + classeTxt(r.conteudo) : ""}</div></div>`).join("")
+    || vazio("Nada encontrado");
+  $$("#req-lista .item").forEach((el) => el.addEventListener("click", () => selecionarReq(el.dataset.id)));
+}
+$("#req-busca").addEventListener("input", listarRequisitos);
+$("#req-status").addEventListener("change", listarRequisitos);
 
-function desenharGrafo(requisitos, ligacoes) {
-  const larg = Math.max(1000, requisitos.length * 140 + 80), alt = 300, meio = 150;
-  const X = {}; requisitos.forEach((r, i) => { X[r.id] = 70 + i * ((larg - 140) / Math.max(requisitos.length - 1, 1)); });
-  if (requisitos.length === 1) X[requisitos[0].id] = larg / 2;
-  let s = "";
-  ligacoes.forEach((l) => {
-    const a = X[l.origem_id], b = X[l.destino_id]; if (a == null || b == null) return;
-    const evolucao = ["refina", "divide", "junta", "substitui"].includes(l.tipo);
-    const h = Math.min(110, 30 + Math.abs(a - b) / 4) * (evolucao ? -1 : 1);
-    const y0 = meio + (evolucao ? -24 : 24), t = TIPO_LIG[l.tipo] || { cor: "gray", txt: l.tipo };
-    s += `<path d="M${a},${y0} C${a},${y0 + h} ${b},${y0 + h} ${b},${y0}" fill="none" stroke="${t.cor}" stroke-width="2.5" marker-end="url(#seta-${l.tipo})"/>`;
-    s += `<text x="${(a + b) / 2}" y="${y0 + h * 0.78 + (evolucao ? -4 : 12)}" text-anchor="middle" style="fill:${t.cor};font-size:12px">${l.origem_id} ${t.txt} ${l.destino_id}</text>`;
-  });
-  const defs = Object.entries(TIPO_LIG).map(([k, t]) => `<marker id="seta-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${t.cor}"/></marker>`).join("");
-  requisitos.forEach((r) => {
-    const apagado = !["ativo", "em_revisao"].includes(r.status);
-    s += `<g style="cursor:pointer" onclick="REQ_SEL='${r.id}';carregarRequisitos();mostrarRequisito()" opacity="${apagado ? 0.55 : 1}">
-      <rect x="${X[r.id] - 55}" y="${meio - 24}" width="110" height="48" rx="10" fill="var(--card)" stroke="${r.status === "em_revisao" ? "var(--warn)" : apagado ? "var(--muted)" : "var(--ok)"}" stroke-width="${r.id === REQ_SEL ? 4 : 2}" ${apagado ? 'stroke-dasharray="4 3"' : ""}/>
-      <text x="${X[r.id]}" y="${meio - 2}" text-anchor="middle" style="font-weight:700">${r.id} <tspan style="font-weight:400;fill:var(--muted)">v${r.versao_atual}</tspan></text>
-      <text x="${X[r.id]}" y="${meio + 14}" text-anchor="middle" style="font-size:11px;fill:var(--muted)">${r.status.replace("_", " ")}</text></g>`;
-  });
-  $("#req-grafo").setAttribute("viewBox", `0 0 ${larg} ${alt}`);
-  $("#req-grafo").innerHTML = `<defs>${defs}</defs>` + (requisitos.length ? s : `<text x="${larg / 2}" y="${meio}" text-anchor="middle" style="fill:var(--muted)">nenhum requisito ainda</text>`);
-  $("#req-legenda").innerHTML = `<span>Acima: evolução (de onde o requisito veio) · Abaixo: relações entre requisitos que convivem</span>` +
+function selecionarReq(id) { REQ.sel = id; listarRequisitos(); desenharMapa(); mostrarRequisito(); }
+
+function desenharMapa() {
+  // Só os requisitos que têm ligação, em tamanho fixo; se não couber, o mapa rola na horizontal.
+  const ligados = new Set(REQ.ligacoes.flatMap((l) => [l.origem_id, l.destino_id]));
+  const nos = REQ.lista.filter((r) => ligados.has(r.id)).sort((a, b) => +a.id.slice(1) - +b.id.slice(1));
+  $("#mapa-legenda").innerHTML = `<span>Acima da linha: <b>evolução</b> (de onde o requisito veio)</span><span>Abaixo: <b>relações</b> entre requisitos que convivem</span>` +
     Object.values(TIPO_LIG).map((t) => `<span><i style="background:${t.cor}"></i>${t.txt}</span>`).join("");
+  if (!nos.length) {
+    $("#mapa-dica").textContent = "";
+    $("#mapa").innerHTML = vazio("Nenhuma ligação entre requisitos", REQ.lista.length ? `Os ${REQ.lista.length} requisitos desta pasta não têm ligações registradas.` : "");
+    return;
+  }
+  $("#mapa-dica").textContent = `${nos.length} requisito(s) com ligação · ${REQ.ligacoes.length} ligação(ões) · clique num requisito`;
+  const passo = 150, nw = 116, nh = 56, margem = 80;
+  const X = {}; nos.forEach((r, i) => { X[r.id] = margem + i * passo; });
+  // Altura do arco cresce com a distância: ligações para o mesmo requisito não sobrepõem os rótulos.
+  const arco = (d) => Math.min(230, 30 + d * 0.25);
+  const temEvo = REQ.ligacoes.some((l) => EVOLUCAO.includes(l.tipo)), temRel = REQ.ligacoes.some((l) => !EVOLUCAO.includes(l.tipo));
+  const meio = temEvo ? 270 : 50, H = meio + (temRel ? 270 : 50);
+  const L = Math.max(margem * 2 + (nos.length - 1) * passo, 600);
+  let s = `<defs>${Object.entries(TIPO_LIG).map(([k, t]) => `<marker id="m-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${t.cor}"/></marker>`).join("")}</defs>`;
+  s += `<line x1="20" y1="${meio}" x2="${L - 20}" y2="${meio}" stroke="var(--line)" stroke-dasharray="3 5"/>`;
+  REQ.ligacoes.forEach((l) => {
+    const a = X[l.origem_id], b = X[l.destino_id]; if (a == null || b == null) return;
+    const evo = EVOLUCAO.includes(l.tipo), sinal = evo ? -1 : 1, t = TIPO_LIG[l.tipo] || { cor: "gray", txt: l.tipo };
+    const h = arco(Math.abs(a - b)) * sinal, y0 = meio + sinal * nh / 2;
+    const foco = REQ.sel && (l.origem_id === REQ.sel || l.destino_id === REQ.sel), op = REQ.sel && !foco ? 0.22 : 1;
+    const tx = (a + b) / 2, ty = y0 + h * 0.75, txt = `${l.origem_id} ${t.txt} ${l.destino_id}`, lw = txt.length * 6.8 + 18;
+    s += `<g opacity="${op}"><path d="M${a},${y0} C${a},${y0 + h} ${b},${y0 + h} ${b},${y0}" fill="none" stroke="${t.cor}" stroke-width="${foco ? 3.5 : 2.2}" marker-end="url(#m-${l.tipo})"/>
+      <rect x="${tx - lw / 2}" y="${ty - 11}" width="${lw}" height="22" rx="11" fill="var(--surface)" stroke="${t.cor}"/>
+      <text x="${tx}" y="${ty + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="${t.cor}">${txt}</text></g>`;
+  });
+  nos.forEach((r) => {
+    const fora = !["ativo", "em_revisao"].includes(r.status), sel = r.id === REQ.sel;
+    const cor = r.status === "em_revisao" ? "var(--warn)" : fora ? "var(--muted)" : "var(--ok)";
+    s += `<g class="no-req" onclick="selecionarReq('${r.id}')"><title>${esc(r.id)} · ${esc(r.titulo)}</title>
+      <rect x="${X[r.id] - nw / 2}" y="${meio - nh / 2}" width="${nw}" height="${nh}" rx="12" fill="${sel ? "var(--info-bg)" : "var(--surface)"}" stroke="${sel ? "var(--info)" : cor}" stroke-width="${sel ? 3 : 2}" ${fora ? 'stroke-dasharray="5 4"' : ""}/>
+      <text x="${X[r.id]}" y="${meio - 3}" text-anchor="middle" font-size="16" font-weight="700" opacity="${fora ? 0.65 : 1}">${r.id}<tspan font-size="12" font-weight="500" fill="var(--muted)"> v${r.versao_atual}</tspan></text>
+      <text x="${X[r.id]}" y="${meio + 15}" text-anchor="middle" font-size="11.5" fill="${cor}" font-weight="600">${(STATUS[r.status] || { txt: r.status }).txt}</text></g>`;
+  });
+  $("#mapa").innerHTML = `<svg width="${L}" height="${H}" viewBox="0 0 ${L} ${H}">${s}</svg>`;
 }
 
 async function mostrarRequisito() {
-  if (!REQ_SEL) return;
-  const r = await api("/api/requisito/" + REQ_SEL);
+  const r = await api("/api/requisito/" + encodeURIComponent(REQ.sel));
+  if (!r) return;
   const c = r.conteudo;
-  const lig = r.ligacoes.map((l) => `<li>${l.origem_id} <b style="color:${TIPO_LIG[l.tipo]?.cor}">${TIPO_LIG[l.tipo]?.txt || l.tipo}</b> ${l.destino_id} <span class="muted">${esc(l.motivo || "")}</span></li>`).join("");
-  const fontes = r.fontes.map((f) => `<li>${esc(f.tipo)}: <b>${esc(f.ref)}</b>${f.versao ? ` (conhecimento v${f.versao})` : ""}</li>`).join("");
+  const lig = r.ligacoes.map((l) => {
+    const t = TIPO_LIG[l.tipo] || { cor: "gray", txt: l.tipo };
+    return `<li><a class="link-req" onclick="selecionarReq('${l.origem_id}')">${l.origem_id}</a> <b style="color:${t.cor}">${t.txt}</b> <a class="link-req" onclick="selecionarReq('${l.destino_id}')">${l.destino_id}</a>
+      ${l.motivo ? `<div class="muted" style="font-size:13px">${esc(l.motivo)}</div>` : ""}</li>`;
+  }).join("");
+  const fontes = r.fontes.map((f) => `<span class="tema">${esc(f.tipo)}: <b>${esc(f.ref)}</b>${f.versao ? ` (v${f.versao})` : ""}</span>`).join("");
   const trilha = r.trilha.map((p) => p.evento === "versao"
-    ? `<div><b>${p.requisito_id} v${p.versao}</b> ${esc(p.titulo)}<br><small class="muted">${p.momento.replace("T", " ")} · ${esc(p.motivo || "")}</small></div>`
-    : `<div class="lig"><b>${p.requisito_id} ${TIPO_LIG[p.tipo]?.txt || p.tipo} ${p.destino_id}</b><br><small class="muted">${p.momento.replace("T", " ")} · ${esc(p.motivo || "")}</small></div>`).join("");
-  const versoes = r.versoes.map((v) => `<details ${v.versao === r.versao_atual ? "" : ""}><summary>v${v.versao} · ${v.aprovado_em.replace("T", " ")} · ${esc(v.motivo || "")} · conversa ${esc(v.conversa_id)}</summary><pre>${esc(JSON.stringify(v.conteudo, null, 2))}</pre></details>`).join("");
-  $("#req-detalhe").innerHTML = `
-    <h2>${r.id} · ${esc(c.titulo)} <span class="badge st-${r.status}">${r.status.replace("_", " ")}</span></h2>
-    <div class="muted">${c.tipo === "enabler" ? "Requisito técnico (enabler)" : "Requisito de negócio"} · temas: ${r.temas.join(", ")} · versão atual v${r.versao_atual}</div>
-    ${c.historia ? `<h3>História</h3><div>${esc(c.historia)}</div>` : ""}
-    ${c.texto ? `<h3>Texto</h3><div>${esc(c.texto)}</div><div class="muted">classe ${c.classe}${c.subtipo ? " / " + c.subtipo : ""} · turnos ${(c.turnos || []).join(", ")}</div>` : ""}
-    ${(c.criterios_aceite || []).length ? `<h3>Critérios de aceite</h3><ul>${c.criterios_aceite.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
-    <h3>Ligações</h3>${lig ? `<ul>${lig}</ul>` : `<div class="muted">nenhuma</div>`}
-    <h3>Fontes (rastreabilidade)</h3><ul>${fontes}</ul>
+    ? `<div class="passo"><b><a class="link-req" onclick="selecionarReq('${p.requisito_id}')">${p.requisito_id}</a> v${p.versao}</b> · ${esc(p.titulo)}<small>${quando(p.momento)} · ${esc(p.motivo || "")}</small></div>`
+    : `<div class="passo lig"><b>${p.requisito_id} <span style="color:${TIPO_LIG[p.tipo]?.cor}">${TIPO_LIG[p.tipo]?.txt || p.tipo}</span> ${p.destino_id}</b><small>${quando(p.momento)} · ${esc(p.motivo || "")}</small></div>`).join("");
+  const versoes = r.versoes.slice().reverse().map((v) => `<details class="json"><summary>v${v.versao} · ${quando(v.aprovado_em)} · ${esc(v.motivo || "")}</summary><pre>${esc(JSON.stringify(v.conteudo, null, 2))}</pre></details>`).join("");
+  $("#req-detalhe").innerHTML = `<div class="detalhe">
+    <div class="item-topo"><span class="muted mono">${r.id} · versão ${r.versao_atual}</span>${selo(r.status)}</div>
+    <div class="titulo-grande">${esc(c.texto || c.titulo)}</div>
+    <div>${r.temas.map((t) => `<span class="tema">${esc(t)}</span>`).join("")}${c.classe ? `<span class="tema">${classeTxt(c)}</span>` : `<span class="tema">${c.tipo === "enabler" ? "enabler técnico" : "negócio"}</span>`}</div>
+    ${c.historia ? `<h3>História</h3><div class="bloco">${esc(c.historia)}</div>` : ""}
+    ${c.turnos?.length ? `<h3>Onde foi dito</h3><div>${c.turnos.map((t) => `<span class="tema mono">${esc(t)}</span>`).join("")}</div>` : ""}
+    ${(c.criterios_aceite || []).length ? `<h3>Critérios de aceite</h3><ul class="limpa">${c.criterios_aceite.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
+    <h3>Ligações</h3>${lig ? `<ul class="limpa">${lig}</ul>` : '<div class="muted">nenhuma</div>'}
+    <h3>Fontes (rastreabilidade)</h3><div>${fontes || '<span class="muted">nenhuma</span>'}</div>
     <h3>Como chegamos aqui</h3><div class="trilha">${trilha}</div>
-    <h3>Versões</h3>${versoes}`;
+    <h3>Versões</h3>${versoes}</div>`;
 }
 
-// ------------------------------------------------------------------ especialistas
-let ESP_SEL = null, ESP_VER = null;
+// ============================================================ especialistas
+const ESP = { sel: null, ver: null, vista: "conteudo" };
 async function carregarEspecialistas() {
-  const lista = await api("/api/especialistas");
-  $("#esp-lista").innerHTML = lista.map((e) => `<div class="item ${e.id === ESP_SEL ? "sel" : ""}" data-id="${e.id}">
-    <b>${esc(e.tema)}</b> <span class="muted">conhecimento v${e.versao_conhecimento}</span>
-    <small>${esc(e.descricao)}</small><small>${e.consultas} consulta(s) · atualizado ${e.atualizado_em.replace("T", " ")}</small></div>`).join("") || `<div class="muted">Nenhum especialista ainda.</div>`;
-  document.querySelectorAll("#esp-lista .item").forEach((el) => el.addEventListener("click", () => { ESP_SEL = el.dataset.id; ESP_VER = null; carregarEspecialistas(); mostrarEspecialista(); }));
+  const lista = (await api("/api/especialistas")) || [];
+  if (!ESP.sel && lista.length) ESP.sel = lista[0].id;
+  $("#esp-cards").innerHTML = lista.map((e) => `<div class="card-esp ${e.id === ESP.sel ? "sel" : ""}" data-id="${e.id}">
+      <b>${esc(e.tema)}</b><div class="muted" style="font-size:13px">${esc(corta(e.descricao, 90))}</div>
+      <div class="num"><span><strong>v${e.versao_conhecimento}</strong> conhecimento</span><span><strong>${e.consultas}</strong> consultas</span></div></div>`).join("")
+    || `<div class="card" style="grid-column:1/-1">${vazio("Nenhum especialista nesta pasta", "Eles são criados pelo Líder quando aparece um tema novo.")}</div>`;
+  $$("#esp-cards .card-esp").forEach((el) => el.addEventListener("click", () => { ESP.sel = el.dataset.id; ESP.ver = null; carregarEspecialistas(); }));
+  if (ESP.sel) mostrarEspecialista(); else $("#esp-detalhe").innerHTML = "";
+  $("#esp-detalhe").hidden = !ESP.sel;
 }
 
 function markdown(md) {
@@ -434,8 +867,11 @@ function markdown(md) {
     if (linha.startsWith("# ")) html += `<h1>${esc(linha.slice(2))}</h1>`;
     else if (linha.startsWith("## ")) html += `<h2>${esc(linha.slice(3))}</h2>`;
     else if (linha.startsWith("> ")) html += `<blockquote>${esc(linha.slice(2))}</blockquote>`;
-    else if (linha.startsWith("- ")) { if (!lista) { html += "<ul>"; lista = true; } html += `<li>${esc(linha.slice(2))}</li>`; }
-    else if (linha.trim()) html += `<p>${esc(linha)}</p>`;
+    else if (linha.startsWith("- ")) {
+      if (!lista) { html += "<ul>"; lista = true; }
+      const t = linha.slice(2);
+      html += t === "(vazio)" ? `<li class="vazio-md">vazio</li>` : `<li>${esc(t).replace(/\b(R\d+)\b/g, "<b>$1</b>")}</li>`;
+    } else if (linha.trim()) html += `<p>${esc(linha)}</p>`;
   }
   return html + (lista ? "</ul>" : "");
 }
@@ -445,182 +881,94 @@ function diff(antes, depois) {
   const L = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
   for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
     L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-  let i = 0, j = 0, out = "";
+  let i = 0, j = 0, out = "", add = 0, del = 0;
   while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && a[i] === b[j]) { out += `<div>${esc(a[i]) || "&nbsp;"}</div>`; i++; j++; }
-    else if (j < b.length && (i >= a.length || L[i][j + 1] >= L[i + 1][j])) { out += `<div class="add">+ ${esc(b[j])}</div>`; j++; }
-    else { out += `<div class="del">- ${esc(a[i])}</div>`; i++; }
+    if (i < a.length && j < b.length && a[i] === b[j]) { out += `<div class="igual">${esc(a[i]) || "&nbsp;"}</div>`; i++; j++; }
+    else if (j < b.length && (i >= a.length || L[i][j + 1] >= L[i + 1][j])) { out += `<div class="add">+ ${esc(b[j])}</div>`; j++; add++; }
+    else { out += `<div class="del">− ${esc(a[i])}</div>`; i++; del++; }
   }
-  return out;
+  return { html: out, add, del };
 }
 
 async function mostrarEspecialista() {
-  if (!ESP_SEL) return;
-  const e = await api("/api/especialista/" + ESP_SEL);
-  const v = ESP_VER ?? e.versoes.length;
+  const e = await api("/api/especialista/" + encodeURIComponent(ESP.sel));
+  if (!e) return;
+  const v = ESP.ver ?? e.versoes.length;
   const atual = e.versoes[v - 1], anterior = e.versoes[v - 2];
-  const botoes = e.versoes.map((x) => `<button class="b ${x.versao === v ? "sel" : ""}" data-v="${x.versao}" title="${esc(x.motivo)}">v${x.versao}</button>`).join("");
+  const d = anterior && atual ? diff(anterior.conteudo, atual.conteudo) : null;
   const mudancas = (atual?.origem?.mudancas || []).map((m) => `<li>${esc(m)}</li>`).join("");
-  $("#esp-detalhe").innerHTML = `
-    <h2>Especialista: ${esc(e.tema)}</h2>
-    <div class="muted">${esc(e.descricao)}<br>arquivo: <code>${esc(e.arquivo)}</code></div>
-    <h3>Versões do conhecimento</h3>
-    <div class="versoes">${botoes}</div>
-    ${atual ? `<div class="muted">v${atual.versao} · ${atual.criado_em.replace("T", " ")} · motivo: <b>${esc(atual.motivo)}</b> · hash ${atual.hash}</div>` : ""}
-    ${mudancas ? `<ul>${mudancas}</ul>` : ""}
-    <div class="grade" style="grid-template-columns:1fr 1fr;margin-top:12px">
-      <div><h3>Conteúdo (v${v})</h3><div class="md card">${markdown(atual?.conteudo || e.conteudo)}</div></div>
-      <div><h3>${anterior ? `O que mudou desde v${anterior.versao}` : "Primeira versão"}</h3><div class="diff card">${anterior ? diff(anterior.conteudo, atual.conteudo) : '<span class="muted">sem versão anterior</span>'}</div></div>
-    </div>`;
-  document.querySelectorAll("#esp-detalhe .versoes button").forEach((b) => b.addEventListener("click", () => { ESP_VER = Number(b.dataset.v); mostrarEspecialista(); }));
+  $("#esp-detalhe").innerHTML = `<div class="card-cabeca" style="align-items:flex-start">
+      <div style="flex:1;min-width:220px"><div class="titulo-grande" style="margin:0">${esc(e.tema)}</div>
+        <div class="muted">${esc(e.descricao)}</div><div class="muted mono" style="font-size:12px;margin-top:4px">${esc(e.arquivo)}</div></div>
+      <div class="segmentos" id="esp-vista">
+        <button data-v="conteudo" class="${ESP.vista === "conteudo" ? "ativo" : ""}">Conteúdo</button>
+        <button data-v="diff" class="${ESP.vista === "diff" ? "ativo" : ""}">O que mudou${d ? ` <span style="color:var(--ok)">+${d.add}</span> <span style="color:var(--bad)">−${d.del}</span>` : ""}</button>
+      </div></div>
+    <div class="detalhe" style="padding-top:16px">
+      <h3 style="margin-top:0">Histórico do conhecimento</h3>
+      <div class="versoes">${e.versoes.map((x) => `<button data-v="${x.versao}" class="${x.versao === v ? "sel" : ""}" title="${esc(x.motivo)}"><b>v${x.versao}</b><span>${esc(corta(x.motivo, 26))}</span></button>`).join("")}</div>
+      ${atual ? `<div class="bloco" style="margin-top:12px"><b>v${atual.versao}</b> · ${quando(atual.criado_em)} · motivo: <b>${esc(atual.motivo)}</b>
+        <span class="muted mono" style="font-size:12px"> · hash ${atual.hash}</span>${mudancas ? `<ul style="margin:8px 0 0">${mudancas}</ul>` : ""}</div>` : ""}
+      <div style="margin-top:18px">${ESP.vista === "diff"
+        ? (d ? `<div class="diff">${d.html}</div>` : '<div class="muted">Esta é a primeira versão; não há o que comparar.</div>')
+        : `<div class="md">${markdown(atual?.conteudo || e.conteudo)}</div>`}</div></div>`;
+  $$("#esp-detalhe .versoes button").forEach((b) => b.addEventListener("click", () => { ESP.ver = +b.dataset.v; mostrarEspecialista(); }));
+  $$("#esp-vista button").forEach((b) => b.addEventListener("click", () => { ESP.vista = b.dataset.v; mostrarEspecialista(); }));
 }
 
-// ------------------------------------------------------------------ avaliação
-let AV = null;
-const METRICAS = [
-  ["revocacao", "Revocação", "do gabarito, quanto foi encontrado"],
-  ["precisao", "Precisão", "do que foi extraído, quanto existe no gabarito"],
-  ["f1", "F1", "equilíbrio entre as duas"],
-  ["classe", "Classe FR/NFR", "acerto entre os encontrados"],
-  ["subtipo", "Subtipo NFR", "acerto entre os NFR encontrados"],
-  ["rastreio", "Rastreio", "citou o turno certo"],
-  ["sem_respaldo", "Sem respaldo", "extraídos sem apoio nas falas (menor é melhor)"],
-];
-const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
-const classeTxt = (x) => x.classe + (x.subtipo ? "/" + x.subtipo : "");
-
+// ============================================================ avaliação
+const AV = { dados: null, filtro: "todos" };
 async function carregarAvaliacao() {
-  AV = await api("/api/avaliacao");
-  if (!AV.metricas) return;
-  const m = AV.metricas;
-  $("#av-topo").innerHTML = `<h2>${esc(AV.titulo)} <span class="muted">· ${AV.modo === "conselho" ? "com o conselho" : "agente único (baseline)"} · provedor ${esc(AV.provedor)}</span></h2>
-    <div class="muted">${m.previstos} requisitos extraídos · ${m.gabarito} no gabarito · ${m.acertos} pares encontrados (similaridade ≥ ${AV.parametros.limiar_similaridade})</div>
-    <div class="metricas">${METRICAS.map(([k, nomeM, dica]) => `<div class="metrica"><small>${nomeM}</small><b>${pct(m[k])}</b>
-      <div class="barra"><i style="width:${(m[k] ?? 0) * 100}%;${k === "sem_respaldo" ? "background:var(--bad)" : ""}"></i></div><small>${dica}</small></div>`).join("")}</div>`;
+  AV.dados = await api("/api/avaliacao");
+  const a = AV.dados;
+  if (!a?.metricas) { $("#av-metricas").innerHTML = ""; $("#av-tabela").innerHTML = vazio("Esta pasta não tem avaliação"); return; }
+  const m = a.metricas;
+  $("#av-sub").innerHTML = `<b>${esc(a.titulo)}</b><br>${a.modo === "conselho" ? '<span style="color:var(--lider)">com o conselho</span>' : '<span style="color:var(--gemeo)">agente único (baseline)</span>'}
+    · provedor ${esc(a.provedor)} · ${m.previstos} extraídos · ${m.gabarito} no gabarito · ${m.acertos} pares (similaridade ≥ ${a.parametros.limiar_similaridade})`;
+  $("#av-metricas").innerHTML = METRICAS.map(([k, nomeM, dica]) => `<div class="metrica"><div class="nome">${nomeM}</div><div class="valor">${pct(m[k])}</div>
+    <div class="barra"><i style="width:${(m[k] ?? 0) * 100}%;${k === "sem_respaldo" ? "background:var(--bad)" : ""}"></i></div><div class="dica">${dica}</div></div>`).join("");
   mostrarTabelaAvaliacao();
 }
-
+$$("#av-filtro button").forEach((b) => b.addEventListener("click", () => {
+  AV.filtro = b.dataset.f; $$("#av-filtro button").forEach((x) => x.classList.toggle("ativo", x === b)); mostrarTabelaAvaliacao();
+}));
 function mostrarTabelaAvaliacao() {
-  const filtro = $("#av-filtro").value;
-  const prev = Object.fromEntries(AV.previstos.map((p) => [p.id, p]));
-  const parGab = Object.fromEntries(AV.pares.map((x) => [x.gabarito, x]));
-  if (filtro === "extras") {
-    const linhas = AV.falsos_positivos.map((id) => prev[id]).map((p) => `<tr><td><b>${p.id}</b></td><td>${esc(p.texto)}</td><td>${classeTxt(p)}</td><td>${p.turnos.join(", ")}</td><td>${esc(p.tema)}</td></tr>`).join("");
-    $("#av-tabela").innerHTML = `<div class="tabela-rolagem"><table><tr><th>id</th><th>extraído pelo GigaBrain (sem par no gabarito)</th><th>classe</th><th>turnos</th><th>tema</th></tr>${linhas}</table></div>`;
+  const a = AV.dados; if (!a?.metricas) return;
+  const prev = Object.fromEntries(a.previstos.map((p) => [p.id, p]));
+  const parGab = Object.fromEntries(a.pares.map((x) => [x.gabarito, x]));
+  if (AV.filtro === "extras") {
+    const extras = a.falsos_positivos.map((id) => prev[id]);
+    $("#av-contagem").textContent = `${extras.length} requisito(s) extraído(s) sem par no gabarito`;
+    $("#av-tabela").innerHTML = extras.length ? `<table><tr><th>id</th><th>extraído pelo GigaBrain</th><th>classe</th><th>turnos</th><th>tema</th></tr>${extras.map((p) =>
+      `<tr><td><b>${p.id}</b></td><td>${esc(p.texto)}</td><td><span class="tema">${classeTxt(p)}</span></td><td class="mono" style="font-size:13px">${p.turnos.join(", ")}</td><td>${esc(p.tema)}</td></tr>`).join("")}</table>` : vazio("Nenhum extra");
     return;
   }
-  const marca = (ok) => ok == null ? "" : ok ? '<span class="ok">✓</span>' : '<span class="erro">✗</span>';
-  const linhas = AV.gabarito.filter((g) => {
+  const lista = a.gabarito.filter((g) => {
     const par = parGab[g.id];
-    return filtro === "todos" || (filtro === "perdidos" && !par) || (filtro === "classe" && par && !par.classe_ok);
-  }).map((g) => {
+    return AV.filtro === "todos" || (AV.filtro === "perdidos" && !par) || (AV.filtro === "classe" && par && !par.classe_ok);
+  });
+  $("#av-contagem").textContent = `${lista.length} de ${a.gabarito.length} requisitos do gabarito`;
+  const marca = (ok, rot) => ok == null ? "" : `<div class="${ok ? "ok-txt" : "erro-txt"}">${ok ? "✓" : "✗"} ${rot}</div>`;
+  $("#av-tabela").innerHTML = lista.length ? `<table><tr><th style="width:120px">gabarito</th><th>texto esperado</th><th>o que o GigaBrain extraiu</th><th style="width:110px">resultado</th></tr>` + lista.map((g) => {
     const par = parGab[g.id], p = par && prev[par.previsto];
-    return `<tr><td><b>${g.id.split(":")[1]}</b><br><small class="muted">${classeTxt(g)} · ${g.turnos.join(", ")}</small></td>
+    return `<tr><td><b>${g.id.split(":")[1]}</b><div class="muted" style="font-size:12px">${classeTxt(g)}<br>${g.turnos.join(", ")}</div></td>
       <td>${esc(g.texto)}</td>
-      <td>${p ? `<b>${p.id}</b> ${esc(p.texto)}<br><small class="muted">${classeTxt(p)} · ${p.turnos.join(", ")} · similaridade ${par.similaridade}</small>` : '<span class="erro">não encontrado</span>'}</td>
-      <td>${par ? `classe ${marca(par.classe_ok)}<br>${par.subtipo_ok != null ? `subtipo ${marca(par.subtipo_ok)}<br>` : ""}turno ${marca(par.rastreio_ok)}` : ""}</td></tr>`;
-  }).join("");
-  $("#av-tabela").innerHTML = `<div class="tabela-rolagem"><table><tr><th>gabarito</th><th>texto do gabarito</th><th>o que o GigaBrain extraiu</th><th>acertos</th></tr>${linhas}</table></div>`;
-}
-$("#av-filtro").addEventListener("change", mostrarTabelaAvaliacao);
-
-// ------------------------------------------------------------------ início
-// ------------------------------------------------------------------ benchmark
-let BENCH = null;
-const COR_MODO = { conselho: "var(--lider)", agente_unico: "var(--gemeo)" };
-const NOME_MODO = { conselho: "conselho", agente_unico: "agente único" };
-
-async function carregarBenchmark() {
-  BENCH = await fetch("/api/benchmark").then((r) => r.json());
-  const provs = [...new Set(BENCH.linhas.map((l) => l.provedor))].sort((a, b) => (a === "simulado") - (b === "simulado"));
-  const atual = $("#bm-provedor").value;
-  $("#bm-provedor").innerHTML = provs.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
-  if (provs.includes(atual)) $("#bm-provedor").value = atual;
-  mostrarBenchmark();
+      <td>${p ? `<b>${p.id}</b> · ${esc(p.texto)}<div class="muted" style="font-size:12px;margin-top:4px">${classeTxt(p)} · ${p.turnos.join(", ")} · similaridade ${Math.round(par.similaridade * 100)}%</div>` : '<span class="selo bad">não encontrado</span>'}</td>
+      <td>${par ? marca(par.classe_ok, "classe") + marca(par.subtipo_ok, "subtipo") + marca(par.rastreio_ok, "turno") : ""}</td></tr>`;
+  }).join("") + "</table>" : vazio("Nada neste filtro");
 }
 
-function mostrarBenchmark() {
-  const prov = $("#bm-provedor").value;
-  const linhas = BENCH.linhas.filter((l) => l.provedor === prov);
-  const porProjeto = {};
-  linhas.forEach((l) => { (porProjeto[l.projeto] ||= {})[l.modo] = l; });
-  // Média só sobre projetos que rodaram nos dois modos, para a comparação ser justa.
-  const pareados = Object.values(porProjeto).filter((p) => p.conselho && p.agente_unico);
-  const andamento = BENCH.em_andamento.filter((f) => f.includes("/" + prov + "/")).length;
-  $("#bm-status").textContent = `${pareados.length} projeto(s) com os dois modos` + (andamento ? ` · ${andamento} execução(ões) em andamento` : "");
-
-  const media = (modo, k) => { const v = pareados.map((p) => p[modo][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
-  $("#bm-medias").innerHTML = METRICAS.map(([k, nomeM]) => {
-    const c = media("conselho", k), a = media("agente_unico", k);
-    const d = c != null && a != null ? c - a : null;
-    const melhor = d == null || Math.abs(d) < 0.005 ? "" : (k === "sem_respaldo" ? d < 0 : d > 0) ? "delta-bom" : "delta-ruim";
-    return `<div class="metrica"><small>${nomeM}</small>
-      <div class="cmp"><span style="color:var(--lider)"><b>${pct(c)}</b></span><span style="color:var(--gemeo)">${pct(a)}</span></div>
-      <small class="${melhor}">${d == null ? "" : (d >= 0 ? "+" : "") + Math.round(d * 100) + " pts para o conselho"}</small></div>`;
-  }).join("");
-
-  // Gráfico: duas barras de F1 por projeto.
-  const projetos = Object.keys(porProjeto).sort(), alt = 30, esq = 170, larg = 1000;
-  let g = "";
-  [0, 0.25, 0.5, 0.75, 1].forEach((t) => {
-    const x = esq + t * (larg - esq - 50);
-    g += `<line x1="${x}" y1="0" x2="${x}" y2="${projetos.length * alt}" stroke="var(--line)"/><text x="${x}" y="${projetos.length * alt + 16}" text-anchor="middle" style="font-size:11px;fill:var(--muted)">${t * 100}%</text>`;
-  });
-  projetos.forEach((nomeP, i) => {
-    const y = i * alt;
-    g += `<text x="${esq - 8}" y="${y + 19}" text-anchor="end" style="font-size:12px">${esc(nomeP)}</text>`;
-    ["conselho", "agente_unico"].forEach((m, j) => {
-      const l = porProjeto[nomeP][m]; if (!l) return;
-      const w = (l.f1 || 0) * (larg - esq - 50);
-      g += `<rect x="${esq}" y="${y + 4 + j * 11}" width="${w}" height="10" rx="2" fill="${COR_MODO[m]}" style="cursor:pointer" onclick="abrirFonte('${l.fonte}')"><title>${esc(nomeP)} · ${NOME_MODO[m]} · F1 ${pct(l.f1)}</title></rect>`;
-      g += `<text x="${esq + w + 4}" y="${y + 13 + j * 11}" style="font-size:10px;fill:var(--muted)">${pct(l.f1)}</text>`;
-    });
-  });
-  $("#bm-grafico").setAttribute("viewBox", `0 0 ${larg} ${projetos.length * alt + 24}`);
-  $("#bm-grafico").innerHTML = projetos.length ? g : `<text x="500" y="20" text-anchor="middle" style="fill:var(--muted)">nenhuma avaliação ainda</text>`;
-
-  const cols = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"];
-  const fmt = (k, v) => v == null ? "–" : ["previstos", "gabarito", "acertos"].includes(k) ? v : pct(v);
-  $("#bm-tabela").innerHTML = `<table><tr><th>projeto</th><th>modo</th>${cols.map((c) => `<th>${c.replace("_", " ")}</th>`).join("")}</tr>` +
-    projetos.flatMap((nomeP) => ["conselho", "agente_unico"].map((m) => porProjeto[nomeP][m]).filter(Boolean)).map((l) =>
-      `<tr class="clicavel" onclick="abrirFonte('${l.fonte}')"><td>${esc(l.projeto)}</td><td style="color:${COR_MODO[l.modo]}">${NOME_MODO[l.modo] || l.modo}</td>${cols.map((c) => `<td>${fmt(c, l[c])}</td>`).join("")}</tr>`).join("") + "</table>";
-}
-$("#bm-provedor").addEventListener("change", mostrarBenchmark);
-$("#bm-atualizar").addEventListener("click", carregarBenchmark);
-
-// ------------------------------------------------------------------ pastas de dados
-async function carregarFontes() {
-  FONTES = await fetch("/api/fontes").then((r) => r.json());
-  const grupos = {};
-  FONTES.forEach((f) => (grupos[f.grupo] ||= []).push(f));
-  $("#fonte").innerHTML = Object.entries(grupos).map(([g, fs]) => `<optgroup label="${esc(g)}">${fs.map((f) =>
-    `<option value="${esc(f.id)}">${esc(f.rotulo)}${f.avaliacao ? " ✓" : ""}</option>`).join("")}</optgroup>`).join("");
-  $("#btn-benchmark").hidden = !FONTES.some((f) => f.id.startsWith("dados-avaliacao/"));
-}
-
-async function definirFonte(id) {
-  FONTE = id;
-  $("#fonte").value = id;
-  try { localStorage.setItem("gigabrain-fonte", id); } catch (e) {}
-  CONV_SEL = REQ_SEL = ESP_SEL = null;
-  ["#conv-eventos", "#req-detalhe", "#esp-detalhe"].forEach((s) => { $(s).className = "vazio"; $(s).innerHTML = "Escolha um item."; });
-  const temAvaliacao = FONTES.find((f) => f.id === id)?.avaliacao;
-  $("#btn-avaliacao").hidden = !temAvaliacao;
-  await carregarResumo();
-  await carregarArquitetura();
-  if (ABA === "avaliacao" && !temAvaliacao) return abrirAba("arquitetura");
-  if (ABA !== "arquitetura" && ABA !== "benchmark") abrirAba(ABA);
-}
-
-function abrirFonte(id) { definirFonte(id).then(() => abrirAba("avaliacao")); }
-$("#fonte").addEventListener("change", () => definirFonte($("#fonte").value));
-
+// ============================================================ início
 (async () => {
   await carregarFontes();
-  if (!FONTES.length) { $("#stats").textContent = "Nenhuma pasta de dados encontrada. Rode: python main.py demo"; return; }
-  let salva = null;
-  try { salva = localStorage.getItem("gigabrain-fonte"); } catch (e) {}
-  const padrao = FONTES.find((f) => f.id === salva) || FONTES.find((f) => f.id === "dados") || FONTES[0];
+  if (!E.fontes.length) {
+    $("main").innerHTML = vazio("Nenhuma pasta de dados encontrada", "Rode <code>python main.py demo</code> ou <code>python main.py avaliar ...</code> e recarregue a página.");
+    return;
+  }
+  const salva = lembrar("gigabrain-fonte");
+  const padrao = E.fontes.find((f) => f.id === salva) || E.fontes.find((f) => f.id === "dados") || E.fontes.find((f) => f.id === "dados-demo") || E.fontes[0];
+  E.aba = lembrar("gigabrain-aba") || "arquitetura";
+  if (E.aba === "benchmark" && $('[data-aba="benchmark"]').hidden) E.aba = "arquitetura";
   await definirFonte(padrao.id);
 })();
 </script>
