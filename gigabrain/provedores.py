@@ -246,18 +246,27 @@ class ProvedorSimulado:
         return {"requisitos": requisitos}
 
     def _especialista_revisar(self, mensagens: list[dict]) -> dict:
-        """Remove candidatos quase iguais a outro do mesmo tema (duplicados)."""
+        """Recomenda descartar o rascunho quase igual a um requisito já salvo do tema."""
         entrada = _ultimo(mensagens)
         from .avaliacao import similaridade
-        revisao, vistos = [], []
-        for c in entrada["candidatos"]:
-            igual = next((v for v in vistos if similaridade(c["texto"], v["texto"]) >= 0.85), None)
-            if igual:
-                revisao.append({"indice": c["indice"], "acao": "remover", "motivo": f"duplicado do candidato {igual['indice']}"})
-            else:
-                revisao.append({"indice": c["indice"], "acao": "manter"})
-                vistos.append(c)
-        return {"revisao": revisao, "ligacoes": []}
+        texto = entrada["rascunho"]["texto"]
+        for req in entrada.get("requisitos_do_tema", []):
+            if similaridade(texto, req.get("texto") or req.get("titulo") or "") >= 0.85:
+                return {"acao": "descartar", "duplicado_de": req["id"], "ligacoes": [], "motivo": f"repete o {req['id']}"}
+        return {"acao": "manter", "duplicado_de": None, "ligacoes": [], "motivo": "sem duplicados no tema"}
+
+    def _gemeo_decidir(self, mensagens: list[dict]) -> dict:
+        """Segue a recomendação do especialista."""
+        entrada = _ultimo(mensagens)
+        rec, rascunho = entrada["recomendacao"], entrada["rascunho"]
+        return {
+            "salvar": rec["acao"] != "descartar",
+            "texto": rec.get("texto") or rascunho["texto"],
+            "classe": rec.get("classe") or rascunho["classe"],
+            "subtipo": rec.get("subtipo") or rascunho["subtipo"],
+            "ligacoes": rec.get("ligacoes", []),
+            "motivo": f"segui a recomendação ({rec['acao']}): {rec.get('motivo', '')}",
+        }
 
     # Líder -----------------------------------------------------------------
 

@@ -25,12 +25,12 @@ GABARITO = [
 ]
 
 
-def criar_dataset(pasta: str) -> None:
+def criar_dataset(pasta: str, falas=FALAS) -> None:
     """Monta um projeto mínimo no mesmo formato do EntradasGigabrain."""
     base = os.path.join(pasta, "teste-projeto")
     os.makedirs(base)
     texto, segmentos = "", []
-    for i, (falante, fala) in enumerate(FALAS, start=1):
+    for i, (falante, fala) in enumerate(falas, start=1):
         texto += f"{falante}: "
         inicio = len(texto)
         texto += fala
@@ -112,6 +112,37 @@ class TestReuniao(unittest.TestCase):
             self.assertIn({"tipo": "turno", "ref": "T2", "projeto": "teste-projeto"}, req["fontes"])
             # Só o modo conselho cria especialistas.
             self.assertEqual(bool(ctx.banco.listar_especialistas()), com_conselho)
+
+
+class TestUmRequisitoPorVez(unittest.TestCase):
+    """No modo conselho, o especialista recomenda e o Gêmeo decide, um rascunho por vez."""
+
+    def test_duplicado_e_descartado_pelo_gemeo(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        repetida = "Users must log in with their email and a password of at least 8 characters."
+        criar_dataset(tmp.name, FALAS[:2] + [("EndUser", repetida)])
+        projeto = entradas.carregar_projeto("teste-projeto", tmp.name)
+
+        resultados = {}
+        for com_conselho in (True, False):
+            pasta = os.path.join(tmp.name, "saida", str(com_conselho))
+            ctx = abrir_contexto(pasta, ProvedorSimulado())
+            self.addCleanup(ctx.banco.fechar)
+            resultados[com_conselho] = (reuniao.processar(ctx, projeto, com_conselho), ctx)
+
+        com, ctx = resultados[True]
+        self.assertEqual(len(com["previstos"]), 1)
+        self.assertEqual(len(com["descartados"]), 1)
+        eventos = ctx.banco.listar_eventos(com["conversa_id"])
+        decisoes = [e["conteudo"] for e in eventos if e["tipo"] == "decisao"]
+        self.assertEqual([d["salvar"] for d in decisoes], [True, False])
+        salvo = next(e for e in eventos if e["tipo"] == "requisito_salvo")
+        self.assertEqual((salvo["de"], salvo["para"]), ("gemeo", "repositorio"))
+        self.assertIn("gemeo", salvo["conteudo"]["decidido_por"])
+
+        sem, _ = resultados[False]
+        self.assertEqual(len(sem["previstos"]), 2)  # sem conselho, o duplicado passa
 
 
 @unittest.skipUnless(os.path.exists(os.path.join(entradas.PASTA_PADRAO, "indice_documentos.csv")),

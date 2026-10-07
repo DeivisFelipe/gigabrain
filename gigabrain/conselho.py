@@ -25,7 +25,7 @@ from .agentes import Contexto, Especialista, GemeoDigital, Lider
 from .aprovacao import eh_aprovacao
 from .banco import Banco, slug
 from .log import Registro
-from .mensagens import GEMEO, PO, SISTEMA, Mensagem
+from .mensagens import GEMEO, LIDER, PO, REGISTRO, REPOSITORIO, SISTEMA, Mensagem
 
 MAX_CONSULTAS_POR_FALA = 2
 CAMPOS_DO_REQUISITO = ("titulo", "historia", "criterios_aceite", "tipo", "temas")
@@ -33,13 +33,13 @@ CAMPOS_DO_REQUISITO = ("titulo", "historia", "criterios_aceite", "tipo", "temas"
 
 def abrir_contexto(pasta_dados: str, provedor, modo: str = "pos_reuniao", ver_agentes: bool = False) -> Contexto:
     os.makedirs(pasta_dados, exist_ok=True)
-    banco = Banco(os.path.join(pasta_dados, "gigabrain.db"))
+    banco = Banco(pasta_dados)
     registro = Registro(banco, os.path.join(pasta_dados, "logs"), ver_agentes=ver_agentes)
     return Contexto(banco, registro, provedor, os.path.join(pasta_dados, "conhecimento"), modo)
 
 
-def _sistema(ctx: Contexto, tipo: str, conteudo: dict, para: str = "todos") -> None:
-    ctx.registro.registrar(Mensagem(de=SISTEMA, para=para, tipo=tipo, conteudo=conteudo, conversa_id=ctx.conversa_id))
+def _registrar(ctx: Contexto, de: str, para: str, tipo: str, conteudo: dict) -> None:
+    ctx.registro.registrar(Mensagem(de=de, para=para, tipo=tipo, conteudo=conteudo, conversa_id=ctx.conversa_id))
 
 
 class Conselho:
@@ -122,9 +122,9 @@ class Conselho:
                 ligacoes=proposto.get("ligacoes"),
                 fontes=fontes,
             )
-            _sistema(self.ctx, "requisito_salvo", resultado)
+            _registrar(self.ctx, GEMEO, REPOSITORIO, "requisito_salvo", {**resultado, "decidido_por": "po (aprovação explícita)"})
             for rid in resultado["em_revisao"]:
-                _sistema(self.ctx, "requisito_em_revisao", {"requisito_id": rid, "por_causa_de": resultado["requisito_id"]})
+                _registrar(self.ctx, REPOSITORIO, GEMEO, "requisito_em_revisao", {"requisito_id": rid, "por_causa_de": resultado["requisito_id"]})
             self._atualizar_especialistas(resultado)
             salvos.append(resultado)
 
@@ -155,7 +155,7 @@ class Conselho:
             esp = Especialista.carregar(self.ctx, slug(tema))
             if not esp:
                 if self.ctx.modo == "reuniao":
-                    _sistema(self.ctx, "pendencia", {"motivo": "requisito aprovado em tema sem especialista", "tema": tema})
+                    _registrar(self.ctx, LIDER, REGISTRO, "pendencia", {"motivo": "requisito aprovado em tema sem especialista", "tema": tema})
                     continue
                 # Ao nascer, o especialista já lê os requisitos do tema, inclusive este.
                 Especialista.criar(self.ctx, tema, f"Regras de negócio e requisitos sobre {tema}.", criado_por=SISTEMA)

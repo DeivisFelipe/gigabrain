@@ -1,7 +1,7 @@
 """Servidor do painel visual (só biblioteca padrão, sem dependências).
 
 Um painel só para todas as pastas de dados: o servidor procura, a partir de
-uma pasta raiz, toda subpasta que tenha um gigabrain.db (dados/, dados-demo/,
+uma pasta raiz, toda subpasta que tenha um banco (requisitos.db) (dados/, dados-demo/,
 dados-avaliacao/<provedor>/<projeto>/<modo>/...). A página escolhe qual ver
 pelo parâmetro ?fonte=<caminho relativo>.
 
@@ -26,7 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
 from .. import conhecimento
-from ..banco import Banco
+from ..banco import ARQUIVO_ANTIGO, BASES, Banco
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 IGNORAR = {".git", "venv", ".venv", "__pycache__", "node_modules", "conhecimento", "logs"}
@@ -34,13 +34,13 @@ PROFUNDIDADE_MAX = 5
 
 
 def descobrir_fontes(raiz: str) -> list[dict]:
-    """Toda pasta (até 5 níveis abaixo da raiz) que contém um gigabrain.db."""
+    """Toda pasta (até 5 níveis abaixo da raiz) que contém um banco do GigaBrain."""
     fontes = []
     for pasta, subpastas, arquivos in os.walk(raiz):
         rel = os.path.relpath(pasta, raiz).replace("\\", "/")
         nivel = 0 if rel == "." else rel.count("/") + 1
         subpastas[:] = sorted(s for s in subpastas if s not in IGNORAR) if nivel < PROFUNDIDADE_MAX else []
-        if "gigabrain.db" not in arquivos:
+        if BASES["main"][0] not in arquivos and ARQUIVO_ANTIGO not in arquivos:
             continue
         partes = [] if rel == "." else rel.split("/")
         fontes.append({
@@ -113,7 +113,7 @@ def _rotas(banco: Banco, pasta: str, partes: list[str], query: dict) -> object:
             "trilha": banco.trilha(req["id"]),
         }
     if partes == ["especialistas"]:
-        return banco.listar_especialistas()
+        return [{**e, "versoes_em": banco.datas_conhecimento(e["id"])} for e in banco.listar_especialistas()]
     if len(partes) == 2 and partes[0] == "especialista":
         esp = banco.obter_especialista(partes[1])
         if not esp:
@@ -163,7 +163,7 @@ def criar_handler(raiz: str):
                 return self._json(None)
             pasta = os.path.join(raiz, fonte)
             with trava:
-                banco = Banco(os.path.join(pasta, "gigabrain.db"))
+                banco = Banco(pasta)
                 try:
                     dados = _rotas(banco, pasta, partes, query)
                 finally:

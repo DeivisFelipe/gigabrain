@@ -14,7 +14,7 @@ Quando o Gêmeo faz uma consulta, o Líder:
 from __future__ import annotations
 
 from ..banco import slug
-from ..mensagens import GEMEO, LIDER, SISTEMA, especialista
+from ..mensagens import GEMEO, LIDER, REGISTRO, especialista
 from .base import Agente, como_json
 from .especialista import Especialista
 
@@ -81,29 +81,17 @@ class Lider(Agente):
         self.enviar(GEMEO, "resposta_consolidada", consolidada)
         return consolidada
 
-    def revisar_extracao(self, candidatos: list[dict], falas: dict[str, str], idioma: str = "en") -> dict:
-        """Distribui os candidatos por tema e pede a revisão de cada especialista."""
-        por_tema: dict[str, list[dict]] = {}
-        for c in candidatos:
-            por_tema.setdefault(slug(c["tema"]), []).append(c)
-        self.enviar(LIDER, "decomposicao", {
-            "pergunta": "revisar requisitos extraídos da transcrição",
-            "subconsultas": [{"tema": por_tema[t][0]["tema"], "candidatos": len(por_tema[t])} for t in por_tema],
-        })
-
-        revisados, ligacoes = [], []
-        for tema_slug, grupo in por_tema.items():
-            esp = self._obter_ou_criar({"tema": grupo[0]["tema"], "especialista_id": tema_slug,
-                                        "descricao": f"Requisitos sobre {grupo[0]['tema']}."})
-            if not esp:
-                revisados += grupo
-                continue
-            self.enviar(especialista(esp.id), "consulta", {"pergunta": f"revisar {len(grupo)} candidato(s)", "tema": esp.tema})
-            resultado = esp.revisar(grupo, falas, idioma)
-            revisados += resultado["candidatos"]
-            ligacoes += resultado["ligacoes"]
-        revisados.sort(key=lambda c: c["indice"])
-        return {"candidatos": revisados, "ligacoes": ligacoes}
+    def consultar_rascunho(self, rascunho: dict, falas: dict[str, str], idioma: str = "en") -> dict:
+        """Leva um rascunho ao especialista do tema e devolve a recomendação ao Gêmeo."""
+        esp = self._obter_ou_criar({"tema": rascunho["tema"], "descricao": f"Requisitos sobre {rascunho['tema']}."})
+        if esp:
+            self.enviar(especialista(esp.id), "consulta", {"pergunta": "revisar rascunho: " + rascunho["texto"][:100], "tema": esp.tema})
+            sugestao = esp.revisar(rascunho, falas, idioma)
+        else:
+            sugestao = {"especialista_id": None, "acao": "manter", "ligacoes": [], "duplicado_de": None,
+                        "motivo": "sem especialista para o tema; nada a recomendar"}
+        self.enviar(GEMEO, "resposta_consolidada", {"resumo": f"{sugestao['acao']}: {sugestao['motivo']}", **sugestao})
+        return sugestao
 
     def _obter_ou_criar(self, sub: dict) -> Especialista | None:
         id_ = sub.get("especialista_id") or slug(sub["tema"])
@@ -111,13 +99,14 @@ class Lider(Agente):
         if existente:
             return existente
         if self.ctx.modo == "reuniao":
-            self.enviar(SISTEMA, "pendencia", {
+            self.enviar(REGISTRO, "pendencia", {
                 "motivo": "tema sem especialista durante a reunião", "tema": sub["tema"], "descricao": sub.get("descricao"),
             })
             return None
-        novo = Especialista.criar(self.ctx, sub["tema"], sub.get("descricao") or f"Requisitos sobre {sub['tema']}")
-        self.enviar(SISTEMA, "especialista_criado", {"especialista_id": novo.id, "tema": novo.tema, "descricao": novo.descricao})
-        return novo
+        # Anuncia antes de criar: a criação já grava a primeira versão do conhecimento.
+        descricao = sub.get("descricao") or f"Requisitos sobre {sub['tema']}"
+        self.enviar(REGISTRO, "especialista_criado", {"especialista_id": slug(sub["tema"]), "tema": sub["tema"], "descricao": descricao})
+        return Especialista.criar(self.ctx, sub["tema"], descricao)
 
     def _consolidar(self, pergunta: str, respostas: list[dict]) -> dict:
         vazio = {"resumo": "", "conflitos": [], "duvidas_para_po": [], "requisitos_relacionados": []}

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from .. import conhecimento
 from ..banco import slug
-from ..mensagens import LIDER, SISTEMA, especialista
+from ..mensagens import LIDER, REGISTRO, especialista
 from .base import Agente, como_json, resumo_requisito
 
 PROMPT_RESPONDER = """\
@@ -58,24 +58,25 @@ Responda com um único objeto JSON:
 
 
 PROMPT_REVISAR = """\
-Você é um especialista do GigaBrain e revisa requisitos candidatos do seu tema, extraídos
-da transcrição de uma reunião. Você recebe os candidatos, as falas que cada um cita e o
-seu arquivo de conhecimento. Para cada candidato decida:
-- "manter":   está correto e tem respaldo nas falas citadas
-- "corrigir": tem respaldo, mas o texto, a classe (FR/NFR) ou o subtipo precisam de ajuste
-- "remover":  é duplicado de outro candidato (diga qual) ou não tem respaldo nas falas
-Não invente requisitos e não reescreva além do necessário: mantenha as palavras originais.
+Você é um especialista do GigaBrain e revisa UM rascunho de requisito do seu tema, extraído
+da transcrição de uma reunião pelo Gêmeo Digital. Você recebe o rascunho, as falas que ele
+cita, o seu arquivo de conhecimento e os requisitos do seu tema que já foram salvos.
+Você só RECOMENDA; quem decide é o Gêmeo Digital (Conselho Deliberativo).
+
+Recomende uma ação:
+- "manter":    correto e com respaldo nas falas
+- "corrigir":  tem respaldo, mas o texto, a classe (FR/NFR) ou o subtipo precisam de ajuste
+- "descartar": repete um requisito já salvo (diga qual em "duplicado_de") ou não tem
+               respaldo nas falas citadas
+Aponte também ligações do rascunho com requisitos já salvos do tema ("alvo": "R3"):
+depende_de, conflita_com, refina. Não invente requisitos e mantenha as palavras originais.
 IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza; traduzir
-não é uma correção. Corrija o texto só se ele distorce o que foi dito. Aponte também ligações entre candidatos do seu tema
-(depende_de, conflita_com, refina), usando os índices.
+não é uma correção.
 
 Responda com um único objeto JSON:
-{
-  "revisao": [{"indice": 0, "acao": "manter" | "corrigir" | "remover",
-               "texto": "só se corrigir", "classe": "só se corrigir", "subtipo": "só se corrigir",
-               "motivo": "curto"}],
-  "ligacoes": [{"origem": 3, "tipo": "depende_de", "destino": 1, "motivo": "..."}]
-}
+{"acao": "manter" | "corrigir" | "descartar", "texto": "só se corrigir", "classe": "só se corrigir",
+ "subtipo": "só se corrigir", "duplicado_de": "R3" ou null,
+ "ligacoes": [{"tipo": "depende_de", "alvo": "R2", "motivo": "..."}], "motivo": "curto"}
 """
 
 
@@ -123,7 +124,7 @@ class Especialista(Agente):
         conhecimento.escrever(self.arquivo, md)
         versao = self.ctx.banco.registrar_conhecimento(self.id, conhecimento.ler(self.arquivo), motivo, origem)
         if versao:
-            self.enviar(SISTEMA, "conhecimento_atualizado", {
+            self.enviar(REGISTRO, "conhecimento_atualizado", {
                 "especialista_id": self.id, "versao": versao, "motivo": motivo, **origem,
             })
         return versao
@@ -148,43 +149,33 @@ class Especialista(Agente):
             return None
         return self._gravar(md, motivo, {"gatilho": gatilho["tipo"], "mudancas": resposta.get("mudancas", [])})
 
-    # ------------------------------------------------------------------ revisão de transcrição
+    # ------------------------------------------------------------------ revisão de rascunho
 
-    def revisar(self, candidatos: list[dict], falas: dict[str, str], idioma: str = "en") -> dict:
-        """Revisa candidatos do seu tema. Devolve {"candidatos": [...ajustados], "ligacoes": [...]}."""
+    def revisar(self, rascunho: dict, falas: dict[str, str], idioma: str = "en") -> dict:
+        """Recomenda o que fazer com um rascunho de requisito (não decide)."""
         self.sincronizar()
-        citadas = {t: falas[t] for c in candidatos for t in c["turnos"] if t in falas}
         resposta = self.chamar_llm("especialista_revisar", PROMPT_REVISAR, [{"role": "user", "content": como_json({
             "tema": self.tema,
             "idioma": idioma,
             "conhecimento": self.ler_conhecimento(),
-            "candidatos": [{k: c[k] for k in ("indice", "texto", "classe", "subtipo", "turnos")} for c in candidatos],
-            "falas": citadas,
+            "requisitos_do_tema": self.requisitos_do_tema(),
+            "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo", "turnos")},
+            "falas": falas,
         })}])
-        decisoes = {d.get("indice"): d for d in resposta.get("revisao", [])}
-        ajustados, removidos, corrigidos = [], [], []
-        for c in candidatos:
-            d = decisoes.get(c["indice"], {"acao": "manter"})
-            if d.get("acao") == "remover":
-                removidos.append({"indice": c["indice"], "motivo": d.get("motivo")})
-                continue
-            novo = dict(c)
-            if d.get("acao") == "corrigir":
-                for campo in ("texto", "classe", "subtipo"):
-                    if d.get(campo):
-                        novo[campo] = d[campo]
-                if novo["classe"] != "NFR":
-                    novo["subtipo"] = None
-                corrigidos.append({"indice": c["indice"], "motivo": d.get("motivo")})
-            novo["revisado_por"] = self.id
-            ajustados.append(novo)
-
-        mantidos = {c["indice"] for c in ajustados}
-        ligacoes = [l for l in resposta.get("ligacoes", []) if l.get("origem") in mantidos and l.get("destino") in mantidos]
-        self.enviar(LIDER, "revisao", {
-            "tema": self.tema, "mantidos": len(ajustados), "removidos": removidos, "corrigidos": corrigidos, "ligacoes": ligacoes,
-        })
-        return {"candidatos": ajustados, "ligacoes": ligacoes}
+        acao = resposta.get("acao") if resposta.get("acao") in ("manter", "corrigir", "descartar") else "manter"
+        sugestao = {
+            "especialista_id": self.id,
+            "versao_conhecimento": self.ctx.banco.obter_especialista(self.id)["versao_conhecimento"],
+            "acao": acao,
+            "texto": resposta.get("texto") if acao == "corrigir" else None,
+            "classe": resposta.get("classe") if acao == "corrigir" else None,
+            "subtipo": resposta.get("subtipo") if acao == "corrigir" else None,
+            "duplicado_de": resposta.get("duplicado_de"),
+            "ligacoes": [l for l in resposta.get("ligacoes", []) if isinstance(l, dict) and l.get("alvo")],
+            "motivo": resposta.get("motivo", ""),
+        }
+        self.enviar(LIDER, "resposta_especialista", {**sugestao, "resposta": f"{acao}: {sugestao['motivo']}"})
+        return sugestao
 
     # ------------------------------------------------------------------ consulta
 

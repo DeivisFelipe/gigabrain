@@ -285,15 +285,16 @@ details.json pre { background: var(--surface-2); border: 1px solid var(--line); 
           <select id="arq-vel" class="campo" title="velocidade"><option value="2000">0,5×</option><option value="1100" selected>1×</option><option value="550">2×</option><option value="250">4×</option></select>
           <div class="crescer"><input type="range" id="arq-pos" min="0" max="0" value="0"></div>
           <span class="muted mono" id="arq-contador" style="font-size:13px"></span>
+          <label class="chave"><input type="checkbox" id="arq-agrupar" checked>agrupar repetidas</label>
           <label class="chave"><input type="checkbox" id="arq-llm">chamadas ao LLM</label>
         </div>
         <div class="palco"><svg id="arq-svg"></svg></div>
         <div class="legenda">
-          <span><i style="background:var(--po)"></i>PO real</span>
-          <span><i style="background:var(--gemeo)"></i>Gêmeo Digital (Conselho Deliberativo)</span>
-          <span><i style="background:var(--lider)"></i>Líder (Conselho Consultivo)</span>
-          <span><i style="background:var(--esp)"></i>Especialistas por tema</span>
-          <span><i style="background:var(--sistema)"></i>Banco local</span>
+          <span><i style="background:var(--po)"></i>PO real ou reunião</span>
+          <span><i style="background:var(--gemeo)"></i>Gêmeo Digital · voto final</span>
+          <span><i style="background:var(--lider)"></i>Líder</span>
+          <span><i style="background:var(--esp)"></i>Especialistas por tema · só recomendam</span>
+          <span><i style="background:var(--sistema)"></i>Bases de dados</span>
         </div>
       </div>
       <div class="arq-baixo">
@@ -391,6 +392,8 @@ const PARTICIPANTE = {
   sistema: { nome: "Sistema", cor: "var(--sistema)", sigla: "S" },
   todos: { nome: "todos", cor: "var(--sistema)", sigla: "S" },
   llm: { nome: "LLM", cor: "var(--llm)", sigla: "AI" },
+  repositorio: { nome: "Repositório de Requisitos", curto: "Repositório", cor: "var(--sistema)", sigla: "RR" },
+  registro: { nome: "Registro de Especialistas", curto: "Registro", cor: "var(--sistema)", sigla: "RE" },
 };
 function quem(p) {
   if (PARTICIPANTE[p]) return PARTICIPANTE[p];
@@ -402,7 +405,8 @@ const NOME_TIPO = {
   consulta: "consulta", decomposicao: "decomposição", resposta_especialista: "resposta do especialista",
   resposta_consolidada: "resposta consolidada", especialista_criado: "especialista criado", pendencia: "pendência",
   requisito_salvo: "requisito salvo", requisito_em_revisao: "requisito em revisão", conhecimento_atualizado: "conhecimento atualizado",
-  chamada_llm: "chamada ao LLM", erro: "erro", transcricao: "transcrição", extracao: "extração", revisao: "revisão",
+  chamada_llm: "chamada ao LLM", erro: "erro", transcricao: "transcrição", extracao: "rascunhos extraídos", revisao: "revisão",
+  decisao: "decisão (voto final)",
 };
 const TIPO_LIG = {
   refina: { cor: "#2563eb", txt: "refina" }, divide: { cor: "#7c3aed", txt: "divide" }, junta: { cor: "#0891b2", txt: "junta" },
@@ -421,7 +425,7 @@ function resumo(ev) {
   switch (ev.tipo) {
     case "decomposicao": return "Temas: " + (c.subconsultas || []).map((s) => s.tema + (s.candidatos ? ` (${s.candidatos})` : "")).join(", ");
     case "chamada_llm": return `${c.papel} · ${c.duracao_ms} ms` + (c.tokens_entrada ? ` · ${c.tokens_entrada} + ${c.tokens_saida} tokens` : "");
-    case "requisito_salvo": return (c.versao ? `${c.requisito_id} v${c.versao}` : c.requisito_id) + (c.ligacoes?.length ? " · " + c.ligacoes.map((l) => `${l.tipo.replace("_", " ")} ${l.destino}`).join(", ") : "");
+    case "requisito_salvo": return (c.versao ? `${c.requisito_id} v${c.versao}` : c.requisito_id) + (c.ligacoes?.length ? " · " + c.ligacoes.map((l) => `${l.tipo.replace("_", " ")} ${l.destino}`).join(", ") : "") + (c.decidido_por ? ` · decidido por ${c.decidido_por}` : "");
     case "conhecimento_atualizado": return `${c.especialista_id} → v${c.versao} · ${c.motivo}`;
     case "especialista_criado": return `Novo especialista "${c.especialista_id}": ${c.descricao || ""}`;
     case "requisito_em_revisao": return `${c.requisito_id} entrou em revisão por causa de ${c.por_causa_de}`;
@@ -429,6 +433,8 @@ function resumo(ev) {
     case "extracao": return `${(c.requisitos || []).length} requisito(s) candidato(s) extraído(s) de ${c.projeto}`;
     case "revisao": return `${c.tema}: ${c.mantidos} mantido(s), ${(c.removidos || []).length} removido(s), ${(c.corrigidos || []).length} corrigido(s)`;
     case "transcricao": return `${c.titulo} · ${c.turnos} turnos`;
+    case "decisao": return (c.salvar ? "✓ " : "✗ ") + (c.texto || "") + (c.recomendacao ? ` (especialista recomendou: ${c.recomendacao})` : "");
+    case "resposta_especialista": if (c.acao) return `recomenda ${c.acao}${c.duplicado_de ? " (repete " + c.duplicado_de + ")" : ""}: ${c.motivo || ""}`; break;
     case "pendencia": return `${c.motivo} (${c.tema})`;
   }
   for (const k of ["texto", "pergunta", "resumo", "resposta", "motivo", "erro"]) if (c[k]) return c[k];
@@ -565,124 +571,238 @@ function desenharBenchmark() {
 }
 
 // ============================================================ arquitetura
-const ARQ = { todos: [], eventos: [], pos: -1, timer: null, especialistas: [], conversas: [] };
+// Reproduz uma conversa passo a passo. Regras do desenho:
+// - o Conselho Consultivo só aparece quando a conversa usou o conselho;
+// - um especialista só aparece quando passa a existir naquele momento da conversa;
+// - as três bases (Repositório, Registro, Log) são desenhadas separadas;
+// - mensagens iguais em sequência (ex.: 50 "requisito salvo") viram um passo só.
+const ARQ = { todos: [], passos: [], pos: -1, timer: null, especialistas: [], conversas: [], conv: null, relevantes: [], primeiroPasso: {} };
 
-function layoutArquitetura() {
-  // Especialistas em 1, 2 ou 3 colunas conforme a quantidade, sempre com tamanho legível;
-  // o desenho cresce (e o SVG é reduzido para caber) em vez de espremer os nomes.
-  const n = ARQ.especialistas.length;
-  const cols = n <= 7 ? 1 : n <= 16 ? 2 : 3;
+function layoutArquitetura(comConselho, especialistas) {
+  const n = especialistas.length;
+  const cols = n <= 6 ? 1 : n <= 14 ? 2 : 3;
   const linhas = Math.max(1, Math.ceil(n / cols));
-  const espW = 190, espH = 50, gapX = 16, gapY = 12, xEsp0 = 770;
-  const L = xEsp0 + cols * espW + (cols - 1) * gapX + 30;
-  const altEsp = linhas * espH + (linhas - 1) * gapY;
-  const H = Math.max(500, altEsp + 110);
-  const cy = Math.max(200, H / 2 - 50);
+  const espW = 190, espH = 52, gapX = 16, gapY = 12;
+  const altEsp = n ? linhas * espH + (linhas - 1) * gapY : 56;
+  const frameH = Math.max(170, altEsp + 70);
+  const topo = 20, cy = topo + 14 + frameH / 2;
+
+  // Conselho Deliberativo: PO (ou a transcrição) e Gêmeo centralizados na moldura.
+  const D = { x: 20, w: 420, y: cy - 85, h: 170 };
   const P = {
-    po: { x: 90, y: cy, w: 130, rot: "PO real", sub: "decide e aprova", cor: "var(--po)" },
-    gemeo: { x: 330, y: cy, w: 170, rot: "Gêmeo Digital", sub: "conversa e propõe", cor: "var(--gemeo)" },
-    lider: { x: 590, y: cy, w: 150, rot: "Líder", sub: "decompõe e consolida", cor: "var(--lider)" },
-    llm: { x: 330, y: H - 70, w: 150, rot: "LLM", sub: "DeepSeek ou simulado", cor: "var(--llm)" },
-    sistema: { x: 590, y: H - 70, w: 170, rot: "Banco local", sub: "requisitos · registro · log", cor: "var(--sistema)" },
+    entrada: { x: D.x + 30 + 70, y: cy, w: 140 },
+    gemeo: { x: D.x + D.w - 30 - 90, y: cy, w: 180 },
   };
-  const y0 = (H - 70) / 2 - altEsp / 2 + 10;
-  ARQ.especialistas.forEach((e, i) => {
-    const c = Math.floor(i / linhas), r = i % linhas;
-    P["especialista:" + e.id] = { x: xEsp0 + c * (espW + gapX) + espW / 2, y: y0 + r * (espH + gapY) + espH / 2, w: espW, h: espH,
-      rot: e.tema, sub: `conhecimento v${e.versao_conhecimento} · ${e.consultas} consulta(s)`, cor: "var(--esp)" };
-  });
-  P.todos = P.sistema;
-  return { P, L, H, xEsp0, espW, y0, altEsp };
+  let C = null, L = 900;
+  if (comConselho) {
+    const x0 = 480;
+    const busX = x0 + 30 + 150 + 34;
+    const xE0 = busX + 26;
+    const gridW = n ? cols * espW + (cols - 1) * gapX : 190;
+    C = { x: x0, y: topo, w: xE0 + gridW + 30 - x0, h: frameH + 28, busX, xE0 };
+    P.lider = { x: x0 + 30 + 75, y: cy, w: 150 };
+    const y0 = cy - altEsp / 2;
+    especialistas.forEach((e, i) => {
+      const c = Math.floor(i / linhas), r = i % linhas;
+      P["especialista:" + e.id] = { x: xE0 + c * (espW + gapX) + espW / 2, y: y0 + r * (espH + gapY) + espH / 2, w: espW, h: espH, esp: e };
+    });
+    L = C.x + C.w + 20;
+  }
+  // Bases locais embaixo, centralizadas na moldura "Bases de dados".
+  const yB = topo + frameH + 28 + 46;
+  const bases = comConselho ? ["repositorio", "registro", "log"] : ["repositorio", "log"];
+  const B = { x: 240, y: yB, w: L - 260, h: 118 };
+  const passo = B.w / bases.length;
+  bases.forEach((b, i) => { P[b] = { x: B.x + passo * (i + 0.5), y: yB + 68, w: 200, h: 64, base: true }; });
+  P.llm = { x: P.entrada.x, y: yB + 68, w: 140 };
+  return { P, D, C, B, L, H: yB + B.h + 20 };
 }
 
-function desenharArquitetura(ev) {
-  const { P, L, H, xEsp0, espW, y0, altEsp } = layoutArquitetura();
-  const borda = (p, alvo) => { // ponto na borda do retângulo de p, na direção de alvo
+// Logs antigos (antes da separação dos bancos) mandavam tudo para "sistema"/"todos".
+function normalizar(ev) {
+  const e = { ...ev };
+  if (e.tipo === "requisito_salvo" && (e.de === "sistema" || e.para === "todos")) { e.de = "gemeo"; e.para = "repositorio"; }
+  if (e.tipo === "requisito_em_revisao" && e.de === "sistema") { e.de = "repositorio"; e.para = "gemeo"; }
+  if (["conhecimento_atualizado", "especialista_criado", "pendencia"].includes(e.tipo) && e.para === "sistema") e.para = "registro";
+  if (e.tipo === "extracao") e.para = "gemeo";
+  return e;
+}
+const noDe = (p) => (p === "po" || p === "sistema") ? "entrada" : p === "todos" ? "repositorio" : p;
+
+function agrupar(eventos, juntar) {
+  const passos = [];
+  for (const ev of eventos) {
+    const ult = passos[passos.length - 1];
+    if (juntar && ult && ult.ev.de === ev.de && ult.ev.para === ev.para && ult.ev.tipo === ev.tipo) ult.lista.push(ev);
+    else passos.push({ ev, lista: [ev] });
+  }
+  return passos;
+}
+
+function prepararConversa() {
+  const comLlm = $("#arq-llm").checked, juntar = $("#arq-agrupar").checked;
+  ARQ.passos = agrupar(ARQ.todos.filter((e) => comLlm || e.tipo !== "chamada_llm"), juntar);
+  // Em que passo cada especialista aparece pela primeira vez nesta conversa.
+  ARQ.primeiroPasso = {};
+  ARQ.passos.forEach((p, i) => p.lista.forEach((ev) => {
+    for (const ref of [ev.de, ev.para, ev.conteudo?.especialista_id && "especialista:" + ev.conteudo.especialista_id]) {
+      if (ref && ref.startsWith("especialista:") && !(ref in ARQ.primeiroPasso)) ARQ.primeiroPasso[ref] = i;
+    }
+  }));
+  const inicio = ARQ.conv?.iniciada_em || "";
+  // Só entram no desenho os especialistas que já existiam ou que surgem nesta conversa.
+  ARQ.relevantes = ARQ.especialistas.filter((e) => (e.versoes_em?.[0] || e.criado_em) < inicio || ("especialista:" + e.id) in ARQ.primeiroPasso);
+}
+
+function momentoDoPasso(i) {
+  if (i < 0) return ARQ.conv?.iniciada_em || "";
+  const lista = ARQ.passos[i].lista;
+  return lista[lista.length - 1].momento;
+}
+
+function cilindro(n, cor, on, titulo, sub) {
+  const x = n.x - n.w / 2, y = n.y - n.h / 2, rx = n.w / 2, ry = 9;
+  return `<path d="M${x},${y + ry} v${n.h - 2 * ry} a${rx},${ry} 0 0 0 ${n.w},0 v-${n.h - 2 * ry}" fill="var(--surface)" stroke="${cor}" stroke-width="${on ? 3.5 : 1.5}"/>
+    <ellipse cx="${n.x}" cy="${y + ry}" rx="${rx}" ry="${ry}" fill="var(--surface-2)" stroke="${cor}" stroke-width="${on ? 3.5 : 1.5}"/>
+    <text x="${n.x}" y="${n.y + 6}" text-anchor="middle" font-size="14" font-weight="600">${esc(titulo)}</text>
+    <text x="${n.x}" y="${n.y + 23}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${esc(sub)}</text>`;
+}
+
+function desenharArquitetura() {
+  const passo = ARQ.passos[ARQ.pos], ev = passo?.ev;
+  const comConselho = !String(ARQ.conv?.modo || "").includes("agente_unico");
+  const lote = String(ARQ.conv?.modo || "").startsWith("transcricao");
+  const { P, D, C, B, L, H } = layoutArquitetura(comConselho, ARQ.relevantes);
+  const agora = momentoDoPasso(ARQ.pos);
+  const ativos = ev ? [noDe(ev.de), noDe(ev.para)] : [];
+
+  // Contadores "até este passo".
+  let msgs = 0, salvos = 0;
+  ARQ.passos.slice(0, ARQ.pos + 1).forEach((p) => { msgs += p.lista.length; if (p.ev.tipo === "requisito_salvo") salvos += p.lista.length; });
+
+  const borda = (p, alvo) => {
     const dx = alvo.x - p.x, dy = alvo.y - p.y, hw = (p.w || 150) / 2, hh = (p.h || 56) / 2;
     const t = Math.min(Math.abs(dx) ? hw / Math.abs(dx) : Infinity, Math.abs(dy) ? hh / Math.abs(dy) : Infinity);
     return { x: p.x + dx * t, y: p.y + dy * t };
   };
+  const fio = (a, b, extra = "") => { if (!P[a] || !P[b]) return ""; const p1 = borda(P[a], P[b]), p2 = borda(P[b], P[a]); return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="var(--line-2)" stroke-width="2" ${extra}/>`; };
+  const pilula = (x, y, txt) => { const w = txt.length * 7.3 + 22; return `<rect x="${x - w / 2}" y="${y - 12}" width="${w}" height="24" rx="12" fill="var(--info)"/><text x="${x}" y="${y + 4.5}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#fff">${esc(txt)}</text>`; };
+
   let s = `<defs><marker id="ponta" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--info)"/></marker></defs>`;
-  s += `<rect x="16" y="${P.po.y - 92}" width="440" height="184" rx="18" fill="var(--gemeo)" fill-opacity=".05" stroke="var(--gemeo)" stroke-opacity=".35" stroke-dasharray="6 6"/>
-    <text x="34" y="${P.po.y - 66}" font-size="13" font-weight="600" fill="var(--gemeo)">Conselho Deliberativo</text>
-    <rect x="490" y="16" width="${L - 506}" height="${H - 32}" rx="18" fill="var(--lider)" fill-opacity=".04" stroke="var(--lider)" stroke-opacity=".35" stroke-dasharray="6 6"/>
-    <text x="510" y="44" font-size="13" font-weight="600" fill="var(--lider)">Conselho Consultivo</text>`;
-  const fio = (a, b, extra = "") => { const p1 = borda(P[a], P[b]), p2 = borda(P[b], P[a]); return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="var(--line-2)" stroke-width="2" ${extra}/>`; };
-  s += fio("po", "gemeo") + fio("gemeo", "lider") + fio("lider", "sistema") + fio("gemeo", "llm", 'stroke-dasharray="4 5"');
-  // Barramento do Líder até a coluna de especialistas, em vez de dezenas de linhas cruzadas.
-  if (ARQ.especialistas.length) {
-    const xb = xEsp0 - 26;
-    s += `<line x1="${P.lider.x + P.lider.w / 2}" y1="${P.lider.y}" x2="${xb}" y2="${P.lider.y}" stroke="var(--line-2)" stroke-width="2"/>
-      <line x1="${xb}" y1="${Math.min(y0 + 25, P.lider.y)}" x2="${xb}" y2="${Math.max(y0 + altEsp - 25, P.lider.y)}" stroke="var(--line-2)" stroke-width="2"/>`;
-    ARQ.especialistas.forEach((e) => { const p = P["especialista:" + e.id]; if (p.x - espW / 2 === xEsp0) s += `<line x1="${xb}" y1="${p.y}" x2="${xEsp0}" y2="${p.y}" stroke="var(--line-2)" stroke-width="2"/>`; });
-  }
-  if (ev) {
-    const de = P[ev.de], para = P[ev.para] || P.sistema;
-    const rotulo = NOME_TIPO[ev.tipo] || ev.tipo, lw = rotulo.length * 7.4 + 22;
-    if (de && para && de !== para) {
-      const a = borda(de, para), b = borda(para, de), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#ponta)"/>
-        <rect x="${mx - lw / 2}" y="${my - 26}" width="${lw}" height="24" rx="12" fill="var(--info)"/>
-        <text x="${mx}" y="${my - 9}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#fff">${esc(rotulo)}</text>`;
-    } else if (de) {
-      s += `<rect x="${de.x - (de.w || 150) / 2 - 8}" y="${de.y - 36}" width="${(de.w || 150) + 16}" height="72" rx="16" fill="none" stroke="var(--info)" stroke-width="3" stroke-dasharray="5 4"/>
-        <rect x="${de.x - lw / 2}" y="${de.y - 64}" width="${lw}" height="24" rx="12" fill="var(--info)"/>
-        <text x="${de.x}" y="${de.y - 47}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#fff">${esc(rotulo)}</text>`;
+  s += `<rect x="${D.x}" y="${D.y}" width="${D.w}" height="${D.h}" rx="18" fill="var(--gemeo)" fill-opacity=".05" stroke="var(--gemeo)" stroke-opacity=".4" stroke-dasharray="6 6"/>
+    <text x="${D.x + D.w / 2}" y="${D.y + 26}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--gemeo)">Conselho Deliberativo · decide</text>`;
+  if (C) s += `<rect x="${C.x}" y="${C.y}" width="${C.w}" height="${C.h}" rx="18" fill="var(--lider)" fill-opacity=".04" stroke="var(--lider)" stroke-opacity=".4" stroke-dasharray="6 6"/>
+    <text x="${C.x + C.w / 2}" y="${C.y + 26}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--lider)">Conselho Consultivo · recomenda</text>`;
+  s += `<rect x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" rx="18" fill="var(--sistema)" fill-opacity=".05" stroke="var(--sistema)" stroke-opacity=".4" stroke-dasharray="6 6"/>
+    <text x="${B.x + B.w / 2}" y="${B.y + 20}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--sistema)">Bases de dados locais · um arquivo cada</text>`;
+
+  s += fio("entrada", "gemeo") + fio("gemeo", "repositorio") + fio("gemeo", "llm", 'stroke-dasharray="4 5"');
+  if (C) {
+    s += fio("gemeo", "lider") + fio("lider", "registro");
+    const visiveis = ARQ.relevantes.filter((e) => visivel(e));
+    if (visiveis.length) {
+      const ys = visiveis.map((e) => P["especialista:" + e.id].y);
+      s += `<line x1="${P.lider.x + P.lider.w / 2}" y1="${P.lider.y}" x2="${C.busX}" y2="${P.lider.y}" stroke="var(--line-2)" stroke-width="2"/>
+        <line x1="${C.busX}" y1="${Math.min(...ys, P.lider.y)}" x2="${C.busX}" y2="${Math.max(...ys, P.lider.y)}" stroke="var(--line-2)" stroke-width="2"/>`;
+      visiveis.forEach((e) => { const p = P["especialista:" + e.id]; s += `<line x1="${C.busX}" y1="${p.y}" x2="${p.x - p.w / 2}" y2="${p.y}" stroke="var(--line-2)" stroke-width="2"/>`; });
     }
   }
-  const ativos = ev ? [ev.de, ev.para === "todos" ? "sistema" : ev.para] : [];
-  for (const [id, n] of Object.entries(P)) {
-    if (id === "todos") continue;
-    const on = ativos.includes(id), w = n.w || 150, h = n.h || 56, ehEsp = id.startsWith("especialista:");
-    const maxCh = Math.floor(w / 8.2);
-    s += `<g opacity="${ev && !on ? 0.4 : 1}"><title>${esc(n.rot)} · ${esc(n.sub)}</title>
-      <rect x="${n.x - w / 2}" y="${n.y - h / 2}" width="${w}" height="${h}" rx="12" fill="var(--surface)" stroke="${n.cor}" stroke-width="${on ? 3.5 : 1.5}"/>
-      <rect x="${n.x - w / 2}" y="${n.y - h / 2 + 8}" width="4" height="${h - 16}" rx="2" fill="${n.cor}"/>
-      <text x="${n.x + 2}" y="${n.y - 3}" text-anchor="middle" font-size="${ehEsp ? 14 : 15}" font-weight="600">${esc(corta(n.rot, maxCh))}</text>
-      <text x="${n.x + 2}" y="${n.y + 15}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${esc(corta(n.sub, maxCh + 4))}</text></g>`;
+
+  // Mensagem do passo atual.
+  if (ev) {
+    const rotulo = (NOME_TIPO[ev.tipo] || ev.tipo) + (passo.lista.length > 1 ? ` ×${passo.lista.length}` : "");
+    const de = P[noDe(ev.de)], para = P[noDe(ev.para)];
+    if (de && para && de !== para) {
+      const a = borda(de, para), b = borda(para, de);
+      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#ponta)"/>` + pilula((a.x + b.x) / 2, (a.y + b.y) / 2 - 14, rotulo);
+    } else if (de) {
+      s += `<rect x="${de.x - de.w / 2 - 8}" y="${de.y - (de.h || 56) / 2 - 8}" width="${de.w + 16}" height="${(de.h || 56) + 16}" rx="16" fill="none" stroke="var(--info)" stroke-width="3" stroke-dasharray="5 4"/>` +
+        pilula(de.x, de.y + (de.h || 56) / 2 + 24, rotulo);
+    }
   }
-  if (!ARQ.especialistas.length) s += `<text x="${xEsp0 + 95}" y="${P.lider.y + 5}" text-anchor="middle" font-size="13" fill="var(--muted)">nenhum especialista ainda</text>`;
+
+  const caixa = (id, titulo, sub, cor) => {
+    const n = P[id]; if (!n) return "";
+    const on = ativos.includes(id), w = n.w, h = n.h || 56, maxCh = Math.floor(w / 8.2);
+    return `<g opacity="${ev && !on ? 0.42 : 1}"><title>${esc(titulo)} · ${esc(sub)}</title>
+      <rect x="${n.x - w / 2}" y="${n.y - h / 2}" width="${w}" height="${h}" rx="12" fill="var(--surface)" stroke="${cor}" stroke-width="${on ? 3.5 : 1.5}"/>
+      <rect x="${n.x - w / 2}" y="${n.y - h / 2 + 9}" width="4" height="${h - 18}" rx="2" fill="${cor}"/>
+      <text x="${n.x + 2}" y="${n.y - 3}" text-anchor="middle" font-size="${n.esp ? 14 : 15}" font-weight="600">${esc(corta(titulo, maxCh))}</text>
+      <text x="${n.x + 2}" y="${n.y + 15}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${esc(corta(sub, maxCh + 4))}</text></g>`;
+  };
+  s += caixa("entrada", lote ? "Reunião" : "PO real", lote ? "transcrição de entrada" : "fala e aprova", "var(--po)");
+  s += caixa("gemeo", "Gêmeo Digital", lote ? "extrai e dá o voto final" : "conversa, propõe e salva", "var(--gemeo)");
+  s += caixa("llm", "LLM", "chamado pelos agentes", "var(--llm)");
+  if (C) {
+    s += caixa("lider", "Líder", "encaminha e consolida", "var(--lider)");
+    ARQ.relevantes.forEach((e) => {
+      if (!visivel(e)) {
+        const n = P["especialista:" + e.id];
+        s += `<rect x="${n.x - n.w / 2}" y="${n.y - n.h / 2}" width="${n.w}" height="${n.h}" rx="12" fill="none" stroke="var(--line-2)" stroke-dasharray="4 5"/>`;
+        return;
+      }
+      const v = e.versoes_em ? e.versoes_em.filter((d) => d <= agora).length : e.versao_conhecimento;
+      s += caixa("especialista:" + e.id, e.tema, v ? `conhecimento v${v}` : "sendo criado…", "var(--esp)");
+    });
+    const faltam = ARQ.relevantes.length - ARQ.relevantes.filter(visivel).length;
+    if (!ARQ.relevantes.length) s += `<text x="${C.xE0 + 95}" y="${P.lider.y + 5}" text-anchor="middle" font-size="13" fill="var(--muted)">nenhum especialista</text>`;
+    if (faltam) s += `<text x="${C.x + C.w - 24}" y="${C.y + C.h - 12}" text-anchor="end" font-size="12" fill="var(--muted)">vagas tracejadas: ${faltam} especialista(s) ainda serão criados nesta conversa</text>`;
+  }
+  const base = (id, titulo, sub) => { const n = P[id]; if (!n) return ""; const on = ativos.includes(id); return `<g opacity="${ev && !on && id !== "log" ? 0.42 : 1}">${cilindro(n, "var(--sistema)", on, titulo, sub)}</g>`; };
+  s += base("repositorio", "Repositório de Requisitos", `requisitos.db · +${salvos} nesta conversa`);
+  s += base("registro", "Registro de Especialistas", "especialistas.db + arquivos .md");
+  s += base("log", "Log", `log.db · ${msgs} mensagem(ns) até aqui`);
+
   $("#arq-svg").setAttribute("viewBox", `0 0 ${L} ${H}`);
   $("#arq-svg").innerHTML = s;
 }
 
-function cartaoMensagem(ev) {
-  const de = quem(ev.de), para = quem(ev.para);
+function visivel(e) {
+  const ref = "especialista:" + e.id, inicio = ARQ.conv?.iniciada_em || "";
+  if ((e.versoes_em?.[0] || e.criado_em) < inicio) return true;
+  return ref in ARQ.primeiroPasso && ARQ.primeiroPasso[ref] <= ARQ.pos;
+}
+
+function cartaoMensagem(passo) {
+  const ev = passo.ev, de = quem(ev.de), para = quem(ev.para), n = passo.lista.length;
+  const corpo = n > 1
+    ? `<div class="muted" style="margin-bottom:6px">${n} mensagens iguais em sequência:</div><ul style="margin:0;padding-left:18px">${passo.lista.slice(0, 40).map((e) => `<li>${esc(corta(resumo(e), 160))}</li>`).join("")}${n > 40 ? `<li class="muted">… e mais ${n - 40}</li>` : ""}</ul>`
+    : esc(resumo(ev)) || '<span class="muted">(sem texto)</span>';
   return `<div class="msg-atual"><div class="msg-topo">
       <span class="avatar" style="background:${de.cor}">${de.sigla}</span>
       <b style="color:${de.cor}">${esc(de.nome)}</b><span class="seta">→</span><b style="color:${para.cor}">${esc(para.nome)}</b>
-      <span class="selo info">${esc(NOME_TIPO[ev.tipo] || ev.tipo)}</span><span class="hora">${hora(ev.momento)}</span></div>
-    <div class="msg-corpo" style="margin-top:12px">${esc(resumo(ev)) || '<span class="muted">(sem texto)</span>'}</div>
-    <details class="json"><summary>ver mensagem JSON</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details></div>`;
+      <span class="selo info">${esc(NOME_TIPO[ev.tipo] || ev.tipo)}${n > 1 ? " ×" + n : ""}</span><span class="hora">${hora(ev.momento)}</span></div>
+    <div class="msg-corpo" style="margin-top:12px">${corpo}</div>
+    <details class="json"><summary>ver mensagem JSON${n > 1 ? " (a primeira)" : ""}</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details></div>`;
 }
 
 function mostrarPasso() {
-  const ev = ARQ.eventos[ARQ.pos];
-  desenharArquitetura(ev);
-  $("#arq-pos").max = Math.max(0, ARQ.eventos.length - 1);
+  desenharArquitetura();
+  const passo = ARQ.passos[ARQ.pos];
+  $("#arq-pos").max = Math.max(0, ARQ.passos.length - 1);
   $("#arq-pos").value = Math.max(0, ARQ.pos);
-  $("#arq-contador").textContent = ARQ.eventos.length ? `${Math.max(0, ARQ.pos + 1)} / ${ARQ.eventos.length}` : "";
-  $("#arq-msg").innerHTML = ev ? cartaoMensagem(ev) : vazio("Nenhum passo selecionado", "Clique em Reproduzir ou escolha um passo na lista.");
+  $("#arq-contador").textContent = ARQ.passos.length ? `${Math.max(0, ARQ.pos + 1)} / ${ARQ.passos.length}` : "";
+  $("#arq-msg").innerHTML = passo ? cartaoMensagem(passo) : vazio("Nenhum passo selecionado", "Clique em Reproduzir ou escolha um passo na lista.");
   $$("#arq-passos .p").forEach((el, i) => el.classList.toggle("atual", i === ARQ.pos));
   // Rola só a lista de passos (scrollIntoView arrastaria a página inteira).
-  const atual = $$("#arq-passos .p")[ARQ.pos], caixa = $("#arq-passos");
+  const atual = $$("#arq-passos .p")[ARQ.pos], lista = $("#arq-passos");
   if (atual) {
-    const topo = atual.offsetTop - caixa.offsetTop;
-    if (topo < caixa.scrollTop) caixa.scrollTop = topo;
-    else if (topo + atual.offsetHeight > caixa.scrollTop + caixa.clientHeight) caixa.scrollTop = topo + atual.offsetHeight - caixa.clientHeight;
+    const topo = atual.offsetTop - lista.offsetTop;
+    if (topo < lista.scrollTop) lista.scrollTop = topo;
+    else if (topo + atual.offsetHeight > lista.scrollTop + lista.clientHeight) lista.scrollTop = topo + atual.offsetHeight - lista.clientHeight;
   }
 }
 
 function listarPassos() {
-  $("#arq-npassos").textContent = `${ARQ.eventos.length} mensagens`;
-  $("#arq-passos").innerHTML = ARQ.eventos.map((ev, i) => {
-    const de = quem(ev.de), para = quem(ev.para);
-    return `<div class="p" data-i="${i}"><span class="n">${i + 1}</span><span><b style="color:${de.cor}">${esc(de.curto || de.nome)}</b> → <span style="color:${para.cor}">${esc(para.curto || para.nome)}</span><br><span class="muted">${esc(NOME_TIPO[ev.tipo] || ev.tipo)}</span></span></div>`;
+  const total = ARQ.passos.reduce((n, p) => n + p.lista.length, 0);
+  $("#arq-npassos").textContent = `${ARQ.passos.length} passos · ${total} mensagens`;
+  $("#arq-passos").innerHTML = ARQ.passos.map((p, i) => {
+    const de = quem(p.ev.de), para = quem(p.ev.para);
+    return `<div class="p" data-i="${i}"><span class="n">${i + 1}</span><span><b style="color:${de.cor}">${esc(de.curto || de.nome)}</b> → <span style="color:${para.cor}">${esc(para.curto || para.nome)}</span>
+      <br><span class="muted">${esc(NOME_TIPO[p.ev.tipo] || p.ev.tipo)}</span>${p.lista.length > 1 ? ` <span class="selo">×${p.lista.length}</span>` : ""}</span></div>`;
   }).join("") || vazio("Sem mensagens");
   $$("#arq-passos .p").forEach((el) => el.addEventListener("click", () => { parar(); ARQ.pos = +el.dataset.i; mostrarPasso(); }));
 }
-
-const filtraLlm = (lista, com) => lista.filter((e) => com || e.tipo !== "chamada_llm");
 
 async function carregarArquitetura() {
   const [especialistas, resumoF] = await Promise.all([api("/api/especialistas"), api("/api/resumo")]);
@@ -696,27 +816,29 @@ async function carregarArquitetura() {
 async function escolherConversa() {
   parar();
   const id = $("#arq-conversa").value;
-  ARQ.todos = id ? (await api("/api/eventos?conversa=" + encodeURIComponent(id))) || [] : [];
-  ARQ.eventos = filtraLlm(ARQ.todos, $("#arq-llm").checked);
-  ARQ.pos = -1;
-  listarPassos();
-  mostrarPasso();
+  ARQ.conv = ARQ.conversas.find((c) => c.id === id) || null;
+  ARQ.todos = id ? ((await api("/api/eventos?conversa=" + encodeURIComponent(id))) || []).map(normalizar) : [];
+  reiniciarPassos();
 }
+function reiniciarPassos() { prepararConversa(); ARQ.pos = -1; listarPassos(); mostrarPasso(); }
 function parar() { clearInterval(ARQ.timer); ARQ.timer = null; $("#arq-play").textContent = "▶ Reproduzir"; }
-function avancar() { if (ARQ.pos < ARQ.eventos.length - 1) { ARQ.pos++; mostrarPasso(); } else parar(); }
+function avancar() { if (ARQ.pos < ARQ.passos.length - 1) { ARQ.pos++; mostrarPasso(); } else parar(); }
 function tocar() {
-  if (ARQ.pos >= ARQ.eventos.length - 1) ARQ.pos = -1;
+  if (ARQ.pos >= ARQ.passos.length - 1) ARQ.pos = -1;
   $("#arq-play").textContent = "❚❚ Pausar";
   avancar();
   ARQ.timer = setInterval(avancar, +$("#arq-vel").value);
 }
 $("#arq-conversa").addEventListener("change", escolherConversa);
-$("#arq-llm").addEventListener("change", () => { ARQ.eventos = filtraLlm(ARQ.todos, $("#arq-llm").checked); ARQ.pos = -1; listarPassos(); mostrarPasso(); });
+$("#arq-llm").addEventListener("change", reiniciarPassos);
+$("#arq-agrupar").addEventListener("change", reiniciarPassos);
 $("#arq-avancar").addEventListener("click", () => { parar(); avancar(); });
 $("#arq-voltar").addEventListener("click", () => { parar(); if (ARQ.pos > 0) { ARQ.pos--; mostrarPasso(); } });
 $("#arq-play").addEventListener("click", () => ARQ.timer ? parar() : tocar());
 $("#arq-vel").addEventListener("change", () => { if (ARQ.timer) { parar(); tocar(); } });
 $("#arq-pos").addEventListener("input", () => { parar(); ARQ.pos = +$("#arq-pos").value; mostrarPasso(); });
+
+const filtraLlm = (lista, com) => lista.filter((e) => com || e.tipo !== "chamada_llm");
 
 // ============================================================ conversas
 const CONV = { sel: null, conversas: [] };
@@ -732,7 +854,7 @@ async function carregarConversas() {
 }
 async function mostrarConversa() {
   if (!CONV.sel) { $("#conv-eventos").innerHTML = vazio("Escolha uma sessão", "As mensagens aparecem aqui."); return; }
-  const eventos = filtraLlm((await api("/api/eventos?conversa=" + encodeURIComponent(CONV.sel))) || [], $("#conv-llm").checked);
+  const eventos = filtraLlm(((await api("/api/eventos?conversa=" + encodeURIComponent(CONV.sel))) || []).map(normalizar), $("#conv-llm").checked);
   $("#conv-titulo").textContent = `Mensagens · ${eventos.length}`;
   $("#conv-eventos").innerHTML = eventos.map((ev) => {
     const de = quem(ev.de), para = quem(ev.para);

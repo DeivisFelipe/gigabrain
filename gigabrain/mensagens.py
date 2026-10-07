@@ -30,6 +30,9 @@ PO = "po"
 GEMEO = "gemeo"
 LIDER = "lider"
 SISTEMA = "sistema"
+# As três bases de dados também aparecem como destinatárias das mensagens.
+REPOSITORIO = "repositorio"   # Repositório de Requisitos
+REGISTRO = "registro"         # Registro de Especialistas (+ arquivos de conhecimento)
 
 
 def especialista(id_: str) -> str:
@@ -46,13 +49,14 @@ TIPOS = {
     "decomposicao": "Líder -> Líder. {subconsultas: [...]}",
     "resposta_especialista": "Especialista -> Líder. {resposta, requisitos_relacionados, conflitos, duvidas_para_po, confianca}",
     "resposta_consolidada": "Líder -> Gêmeo. {resumo, conflitos, duvidas_para_po, requisitos_relacionados}",
-    "especialista_criado": "Líder -> Sistema. {especialista_id, tema, descricao}",
-    "pendencia": "Líder -> Sistema. {motivo, tema}",
-    "requisito_salvo": "Sistema -> todos. {requisito_id, versao, ligacoes}",
-    "requisito_em_revisao": "Sistema -> todos. {requisito_id, por_causa_de}",
-    "conhecimento_atualizado": "Especialista -> Sistema. {especialista_id, versao, motivo}",
+    "especialista_criado": "Líder -> Registro. {especialista_id, tema, descricao}",
+    "pendencia": "Líder -> Registro. {motivo, tema}",
+    "requisito_salvo": "Gêmeo -> Repositório. {requisito_id, versao, ligacoes}",
+    "requisito_em_revisao": "Repositório -> Gêmeo. {requisito_id, por_causa_de}",
+    "conhecimento_atualizado": "Especialista -> Registro. {especialista_id, versao, motivo}",
+    "decisao": "Gêmeo -> Gêmeo. {rascunho, salvar, motivo}: o voto final do Conselho Deliberativo",
     "transcricao": "Sistema -> Gêmeo. {projeto, titulo, turnos}",
-    "extracao": "Gêmeo -> Líder. {requisitos: [candidatos extraídos da transcrição]}",
+    "extracao": "Gêmeo -> Gêmeo. {requisitos: [rascunhos extraídos da transcrição]}",
     "revisao": "Especialista -> Líder. {tema, mantidos, removidos, corrigidos, ligacoes}",
     "chamada_llm":"Agente -> LLM. {papel, duracao_ms, tokens?}",
     "erro": "Qualquer -> Sistema. {erro}",

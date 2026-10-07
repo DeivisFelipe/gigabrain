@@ -12,7 +12,7 @@ O PO sempre tem a palavra final: nada é salvo sem aprovação explícita.
 
 from __future__ import annotations
 
-from ..mensagens import LIDER, PO
+from ..mensagens import GEMEO, LIDER, PO
 from .base import Agente, como_json
 
 SYSTEM_PROMPT = """\
@@ -104,6 +104,20 @@ Responda com um único objeto JSON:
 
 TURNOS_POR_BLOCO = 40
 
+PROMPT_DECIDIR = """\
+Você é o Gêmeo Digital, representante do PO no Conselho Deliberativo do GigaBrain, e tem o
+voto final sobre o que entra no Repositório de Requisitos. O especialista do tema revisou o
+seu rascunho e fez uma recomendação. Decida:
+- salvar o requisito (aplicando ou não as correções e ligações sugeridas), ou
+- descartá-lo (por exemplo, se repete um requisito já salvo ou não tem respaldo nas falas).
+Siga a recomendação quando ela se apoia nas falas; rejeite-a quando contraria o que foi dito.
+IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza.
+
+Responda com um único objeto JSON:
+{"salvar": true, "texto": "...", "classe": "FR" | "NFR", "subtipo": null,
+ "ligacoes": [{"tipo": "depende_de", "alvo": "R2", "motivo": "..."}], "motivo": "por que decidiu assim"}
+"""
+
 
 class GemeoDigital(Agente):
     nome = "gemeo"
@@ -165,5 +179,32 @@ class GemeoDigital(Agente):
                     "tema": req.get("tema") or "geral",
                     "turnos": [t for t in req.get("turnos", []) if isinstance(t, str)],
                 })
-        self.enviar(LIDER, "extracao", {"projeto": projeto["id"], "requisitos": candidatos})
+        self.enviar(GEMEO, "extracao", {"projeto": projeto["id"], "requisitos": candidatos})
         return candidatos
+
+    def decidir(self, rascunho: dict, sugestao: dict, falas: dict[str, str], idioma: str = "en") -> dict:
+        """Voto final: salvar (como está ou corrigido) ou descartar o rascunho."""
+        if sugestao["acao"] == "manter" and not sugestao.get("ligacoes"):
+            decisao = {"salvar": True, "texto": rascunho["texto"], "classe": rascunho["classe"],
+                       "subtipo": rascunho["subtipo"], "ligacoes": [], "motivo": "especialista concordou com o rascunho"}
+        else:
+            resposta = self.chamar_llm("gemeo_decidir", PROMPT_DECIDIR, [{"role": "user", "content": como_json({
+                "idioma": idioma,
+                "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo", "turnos")},
+                "recomendacao": sugestao,
+                "falas": falas,
+            })}])
+            classe = "NFR" if str(resposta.get("classe", rascunho["classe"])).upper() == "NFR" else "FR"
+            decisao = {
+                "salvar": bool(resposta.get("salvar", True)),
+                "texto": (resposta.get("texto") or rascunho["texto"]).strip(),
+                "classe": classe,
+                "subtipo": resposta.get("subtipo") if classe == "NFR" else None,
+                "ligacoes": [l for l in resposta.get("ligacoes", []) if isinstance(l, dict) and l.get("alvo")],
+                "motivo": resposta.get("motivo", ""),
+            }
+        self.enviar(GEMEO, "decisao", {
+            "rascunho": rascunho["indice"], "salvar": decisao["salvar"], "recomendacao": sugestao["acao"],
+            "texto": ("salvar: " if decisao["salvar"] else "descartar: ") + decisao["motivo"],
+        })
+        return decisao
