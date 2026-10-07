@@ -9,6 +9,9 @@ Comandos:
     python main.py trilha R3              mostra como se chegou no R3
     python main.py especialistas          lista os especialistas
     python main.py alimentar pagamentos ata.md   entrega um documento a um especialista
+    python main.py entradas               lista os projetos do dataset EntradasGigabrain
+    python main.py avaliar 2008-keepass   processa a reunião e compara com o gabarito
+    python main.py avaliar todos --simulado      roda o dataset inteiro (conselho x agente único)
 
 Opção global --dados <pasta> escolhe onde fica o banco (padrão: dados/).
 
@@ -18,11 +21,12 @@ Para usar a DeepSeek:  set DEEPSEEK_API_KEY=sua-chave   (PowerShell: $env:DEEPSE
 from __future__ import annotations
 
 import argparse
+import csv
 import os
 import shutil
 import sys
 
-from gigabrain import demo
+from gigabrain import demo, entradas, reuniao
 from gigabrain.conselho import Conselho, abrir_contexto, alimentar_especialista
 from gigabrain.provedores import ErroProvedor, ProvedorSimulado, criar_provedor
 
@@ -114,6 +118,60 @@ def cmd_alimentar(args) -> None:
     print(f"Conhecimento de {args.especialista}: " + (f"versão {versao}" if versao else "sem mudanças"))
 
 
+def cmd_entradas(args) -> None:
+    for p in entradas.listar_projetos(args.entradas):
+        print(f"{p['pasta']:<22} tier {p['qualidade_tier']}  {p['requisitos_dialogo']:>3} requisitos  "
+              f"{p['palavras_transcricao']:>5} palavras  {p['nome_projeto']}")
+
+
+def _formatar(v) -> str:
+    return "  -  " if v is None else f"{v:.2f}" if isinstance(v, float) else str(v)
+
+
+def cmd_avaliar(args) -> None:
+    provedor = ProvedorSimulado() if args.simulado else criar_provedor("deepseek")
+    projetos = [p["pasta"] for p in entradas.listar_projetos(args.entradas) if int(p["requisitos_dialogo"]) > 0]
+    if args.projeto != "todos":
+        projetos = [args.projeto]
+    modos = {"ambos": [True, False], "conselho": [True], "agente_unico": [False]}[args.modo]
+    raiz = os.path.join(RAIZ, "dados-avaliacao", provedor.nome)
+
+    colunas = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"]
+    linhas = []
+    print(f"{'projeto':<22} {'modo':<13} " + " ".join(f"{c[:9]:>9}" for c in colunas))
+    for nome in projetos:
+        projeto = entradas.carregar_projeto(nome, args.entradas)
+        for com_conselho in modos:
+            modo = "conselho" if com_conselho else "agente_unico"
+            pasta = os.path.join(raiz, nome, modo)
+            if os.path.exists(pasta):
+                shutil.rmtree(pasta)
+            ctx = abrir_contexto(pasta, provedor, ver_agentes=args.ver_agentes)
+            try:
+                relatorio = reuniao.processar_e_avaliar(ctx, projeto, pasta, com_conselho)
+            finally:
+                ctx.banco.fechar()
+            m = relatorio["metricas"]
+            linhas.append({"projeto": nome, "modo": modo, **m})
+            print(f"{nome:<22} {modo:<13} " + " ".join(f"{_formatar(m[c]):>9}" for c in colunas))
+
+    if len(linhas) > 1:
+        print()
+        for modo in dict.fromkeys(l["modo"] for l in linhas):
+            do_modo = [l for l in linhas if l["modo"] == modo]
+            media = {c: (sum(l[c] for l in do_modo if l[c] is not None) / max(1, sum(l[c] is not None for l in do_modo)))
+                     for c in colunas}
+            print(f"{'MÉDIA':<22} {modo:<13} " + " ".join(f"{_formatar(media[c]):>9}" for c in colunas))
+
+    os.makedirs(raiz, exist_ok=True)
+    with open(os.path.join(raiz, "resumo.csv"), "w", encoding="utf-8", newline="") as f:
+        escritor = csv.DictWriter(f, fieldnames=["projeto", "modo", *colunas])
+        escritor.writeheader()
+        escritor.writerows(linhas)
+    print(f"\nResumo em {os.path.relpath(os.path.join(raiz, 'resumo.csv'), RAIZ)}. Para ver um projeto no painel:")
+    print(f"python main.py --dados {os.path.relpath(os.path.join(raiz, projetos[0], 'conselho' if True in modos else 'agente_unico'), RAIZ)} painel")
+
+
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -146,6 +204,18 @@ def main() -> None:
     p.add_argument("arquivo")
     p.add_argument("--simulado", action="store_true")
     p.set_defaults(func=cmd_alimentar)
+
+    p = sub.add_parser("entradas", help="lista os projetos do dataset de teste")
+    p.add_argument("--entradas", default=entradas.PASTA_PADRAO, help="pasta do repositório EntradasGigabrain")
+    p.set_defaults(func=cmd_entradas)
+
+    p = sub.add_parser("avaliar", help="processa reuniões do dataset e compara com o gabarito")
+    p.add_argument("projeto", help="pasta do projeto (ex.: 2008-keepass) ou 'todos'")
+    p.add_argument("--modo", choices=["ambos", "conselho", "agente_unico"], default="ambos")
+    p.add_argument("--simulado", action="store_true", help="baseline por regras, sem API")
+    p.add_argument("--ver-agentes", action="store_true")
+    p.add_argument("--entradas", default=entradas.PASTA_PADRAO)
+    p.set_defaults(func=cmd_avaliar)
 
     args = parser.parse_args()
     try:

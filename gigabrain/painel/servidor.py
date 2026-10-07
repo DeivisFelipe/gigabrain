@@ -8,6 +8,7 @@ Serve a página index.html e uma API JSON somente leitura sobre o banco:
     GET /api/requisito/<id>         versões, ligações e trilha de um requisito
     GET /api/especialistas          registro de especialistas
     GET /api/especialista/<id>      arquivo atual + todas as versões
+    GET /api/avaliacao              resultado contra o gabarito (se a pasta veio do comando avaliar)
 """
 
 from __future__ import annotations
@@ -27,6 +28,12 @@ PASTA = os.path.dirname(os.path.abspath(__file__))
 
 def _rotas(banco: Banco, caminho: str, query: dict) -> object:
     partes = [p for p in caminho.split("/") if p][1:]  # tira o "api"
+    if partes == ["avaliacao"]:
+        arquivo = os.path.join(os.path.dirname(banco.caminho), "avaliacao.json")
+        if not os.path.exists(arquivo):
+            return {}
+        with open(arquivo, encoding="utf-8") as f:
+            return json.load(f)
     if partes == ["resumo"]:
         requisitos = banco.listar_requisitos()
         return {

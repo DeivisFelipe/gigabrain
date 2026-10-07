@@ -67,6 +67,17 @@ pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; 
 .versoes { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
 .versoes button { font-size: 12px; }
 .versoes button.sel { outline: 2px solid var(--info); }
+.metricas { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+.metrica { border: 1px solid var(--line); border-radius: 8px; padding: 10px; }
+.metrica b { font-size: 22px; display: block; font-variant-numeric: tabular-nums; }
+.metrica small { color: var(--muted); }
+.barra { height: 6px; border-radius: 3px; background: var(--line); margin: 6px 0 4px; overflow: hidden; }
+.barra i { display: block; height: 100%; background: var(--info); }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 500; }
+.ok { color: var(--ok); } .erro { color: var(--bad); }
+.tabela-rolagem { overflow-x: auto; }
 </style>
 </head>
 <body>
@@ -77,6 +88,7 @@ pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; 
     <button data-aba="conversas">Conversas</button>
     <button data-aba="requisitos">Requisitos</button>
     <button data-aba="especialistas">Especialistas</button>
+    <button data-aba="avaliacao" id="btn-avaliacao" hidden>Avaliação</button>
   </nav>
   <div class="stats" id="stats"></div>
 </header>
@@ -136,6 +148,21 @@ pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; 
       <div class="card" id="esp-detalhe"><div class="vazio">Escolha um especialista.</div></div>
     </div>
   </section>
+  <!-- AVALIAÇÃO: comparação com o gabarito do dataset -->
+  <section class="aba" id="aba-avaliacao">
+    <div class="card" style="margin-bottom:16px" id="av-topo"></div>
+    <div class="card">
+      <div class="controles">
+        <select id="av-filtro">
+          <option value="todos">todos os requisitos do gabarito</option>
+          <option value="perdidos">só os não encontrados</option>
+          <option value="classe">só os com classe errada</option>
+          <option value="extras">requisitos extraídos que não existem no gabarito</option>
+        </select>
+      </div>
+      <div id="av-tabela"></div>
+    </div>
+  </section>
 </main>
 
 <script>
@@ -168,7 +195,7 @@ function resumo(ev) {
 document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
   document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("ativo", x === b));
   document.querySelectorAll(".aba").forEach((a) => a.classList.toggle("ativa", a.id === "aba-" + b.dataset.aba));
-  ({ requisitos: carregarRequisitos, especialistas: carregarEspecialistas, conversas: carregarConversas }[b.dataset.aba] || (() => {}))();
+  ({ requisitos: carregarRequisitos, especialistas: carregarEspecialistas, conversas: carregarConversas, avaliacao: carregarAvaliacao }[b.dataset.aba] || (() => {}))();
 }));
 
 let RESUMO = null;
@@ -350,8 +377,9 @@ async function mostrarRequisito() {
   $("#req-detalhe").innerHTML = `
     <h2>${r.id} · ${esc(c.titulo)} <span class="badge st-${r.status}">${r.status.replace("_", " ")}</span></h2>
     <div class="muted">${c.tipo === "enabler" ? "Requisito técnico (enabler)" : "Requisito de negócio"} · temas: ${r.temas.join(", ")} · versão atual v${r.versao_atual}</div>
-    <h3>História</h3><div>${esc(c.historia)}</div>
-    <h3>Critérios de aceite</h3><ul>${(c.criterios_aceite || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    ${c.historia ? `<h3>História</h3><div>${esc(c.historia)}</div>` : ""}
+    ${c.texto ? `<h3>Texto</h3><div>${esc(c.texto)}</div><div class="muted">classe ${c.classe}${c.subtipo ? " / " + c.subtipo : ""} · turnos ${(c.turnos || []).join(", ")}</div>` : ""}
+    ${(c.criterios_aceite || []).length ? `<h3>Critérios de aceite</h3><ul>${c.criterios_aceite.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}
     <h3>Ligações</h3>${lig ? `<ul>${lig}</ul>` : `<div class="muted">nenhuma</div>`}
     <h3>Fontes (rastreabilidade)</h3><ul>${fontes}</ul>
     <h3>Como chegamos aqui</h3><div class="trilha">${trilha}</div>
@@ -416,8 +444,58 @@ async function mostrarEspecialista() {
   document.querySelectorAll("#esp-detalhe .versoes button").forEach((b) => b.addEventListener("click", () => { ESP_VER = Number(b.dataset.v); mostrarEspecialista(); }));
 }
 
+// ------------------------------------------------------------------ avaliação
+let AV = null;
+const METRICAS = [
+  ["revocacao", "Revocação", "do gabarito, quanto foi encontrado"],
+  ["precisao", "Precisão", "do que foi extraído, quanto existe no gabarito"],
+  ["f1", "F1", "equilíbrio entre as duas"],
+  ["classe", "Classe FR/NFR", "acerto entre os encontrados"],
+  ["subtipo", "Subtipo NFR", "acerto entre os NFR encontrados"],
+  ["rastreio", "Rastreio", "citou o turno certo"],
+  ["sem_respaldo", "Sem respaldo", "extraídos sem apoio nas falas (menor é melhor)"],
+];
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
+const classeTxt = (x) => x.classe + (x.subtipo ? "/" + x.subtipo : "");
+
+async function carregarAvaliacao() {
+  AV = await api("/api/avaliacao");
+  if (!AV.metricas) return;
+  const m = AV.metricas;
+  $("#av-topo").innerHTML = `<h2>${esc(AV.titulo)} <span class="muted">· ${AV.modo === "conselho" ? "com o conselho" : "agente único (baseline)"} · provedor ${esc(AV.provedor)}</span></h2>
+    <div class="muted">${m.previstos} requisitos extraídos · ${m.gabarito} no gabarito · ${m.acertos} pares encontrados (similaridade ≥ ${AV.parametros.limiar_similaridade})</div>
+    <div class="metricas">${METRICAS.map(([k, nomeM, dica]) => `<div class="metrica"><small>${nomeM}</small><b>${pct(m[k])}</b>
+      <div class="barra"><i style="width:${(m[k] ?? 0) * 100}%;${k === "sem_respaldo" ? "background:var(--bad)" : ""}"></i></div><small>${dica}</small></div>`).join("")}</div>`;
+  mostrarTabelaAvaliacao();
+}
+
+function mostrarTabelaAvaliacao() {
+  const filtro = $("#av-filtro").value;
+  const prev = Object.fromEntries(AV.previstos.map((p) => [p.id, p]));
+  const parGab = Object.fromEntries(AV.pares.map((x) => [x.gabarito, x]));
+  if (filtro === "extras") {
+    const linhas = AV.falsos_positivos.map((id) => prev[id]).map((p) => `<tr><td><b>${p.id}</b></td><td>${esc(p.texto)}</td><td>${classeTxt(p)}</td><td>${p.turnos.join(", ")}</td><td>${esc(p.tema)}</td></tr>`).join("");
+    $("#av-tabela").innerHTML = `<div class="tabela-rolagem"><table><tr><th>id</th><th>extraído pelo GigaBrain (sem par no gabarito)</th><th>classe</th><th>turnos</th><th>tema</th></tr>${linhas}</table></div>`;
+    return;
+  }
+  const marca = (ok) => ok == null ? "" : ok ? '<span class="ok">✓</span>' : '<span class="erro">✗</span>';
+  const linhas = AV.gabarito.filter((g) => {
+    const par = parGab[g.id];
+    return filtro === "todos" || (filtro === "perdidos" && !par) || (filtro === "classe" && par && !par.classe_ok);
+  }).map((g) => {
+    const par = parGab[g.id], p = par && prev[par.previsto];
+    return `<tr><td><b>${g.id.split(":")[1]}</b><br><small class="muted">${classeTxt(g)} · ${g.turnos.join(", ")}</small></td>
+      <td>${esc(g.texto)}</td>
+      <td>${p ? `<b>${p.id}</b> ${esc(p.texto)}<br><small class="muted">${classeTxt(p)} · ${p.turnos.join(", ")} · similaridade ${par.similaridade}</small>` : '<span class="erro">não encontrado</span>'}</td>
+      <td>${par ? `classe ${marca(par.classe_ok)}<br>${par.subtipo_ok != null ? `subtipo ${marca(par.subtipo_ok)}<br>` : ""}turno ${marca(par.rastreio_ok)}` : ""}</td></tr>`;
+  }).join("");
+  $("#av-tabela").innerHTML = `<div class="tabela-rolagem"><table><tr><th>gabarito</th><th>texto do gabarito</th><th>o que o GigaBrain extraiu</th><th>acertos</th></tr>${linhas}</table></div>`;
+}
+$("#av-filtro").addEventListener("change", mostrarTabelaAvaliacao);
+
 // ------------------------------------------------------------------ início
 carregarResumo().then(carregarArquitetura);
+api("/api/avaliacao").then((a) => { if (a.metricas) $("#btn-avaliacao").hidden = false; });
 </script>
 </body>
 </html>

@@ -141,6 +141,10 @@ class Banco:
         self.con = sqlite3.connect(caminho, check_same_thread=False)
         self.con.row_factory = sqlite3.Row
         self.con.execute("PRAGMA foreign_keys = ON")
+        # WAL + synchronous NORMAL: cada evento do log vira uma transação, e sem
+        # isso o Windows espera o disco a cada mensagem (lento com centenas delas).
+        self.con.execute("PRAGMA journal_mode = WAL")
+        self.con.execute("PRAGMA synchronous = NORMAL")
         self.con.executescript(SCHEMA)
 
     def fechar(self) -> None:
@@ -264,26 +268,39 @@ class Banco:
 
             salvas = []
             for lig in ligacoes or []:
-                tipo_lig, destino = lig.get("tipo"), lig.get("alvo")
-                if tipo_lig not in TIPOS_LIGACAO or not destino or destino == req_id:
-                    continue
-                if not self._um("SELECT id FROM requisito WHERE id = ?", (destino,)):
-                    continue
-                self.con.execute(
-                    """INSERT INTO requisito_ligacao (origem_id, tipo, destino_id, motivo, conversa_id, criado_em)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (req_id, tipo_lig, destino, lig.get("motivo"), conversa_id, momento),
-                )
-                if tipo_lig in STATUS_APOS_LIGACAO:
-                    self.con.execute(
-                        "UPDATE requisito SET status = ?, atualizado_em = ? WHERE id = ?",
-                        (STATUS_APOS_LIGACAO[tipo_lig], momento, destino),
-                    )
-                    # O destino deixou de valer: quem dependia dele precisa ser revisto.
-                    em_revisao += [r for r in self._marcar_dependentes(destino, momento, exceto=req_id) if r not in em_revisao]
-                salvas.append({"origem": req_id, "tipo": tipo_lig, "destino": destino})
+                feita = self._inserir_ligacao(req_id, lig.get("tipo"), lig.get("alvo"), lig.get("motivo"), conversa_id, momento)
+                if feita:
+                    em_revisao += [r for r in feita.pop("em_revisao") if r not in em_revisao]
+                    salvas.append(feita)
 
         return {"requisito_id": req_id, "versao": versao, "ligacoes": salvas, "em_revisao": em_revisao}
+
+    def _inserir_ligacao(self, origem: str, tipo: str, destino: str, motivo: str | None,
+                         conversa_id: str | None, momento: str) -> dict | None:
+        if tipo not in TIPOS_LIGACAO or not destino or destino == origem:
+            return None
+        if not self._um("SELECT id FROM requisito WHERE id = ?", (destino,)):
+            return None
+        self.con.execute(
+            """INSERT INTO requisito_ligacao (origem_id, tipo, destino_id, motivo, conversa_id, criado_em)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (origem, tipo, destino, motivo, conversa_id, momento),
+        )
+        em_revisao = []
+        if tipo in STATUS_APOS_LIGACAO:
+            self.con.execute(
+                "UPDATE requisito SET status = ?, atualizado_em = ? WHERE id = ?",
+                (STATUS_APOS_LIGACAO[tipo], momento, destino),
+            )
+            # O destino deixou de valer: quem dependia dele precisa ser revisto.
+            em_revisao = self._marcar_dependentes(destino, momento, exceto=origem)
+        return {"origem": origem, "tipo": tipo, "destino": destino, "em_revisao": em_revisao}
+
+    def ligar(self, origem: str, tipo: str, destino: str, motivo: str | None = None,
+              conversa_id: str | None = None) -> dict | None:
+        """Cria uma ligação entre dois requisitos que já existem."""
+        with self.con:
+            return self._inserir_ligacao(origem, tipo, destino, motivo, conversa_id, agora())
 
     def _marcar_dependentes(self, requisito_id: str, momento: str, exceto: str | None = None) -> list[str]:
         """Coloca "em_revisao" quem tem `depende_de` apontando para o requisito."""

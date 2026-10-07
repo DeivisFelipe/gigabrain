@@ -51,7 +51,10 @@ TIPOS = {
     "requisito_salvo": "Sistema -> todos. {requisito_id, versao, ligacoes}",
     "requisito_em_revisao": "Sistema -> todos. {requisito_id, por_causa_de}",
     "conhecimento_atualizado": "Especialista -> Sistema. {especialista_id, versao, motivo}",
-    "chamada_llm": "Agente -> LLM. {papel, duracao_ms, tokens?}",
+    "transcricao": "Sistema -> Gêmeo. {projeto, titulo, turnos}",
+    "extracao": "Gêmeo -> Líder. {requisitos: [candidatos extraídos da transcrição]}",
+    "revisao": "Especialista -> Líder. {tema, mantidos, removidos, corrigidos, ligacoes}",
+    "chamada_llm":"Agente -> LLM. {papel, duracao_ms, tokens?}",
     "erro": "Qualquer -> Sistema. {erro}",
 }
 

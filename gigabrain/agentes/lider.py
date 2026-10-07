@@ -81,6 +81,30 @@ class Lider(Agente):
         self.enviar(GEMEO, "resposta_consolidada", consolidada)
         return consolidada
 
+    def revisar_extracao(self, candidatos: list[dict], falas: dict[str, str]) -> dict:
+        """Distribui os candidatos por tema e pede a revisão de cada especialista."""
+        por_tema: dict[str, list[dict]] = {}
+        for c in candidatos:
+            por_tema.setdefault(slug(c["tema"]), []).append(c)
+        self.enviar(LIDER, "decomposicao", {
+            "pergunta": "revisar requisitos extraídos da transcrição",
+            "subconsultas": [{"tema": por_tema[t][0]["tema"], "candidatos": len(por_tema[t])} for t in por_tema],
+        })
+
+        revisados, ligacoes = [], []
+        for tema_slug, grupo in por_tema.items():
+            esp = self._obter_ou_criar({"tema": grupo[0]["tema"], "especialista_id": tema_slug,
+                                        "descricao": f"Requisitos sobre {grupo[0]['tema']}."})
+            if not esp:
+                revisados += grupo
+                continue
+            self.enviar(especialista(esp.id), "consulta", {"pergunta": f"revisar {len(grupo)} candidato(s)", "tema": esp.tema})
+            resultado = esp.revisar(grupo, falas)
+            revisados += resultado["candidatos"]
+            ligacoes += resultado["ligacoes"]
+        revisados.sort(key=lambda c: c["indice"])
+        return {"candidatos": revisados, "ligacoes": ligacoes}
+
     def _obter_ou_criar(self, sub: dict) -> Especialista | None:
         id_ = sub.get("especialista_id") or slug(sub["tema"])
         existente = Especialista.carregar(self.ctx, id_)

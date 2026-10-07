@@ -73,6 +73,35 @@ Seja direto e conciso. Não repita o que o PO já disse.
 """
 
 
+PROMPT_EXTRAIR = """\
+Você é o Gêmeo Digital do GigaBrain. Recebe um trecho da transcrição de uma reunião de
+elicitação (Analyst, Client, TechLead, EndUser) e extrai os requisitos de software ditos
+pelos stakeholders.
+
+Regras:
+- Um requisito por obrigação distinta. Uma fala pode conter mais de um requisito.
+- O Analyst só conduz e confirma ("Just to confirm, ..."): não duplique o que ele repete.
+- Ignore falas fora do tópico (problemas de conexão, microfone, risadas).
+- Escreva cada requisito no MESMO idioma da transcrição, como frase declarativa, mantendo
+  as palavras originais e tirando só hesitações (uh, erm, you know, i mean) e repetições.
+- "classe": "FR" (funcional) ou "NFR" (não funcional).
+- "subtipo" só para NFR: PE (desempenho), SE (segurança), US (usabilidade),
+  LF (aparência), A (disponibilidade), SA (safety), PO (portabilidade),
+  MN (manutenibilidade), SC (escalabilidade), L (legal), FT (tolerância a falhas),
+  OT (outro). Para FR use null.
+- "tema": tema de negócio curto, em português, no singular ou plural consistente
+  (ex.: "banco de dados", "busca", "segurança"). Use o tópico que o Analyst anunciou.
+- "turnos": os ids dos turnos onde o requisito foi dito (ex.: ["T8"]), sem os de contexto.
+- Os primeiros turnos do trecho podem ser só contexto do bloco anterior: extraia apenas
+  requisitos ditos a partir do turno "extrair_a_partir_de".
+
+Responda com um único objeto JSON:
+{"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "tema": "...", "turnos": ["T8"]}]}
+"""
+
+TURNOS_POR_BLOCO = 40
+
+
 class GemeoDigital(Agente):
     nome = "gemeo"
 
@@ -108,3 +137,29 @@ class GemeoDigital(Agente):
 
     def ouvir_sistema(self, aviso: str) -> dict:
         return self._decidir({"de": "sistema", "aviso": aviso})
+
+    def extrair_da_transcricao(self, projeto: dict) -> list[dict]:
+        """Lê a reunião em blocos de turnos e devolve os requisitos candidatos."""
+        turnos = projeto["turnos"]
+        candidatos: list[dict] = []
+        for inicio in range(0, len(turnos), TURNOS_POR_BLOCO):
+            # Repete os 2 turnos anteriores para não perder o tópico anunciado pelo Analyst.
+            bloco = turnos[max(0, inicio - 2):inicio + TURNOS_POR_BLOCO]
+            resposta = self.chamar_llm("gemeo_extrair", PROMPT_EXTRAIR, [{"role": "user", "content": como_json({
+                "projeto": projeto["titulo"],
+                "extrair_a_partir_de": turnos[inicio]["id"],
+                "transcricao": "\n".join(f"[{t['id']}] {t['falante']}: {t['texto']}" for t in bloco),
+            })}])
+            for req in resposta.get("requisitos", []):
+                if not req.get("texto"):
+                    continue
+                candidatos.append({
+                    "indice": len(candidatos),
+                    "texto": req["texto"].strip(),
+                    "classe": "NFR" if str(req.get("classe", "")).upper() == "NFR" else "FR",
+                    "subtipo": req.get("subtipo") if str(req.get("classe", "")).upper() == "NFR" else None,
+                    "tema": req.get("tema") or "geral",
+                    "turnos": [t for t in req.get("turnos", []) if isinstance(t, str)],
+                })
+        self.enviar(LIDER, "extracao", {"projeto": projeto["id"], "requisitos": candidatos})
+        return candidatos

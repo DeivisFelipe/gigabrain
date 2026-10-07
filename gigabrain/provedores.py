@@ -51,6 +51,7 @@ class ProvedorOpenAICompativel:
                 model=self.modelo,
                 messages=conversa,
                 response_format={"type": "json_object"},
+                max_tokens=8192,  # extrair requisitos de um bloco de reunião gera respostas longas
             )
             uso = resposta.usage
             self.ultimo_uso = {
@@ -101,6 +102,35 @@ def _adivinhar_temas(texto: str) -> list[str]:
         if chave in t and tema not in temas:
             temas.append(tema)
     return temas or ["geral"]
+
+
+HESITACOES = r"\b(uh|uhm|um|erm|you know|i mean|sort of|basically)\b,?\s*|\[(crosstalk|laughter)\]\s*"
+
+PALAVRAS_NFR = [
+    ("PE", r"response time|seconds?\b|performance|fast|latency|throughput"),
+    ("SE", r"secur|encrypt|authenticat|password|permission|access control|privacy"),
+    ("US", r"easy|easily|intuitive|usab|user[- ]friendly|learn"),
+    ("LF", r"look|colou?r|font|layout|appearance"),
+    ("A", r"availab|24 ?/ ?7|uptime"),
+    ("PO", r"portab|platform|browser|operating system|windows|linux"),
+    ("MN", r"maintain|modular"),
+    ("SC", r"scal|concurrent users"),
+    ("L", r"licen[cs]e|law|legal|regulat|complian"),
+    ("FT", r"backup|recover|fault|failure"),
+]
+
+
+def _limpar_fala(texto: str) -> str:
+    texto = re.sub(HESITACOES, "", texto, flags=re.I)
+    texto = re.sub(r"\b(\w+) \1\b", r"\1", texto, flags=re.I)  # "the the" -> "the"
+    return re.sub(r"\s+", " ", texto).strip()
+
+
+def _classificar(frase: str) -> tuple[str, str | None]:
+    for subtipo, padrao in PALAVRAS_NFR:
+        if re.search(padrao, frase, re.I):
+            return "NFR", subtipo
+    return "FR", None
 
 
 def _ultimo(mensagens: list[dict]) -> dict:
@@ -191,6 +221,44 @@ class ProvedorSimulado:
             "requisitos": [requisito],
         }
 
+    def _gemeo_extrair(self, mensagens: list[dict]) -> dict:
+        """Baseline por regras: cada frase de stakeholder com cara de requisito vira um."""
+        entrada = _ultimo(mensagens)
+        tema, extrair, requisitos = "geral", False, []
+        for linha in entrada["transcricao"].splitlines():
+            m = re.match(r"\[(T\d+)\] (\w+): (.*)", linha)
+            if not m:
+                continue
+            turno, falante, texto = m.groups()
+            extrair = extrair or turno == entrada.get("extrair_a_partir_de")
+            if falante == "Analyst":
+                topico = re.search(r"(?:next topic|talk about|move on to)[:\s]+([^.?]+)", texto, re.I)
+                if topico:
+                    tema = topico.group(1).strip().lower()
+                continue
+            if not extrair or re.search(r"\b(sorry|on mute|hear me|connection)\b", texto, re.I):
+                continue
+            for frase in re.split(r"(?<=[.!?])\s+", _limpar_fala(texto)):
+                if len(frase.split()) < 6:
+                    continue
+                classe, subtipo = _classificar(frase)
+                requisitos.append({"texto": frase, "classe": classe, "subtipo": subtipo, "tema": tema, "turnos": [turno]})
+        return {"requisitos": requisitos}
+
+    def _especialista_revisar(self, mensagens: list[dict]) -> dict:
+        """Remove candidatos quase iguais a outro do mesmo tema (duplicados)."""
+        entrada = _ultimo(mensagens)
+        from .avaliacao import similaridade
+        revisao, vistos = [], []
+        for c in entrada["candidatos"]:
+            igual = next((v for v in vistos if similaridade(c["texto"], v["texto"]) >= 0.85), None)
+            if igual:
+                revisao.append({"indice": c["indice"], "acao": "remover", "motivo": f"duplicado do candidato {igual['indice']}"})
+            else:
+                revisao.append({"indice": c["indice"], "acao": "manter"})
+                vistos.append(c)
+        return {"revisao": revisao, "ligacoes": []}
+
     # Líder -----------------------------------------------------------------
 
     def _lider_decompor(self, mensagens: list[dict]) -> dict:
@@ -275,6 +343,10 @@ class ProvedorSimulado:
             for rid in gatilho.get("em_revisao", []):
                 md = conhecimento.adicionar_item(md, "Pontos em aberto", f"{rid} precisa ser revisto porque {req['id']} mudou")
                 mudancas.append(f"{rid} em revisão")
+        elif gatilho["tipo"] == "lote_aprovado":
+            for req in gatilho["requisitos"]:
+                md = conhecimento.adicionar_item(md, "Requisitos aprovados", f"{req['id']} ({req['classe']}) — {req['titulo']}")
+            mudancas.append(f"registrei {len(gatilho['requisitos'])} requisito(s) da transcrição")
         elif gatilho["tipo"] == "documento":
             for linha in gatilho["texto"].splitlines():
                 linha = linha.strip().lstrip("-*").strip()

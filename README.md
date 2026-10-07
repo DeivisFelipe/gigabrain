@@ -89,6 +89,40 @@ Toda troca entre agentes é uma `Mensagem` com `de`, `para`, `tipo` e `conteudo`
 mensagem vai para a tabela `evento` e para `dados/logs/<conversa>.jsonl`. Os agentes
 também falam com o LLM só em JSON (entrada e saída).
 
+## Teste com o dataset (EntradasGigabrain)
+
+O repositório [EntradasGigabrain](https://github.com/schaumann-byte/EntradasGigabrain)
+tem 18 reuniões simuladas, derivadas do dataset PURE, cada uma com um gabarito de
+requisitos (classe FR/NFR, subtipo e turnos de origem). Clone-o **ao lado** deste
+repositório (ou defina `GIGABRAIN_ENTRADAS`):
+
+```
+Projetos/
+├── gigabrain/
+└── EntradasGigabrain/
+```
+
+`python main.py avaliar <projeto|todos>` processa cada reunião em lote e compara com o
+gabarito, em dois modos:
+
+- **conselho**: o Gêmeo extrai os candidatos citando os turnos, o Líder separa por tema
+  e os especialistas revisam (removem duplicados e requisitos sem respaldo, corrigem
+  classe/subtipo e ligam requisitos)
+- **agente_unico**: só o Gêmeo extrai (baseline para a pergunta "o multiagente ajuda?")
+
+Métricas: precisão, revocação, F1, acerto de classe FR/NFR, acerto de subtipo NFR,
+rastreio (citou o turno certo) e taxa sem respaldo (alucinação). O pareamento usa a
+sobreposição de palavras de conteúdo (Dice ≥ 0,5). Os resultados ficam em
+`dados-avaliacao/<provedor>/<projeto>/<modo>/` (com `avaliacao.json` e um banco próprio)
+e o resumo em `dados-avaliacao/<provedor>/resumo.csv`. O painel ganha a aba
+**Avaliação** quando aberto numa dessas pastas.
+
+> **Atenção:** com `--simulado`, a extração é um baseline por regras (cada frase de
+> stakeholder vira um requisito), não um LLM. Ele já atinge revocação ~0,98 porque as
+> transcrições preservam as palavras dos requisitos originais. Ou seja, encontrar os
+> requisitos é fácil neste dataset; a diferença entre os sistemas deve aparecer em
+> precisão (duplicados, frases que não são requisitos), classe/subtipo e ligações.
+
 ## Como rodar
 
 ```bash
@@ -108,6 +142,11 @@ python main.py conversar --simulado      # testar sem API
 python main.py requisitos
 python main.py trilha R3
 python main.py especialistas
+
+# Dataset de teste (EntradasGigabrain clonado ao lado)
+python main.py entradas
+python main.py avaliar 2008-keepass --simulado
+python main.py avaliar todos            # com a DeepSeek, conselho x agente único
 
 # Testes
 python -m unittest discover tests
@@ -135,7 +174,10 @@ O painel (`python main.py painel`) tem quatro abas:
 | 9 | `gigabrain/agentes/especialista.py` | responder e atualizar o conhecimento |
 | 10 | `gigabrain/conselho.py` | o fluxo inteiro de uma conversa |
 | 11 | `gigabrain/log.py` | para onde vai cada mensagem |
-| 12 | `main.py` e `gigabrain/demo.py` | linha de comando e demonstração |
-| 13 | `gigabrain/painel/` | servidor e página do painel |
+| 12 | `gigabrain/entradas.py` | leitura do dataset EntradasGigabrain |
+| 13 | `gigabrain/reuniao.py` | processar uma reunião inteira (conselho ou agente único) |
+| 14 | `gigabrain/avaliacao.py` | comparação com o gabarito e métricas |
+| 15 | `main.py` e `gigabrain/demo.py` | linha de comando e demonstração |
+| 16 | `gigabrain/painel/` | servidor e página do painel |
 
 `arquitetura.html` e `editor.html` são a nota e o editor do diagrama original.
