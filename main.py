@@ -25,6 +25,7 @@ import csv
 import os
 import shutil
 import sys
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from gigabrain import demo, entradas, reuniao
 from gigabrain.conselho import Conselho, abrir_contexto, alimentar_especialista
@@ -130,32 +131,48 @@ def _formatar(v) -> str:
     return "  -  " if v is None else f"{v:.2f}" if isinstance(v, float) else str(v)
 
 
-def cmd_avaliar(args) -> None:
+def _rodar_avaliacao(args, nome: str, com_conselho: bool, raiz: str) -> dict:
+    """Uma execução (projeto + modo), com pasta, bancos e provedor próprios."""
     provedor = ProvedorSimulado() if args.simulado else criar_provedor("deepseek")
+    projeto = entradas.carregar_projeto(nome, args.entradas)
+    modo = "conselho" if com_conselho else "agente_unico"
+    pasta = os.path.join(raiz, nome, modo)
+    if os.path.exists(pasta):
+        shutil.rmtree(pasta)
+    ctx = abrir_contexto(pasta, provedor, ver_agentes=args.ver_agentes)
+    try:
+        relatorio = reuniao.processar_e_avaliar(ctx, projeto, pasta, com_conselho)
+    finally:
+        ctx.banco.fechar()
+    return {"projeto": nome, "modo": modo, **relatorio["metricas"]}
+
+
+def cmd_avaliar(args) -> None:
+    nome_provedor = ProvedorSimulado.nome if args.simulado else criar_provedor("deepseek").nome
     projetos = [p["pasta"] for p in entradas.listar_projetos(args.entradas) if int(p["requisitos_dialogo"]) > 0]
     if args.projeto != "todos":
         projetos = [args.projeto]
     modos = {"ambos": [True, False], "conselho": [True], "agente_unico": [False]}[args.modo]
-    raiz = os.path.join(RAIZ, "dados-avaliacao", provedor.nome)
+    raiz = os.path.join(RAIZ, "dados-avaliacao", nome_provedor)
 
+    # Cada (projeto, modo) é independente: roda várias ao mesmo tempo.
+    tarefas = [(nome, com_conselho) for nome in projetos for com_conselho in modos]
     colunas = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"]
     linhas = []
+    print(f"{len(tarefas)} execução(ões), {args.paralelo} ao mesmo tempo")
     print(f"{'projeto':<22} {'modo':<13} " + " ".join(f"{c[:9]:>9}" for c in colunas))
-    for nome in projetos:
-        projeto = entradas.carregar_projeto(nome, args.entradas)
-        for com_conselho in modos:
-            modo = "conselho" if com_conselho else "agente_unico"
-            pasta = os.path.join(raiz, nome, modo)
-            if os.path.exists(pasta):
-                shutil.rmtree(pasta)
-            ctx = abrir_contexto(pasta, provedor, ver_agentes=args.ver_agentes)
+    with ThreadPoolExecutor(max_workers=args.paralelo) as executor:
+        futuros = {executor.submit(_rodar_avaliacao, args, nome, cc, raiz): (nome, cc) for nome, cc in tarefas}
+        for futuro in as_completed(futuros):
+            nome, cc = futuros[futuro]
             try:
-                relatorio = reuniao.processar_e_avaliar(ctx, projeto, pasta, com_conselho)
-            finally:
-                ctx.banco.fechar()
-            m = relatorio["metricas"]
-            linhas.append({"projeto": nome, "modo": modo, **m})
-            print(f"{nome:<22} {modo:<13} " + " ".join(f"{_formatar(m[c]):>9}" for c in colunas))
+                linha = futuro.result()
+            except Exception as exc:  # uma execução com erro não derruba as outras
+                print(f"{nome:<22} {'conselho' if cc else 'agente_unico':<13} ERRO: {exc}")
+                continue
+            linhas.append(linha)
+            print(f"{nome:<22} {linha['modo']:<13} " + " ".join(f"{_formatar(linha[c]):>9}" for c in colunas), flush=True)
+    linhas.sort(key=lambda l: (l["projeto"], l["modo"] != "conselho"))
 
     if len(linhas) > 1:
         print()
@@ -216,6 +233,7 @@ def main() -> None:
     p.add_argument("--modo", choices=["ambos", "conselho", "agente_unico"], default="ambos")
     p.add_argument("--simulado", action="store_true", help="baseline por regras, sem API")
     p.add_argument("--ver-agentes", action="store_true")
+    p.add_argument("--paralelo", type=int, default=4, help="quantas execuções ao mesmo tempo (padrão: 4)")
     p.add_argument("--entradas", default=entradas.PASTA_PADRAO)
     p.set_defaults(func=cmd_avaliar)
 
