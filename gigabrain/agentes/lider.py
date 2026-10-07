@@ -13,6 +13,7 @@ Quando o Gêmeo faz uma consulta, o Líder:
 
 from __future__ import annotations
 
+from .. import conhecimento
 from ..banco import slug
 from ..mensagens import GEMEO, LIDER, REGISTRO, especialista
 from .base import Agente, como_json
@@ -82,7 +83,7 @@ class Lider(Agente):
         return consolidada
 
     def consultar_rascunho(self, rascunho: dict, falas: dict[str, str], idioma: str = "en") -> dict:
-        """Leva um rascunho ao especialista do tema e devolve a recomendação ao Gêmeo."""
+        """Leva um rascunho ao especialista do tema e ao de qualidade; devolve a recomendação ao Gêmeo."""
         esp = self._obter_ou_criar({"tema": rascunho["tema"], "descricao": f"Requisitos sobre {rascunho['tema']}."})
         if esp:
             self.enviar(especialista(esp.id), "consulta", {"pergunta": "revisar rascunho: " + rascunho["texto"][:100], "tema": esp.tema})
@@ -90,8 +91,30 @@ class Lider(Agente):
         else:
             sugestao = {"especialista_id": None, "acao": "manter", "ligacoes": [], "duplicado_de": None,
                         "motivo": "sem especialista para o tema; nada a recomendar"}
+
+        # O especialista de qualidade confere classe e subtipo (só se o rascunho não vai ser descartado).
+        if self.ctx.com_qualidade and sugestao["acao"] != "descartar":
+            qualidade = self._especialista_qualidade()
+            self.enviar(especialista(qualidade.id), "consulta", {"pergunta": "classificar: " + rascunho["texto"][:100], "tema": qualidade.tema})
+            q = qualidade.revisar_qualidade({**rascunho, "classe": sugestao.get("classe") or rascunho["classe"],
+                                             "subtipo": sugestao.get("subtipo") or rascunho["subtipo"]})
+            atual = (sugestao.get("classe") or rascunho["classe"], sugestao.get("subtipo") or rascunho["subtipo"])
+            if (q["classe"], q["subtipo"]) != atual:
+                sugestao = {**sugestao, "acao": "corrigir", "classe": q["classe"], "subtipo": q["subtipo"],
+                            "motivo": (sugestao["motivo"] + " | qualidade: " + q["motivo"]).strip(" |")}
+            sugestao["qualidade"] = q
+
         self.enviar(GEMEO, "resposta_consolidada", {"resumo": f"{sugestao['acao']}: {sugestao['motivo']}", **sugestao})
         return sugestao
+
+    def _especialista_qualidade(self) -> Especialista:
+        existente = Especialista.carregar(self.ctx, "qualidade")
+        if existente:
+            return existente
+        self.enviar(REGISTRO, "especialista_criado", {"especialista_id": "qualidade", "tema": "qualidade",
+                                                     "descricao": "Classe FR/NFR e subtipo (ISO/IEC 25010)"})
+        return Especialista.criar_fixo(self.ctx, "qualidade", "qualidade", "Classe FR/NFR e subtipo (ISO/IEC 25010)",
+                                       conhecimento.TAXONOMIA_NFR)
 
     def _obter_ou_criar(self, sub: dict) -> Especialista | None:
         id_ = sub.get("especialista_id") or slug(sub["tema"])

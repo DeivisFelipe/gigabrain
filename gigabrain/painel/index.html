@@ -150,6 +150,15 @@ ul.limpa li:last-child { border-bottom: 0; }
 .par-valores .b { font-size: 18px; font-weight: 600; color: var(--gemeo); }
 .delta { font-size: 12px; font-weight: 600; margin-top: 6px; }
 .delta.bom { color: var(--ok); } .delta.ruim { color: var(--bad); } .delta.igual { color: var(--muted); }
+.modos-valores { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; }
+.modos-valores div { display: flex; flex-direction: column; }
+.modos-valores span { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.modos-valores small { font-size: 11px; color: var(--muted); }
+.rep-chip { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; margin: 1px 3px 1px 0; border-radius: 6px; border: 1px solid var(--line-2); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink-2); text-decoration: none; }
+.rep-chip:hover, .rep-chip.sel { background: var(--info-bg); border-color: var(--info); color: var(--info); }
+.navega { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.navega .grupo { display: flex; gap: 6px; align-items: center; }
+.navega .grupo > span { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
 
 /* tabelas */
 .tabela-rolagem { overflow-x: auto; }
@@ -249,25 +258,31 @@ details.json pre { background: var(--surface-2); border: 1px solid var(--line); 
   <main>
     <!-- BENCHMARK -->
     <section class="pagina" id="pg-benchmark">
-      <div class="cabeca"><h1>Benchmark</h1><p>Todas as reuniões do dataset avaliadas contra o gabarito. Compara o GigaBrain completo (<b style="color:var(--lider)">conselho</b>) com o Gêmeo sozinho (<b style="color:var(--gemeo)">agente único</b>). As médias usam só os projetos que rodaram nos dois modos.</p></div>
+      <div class="cabeca"><h1>Benchmark</h1><p>Todas as reuniões do dataset avaliadas contra o gabarito, em três modos: o GigaBrain completo (<b style="color:var(--lider)">conselho</b>), o Gêmeo sozinho (<b style="color:var(--gemeo)">agente único</b>) e um pedido mínimo ao modelo (<b style="color:var(--esp)">LLM puro</b>). Com repetições, cada execução vira um ponto clicável.</p></div>
       <div class="pilha">
         <div class="card">
           <div class="card-cabeca">
             <h2>Médias</h2>
             <select id="bm-provedor" class="campo"></select>
+            <select id="bm-cenario" class="campo"></select>
             <button class="botao" id="bm-atualizar">↻ Atualizar</button>
             <span class="dica" id="bm-status"></span>
           </div>
           <div class="card-pad"><div class="metricas" id="bm-medias"></div></div>
         </div>
         <div class="card">
-          <div class="card-cabeca"><h2>Por projeto</h2>
-            <div class="segmentos" id="bm-metrica"></div>
-            <span class="dica">clique numa barra para abrir a avaliação</span></div>
-          <div class="card-pad"><svg id="bm-grafico" style="width:100%;height:auto"></svg></div>
+          <div class="card-cabeca"><h2>Comparação estatística</h2><span class="dica">a diferença entre os modos é maior que o acaso?</span></div>
+          <div class="tabela-rolagem" id="bm-testes"></div>
         </div>
         <div class="card">
-          <div class="card-cabeca"><h2>Todas as execuções</h2></div>
+          <div class="card-cabeca"><h2>Por projeto</h2>
+            <div class="segmentos" id="bm-metrica"></div></div>
+          <div class="legenda" id="bm-legenda" style="padding-top:12px"></div>
+          <div class="card-pad" style="padding-top:0"><svg id="bm-grafico" style="width:100%;height:auto"></svg>
+            <div class="dica">Barra = média · traço = da pior à melhor repetição · ponto = uma repetição (clique para abrir)</div></div>
+        </div>
+        <div class="card">
+          <div class="card-cabeca"><h2>Todas as execuções</h2><span class="dica">média ± desvio entre repetições · clique no número da repetição para abrir</span></div>
           <div class="tabela-rolagem" id="bm-tabela"></div>
         </div>
       </div>
@@ -352,6 +367,7 @@ details.json pre { background: var(--surface-2); border: 1px solid var(--line); 
     <!-- AVALIAÇÃO -->
     <section class="pagina" id="pg-avaliacao">
       <div class="cabeca"><h1>Avaliação contra o gabarito</h1><p id="av-sub"></p></div>
+      <div class="navega" id="av-navega"></div>
       <div class="pilha">
         <div class="metricas" id="av-metricas"></div>
         <div class="card">
@@ -361,6 +377,7 @@ details.json pre { background: var(--surface-2); border: 1px solid var(--line); 
               <button data-f="perdidos">Não encontrados</button>
               <button data-f="classe">Classe errada</button>
               <button data-f="extras">Extras (sem par)</button>
+              <button data-f="injecoes" id="av-btn-injecoes" hidden>Injeções (várias reuniões)</button>
             </div>
             <span class="dica" id="av-contagem"></span>
           </div>
@@ -471,7 +488,7 @@ async function carregarFontes() {
   const grupos = {};
   E.fontes.forEach((f) => (grupos[f.grupo] ||= []).push(f));
   $("#fonte").innerHTML = Object.entries(grupos).map(([g, fs]) => `<optgroup label="${esc(g)}">${fs.map((f) =>
-    `<option value="${esc(f.id)}">${esc(f.rotulo.replace("agente_unico", "agente único"))}${f.avaliacao ? "  ✓" : ""}</option>`).join("")}</optgroup>`).join("");
+    `<option value="${esc(f.id)}">${esc(f.rotulo.replace("agente_unico", "agente único").replace("llm_puro", "LLM puro").replace("rep-", "repetição "))}${f.avaliacao ? "  ✓" : ""}</option>`).join("")}</optgroup>`).join("");
   $('[data-aba="benchmark"]').hidden = !E.fontes.some((f) => f.id.startsWith("dados-avaliacao/"));
 }
 
@@ -491,6 +508,8 @@ $("#fonte").addEventListener("change", () => definirFonte($("#fonte").value));
 function abrirFonte(id) { definirFonte(id, "avaliacao"); }
 
 // ============================================================ benchmark
+// Junta todas as execuções (projeto x modo x repetição) de um provedor e cenário.
+// Cada repetição aparece como um ponto; a barra é a média e o traço vai do mínimo ao máximo.
 const BM = { dados: null, metrica: "f1" };
 const METRICAS = [
   ["f1", "F1", "equilíbrio entre precisão e revocação"],
@@ -501,47 +520,75 @@ const METRICAS = [
   ["rastreio", "Rastreio", "citou o turno onde o requisito foi dito"],
   ["sem_respaldo", "Sem respaldo", "extraídos sem apoio nas falas · menor é melhor"],
 ];
-const COR_MODO = { conselho: "var(--lider)", agente_unico: "var(--gemeo)" };
-const NOME_MODO = { conselho: "conselho", agente_unico: "agente único" };
-$("#bm-metrica").innerHTML = METRICAS.map(([k, n]) => `<button data-m="${k}" class="${k === "f1" ? "ativo" : ""}">${n}</button>`).join("");
-$$("#bm-metrica button").forEach((b) => b.addEventListener("click", () => {
-  BM.metrica = b.dataset.m; $$("#bm-metrica button").forEach((x) => x.classList.toggle("ativo", x === b)); desenharBenchmark();
-}));
+const METRICAS_SESSOES = [
+  ["repeticoes_evitadas", "Repetições evitadas", "requisito repetido numa reunião seguinte que NÃO foi salvo de novo"],
+  ["mudancas_capturadas", "Mudanças capturadas", "mudança de um requisito anterior que virou requisito"],
+  ["mudancas_ligadas", "Mudanças ligadas", "mudança ligada ao requisito original (substitui, conflita, refina)"],
+];
+const MODOS = ["conselho", "agente_unico", "llm_puro"];
+const COR_MODO = { conselho: "var(--lider)", agente_unico: "var(--gemeo)", llm_puro: "var(--esp)" };
+const NOME_MODO = { conselho: "conselho", agente_unico: "agente único", llm_puro: "LLM puro" };
+const NOME_CENARIO = { reuniao: "uma reunião por projeto", sessoes: "várias reuniões (repetições e mudanças)" };
+const metricasDoCenario = () => $("#bm-cenario").value === "sessoes" ? [...METRICAS, ...METRICAS_SESSOES] : METRICAS;
+const menorMelhor = (k) => k === "sem_respaldo";
+const fmtP = (p) => p < 0.0001 ? "<0,0001" : p.toFixed(4).replace(".", ",");
 
 async function carregarBenchmark() {
   BM.dados = await apiGlobal("/api/benchmark");
-  const provs = [...new Set(BM.dados.linhas.map((l) => l.provedor))].sort((a, b) => (a === "simulado") - (b === "simulado"));
-  const atual = $("#bm-provedor").value;
+  const chaves = Object.keys(BM.dados.estatisticas);
+  const provs = [...new Set(chaves.map((c) => c.split("/")[0]))].sort((a, b) => (a === "simulado") - (b === "simulado"));
+  const pAtual = $("#bm-provedor").value;
   $("#bm-provedor").innerHTML = provs.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
-  if (provs.includes(atual)) $("#bm-provedor").value = atual;
+  if (provs.includes(pAtual)) $("#bm-provedor").value = pAtual;
+  preencherCenarios();
+}
+function preencherCenarios() {
+  const prov = $("#bm-provedor").value;
+  const cens = Object.keys(BM.dados.estatisticas).filter((c) => c.startsWith(prov + "/")).map((c) => c.split("/")[1]);
+  const atual = $("#bm-cenario").value;
+  $("#bm-cenario").innerHTML = cens.map((c) => `<option value="${c}">${NOME_CENARIO[c] || c}</option>`).join("");
+  if (cens.includes(atual)) $("#bm-cenario").value = atual;
   desenharBenchmark();
 }
-$("#bm-provedor").addEventListener("change", desenharBenchmark);
+$("#bm-provedor").addEventListener("change", preencherCenarios);
+$("#bm-cenario").addEventListener("change", () => { BM.metrica = "f1"; desenharBenchmark(); });
 $("#bm-atualizar").addEventListener("click", carregarBenchmark);
 
 function desenharBenchmark() {
-  const prov = $("#bm-provedor").value;
-  const linhas = BM.dados.linhas.filter((l) => l.provedor === prov);
-  const porProjeto = {};
-  linhas.forEach((l) => { (porProjeto[l.projeto] ||= {})[l.modo] = l; });
-  const pareados = Object.values(porProjeto).filter((p) => p.conselho && p.agente_unico);
-  const andamento = BM.dados.em_andamento.filter((f) => f.includes("/" + prov + "/")).length;
-  $("#bm-status").textContent = `${pareados.length} projeto(s) nos dois modos` + (andamento ? ` · ${andamento} em andamento` : "");
+  const prov = $("#bm-provedor").value, cen = $("#bm-cenario").value;
+  const est = BM.dados.estatisticas[`${prov}/${cen}`];
+  const execs = BM.dados.execucoes.filter((e) => e.provedor === prov && e.cenario === cen);
+  if (!est) { $("#bm-medias").innerHTML = vazio("Nenhuma avaliação ainda", "Rode: python main.py avaliar todos"); return; }
+  const modos = MODOS.filter((m) => est.modos.includes(m));
+  const reps = Math.max(...execs.map((e) => e.rep));
+  const andamento = BM.dados.em_andamento.filter((f) => f.includes(`/${prov}/${cen}/`)).length;
+  $("#bm-status").textContent = `${est.projetos.length} projeto(s) · ${reps} repetição(ões) · ${execs.length} execuções` + (andamento ? ` · ${andamento} em andamento` : "");
+  $("#bm-legenda").innerHTML = modos.map((m) => `<span><i style="background:${COR_MODO[m]}"></i>${NOME_MODO[m]}</span>`).join("");
 
-  const media = (modo, k) => { const v = pareados.map((p) => p[modo][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
-  $("#bm-medias").innerHTML = METRICAS.map(([k, nomeM, dica]) => {
-    const c = media("conselho", k), a = media("agente_unico", k);
-    const d = c != null && a != null ? c - a : null;
-    const melhor = d == null || Math.abs(d) < 0.005 ? "igual" : (k === "sem_respaldo" ? d < 0 : d > 0) ? "bom" : "ruim";
-    const txt = d == null ? "" : melhor === "igual" ? "empate" : `${d > 0 ? "+" : "−"}${Math.abs(Math.round(d * 100))} pts para o conselho`;
-    return `<div class="metrica"><div class="nome">${nomeM}</div>
-      <div class="par-valores"><span class="a" title="conselho">${pct(c)}</span><span class="b" title="agente único">${pct(a)}</span></div>
-      <div class="delta ${melhor}">${txt}</div><div class="dica">${dica}</div></div>`;
-  }).join("");
+  // Cartões: média de cada modo (média das médias por projeto) e o desvio entre repetições.
+  $("#bm-medias").innerHTML = metricasDoCenario().map(([k, nomeM, dica]) => `<div class="metrica"><div class="nome">${nomeM}</div>
+      <div class="modos-valores">${modos.map((m) => { const v = est.por_modo[m]?.[k]; return `<div><span style="color:${COR_MODO[m]}">${pct(v?.media)}</span>
+        <small>${NOME_MODO[m]}${v && reps > 1 ? ` · ±${Math.round(v.desvio_entre_repeticoes * 100)}` : ""}</small></div>`; }).join("")}</div>
+      <div class="dica">${dica}</div></div>`).join("");
 
-  // Barras agrupadas: uma linha por projeto, conselho em cima e agente único embaixo.
-  const k = BM.metrica, projetos = Object.keys(porProjeto).sort();
-  const L = 1000, esq = 190, dir = 60, alt = 44, topo = 8, w = L - esq - dir;
+  // Comparações pareadas (Wilcoxon) da métrica escolhida e das principais.
+  const principais = new Set([BM.metrica, "f1", "precisao", "classe", "subtipo", ...(cen === "sessoes" ? METRICAS_SESSOES.map(([k]) => k) : [])]);
+  const comps = est.comparacoes.filter((c) => principais.has(c.metrica));
+  $("#bm-testes").innerHTML = comps.length ? `<table><tr><th>métrica</th><th>comparação</th><th class="num">média</th><th class="num">média</th><th class="num">p (Wilcoxon)</th><th class="num">efeito</th><th>leitura</th></tr>` +
+    comps.map((c) => {
+      const sig = c.p < 0.05, favorece = (menorMelhor(c.metrica) ? -c.efeito : c.efeito) > 0 ? c.a : c.b;
+      return `<tr><td>${esc((METRICAS.concat(METRICAS_SESSOES).find(([k]) => k === c.metrica) || [, c.metrica])[1])}</td>
+        <td><b style="color:${COR_MODO[c.a]}">${NOME_MODO[c.a]}</b> × <b style="color:${COR_MODO[c.b]}">${NOME_MODO[c.b]}</b></td>
+        <td class="num">${pct(c.media_a)}</td><td class="num">${pct(c.media_b)}</td><td class="num">${fmtP(c.p)}</td><td class="num">${c.efeito > 0 ? "+" : ""}${c.efeito.toFixed(2)}</td>
+        <td>${sig ? `<span class="selo ok">diferença significativa · ${NOME_MODO[favorece]}</span>` : '<span class="selo">sem diferença significativa</span>'}</td></tr>`;
+    }).join("") + `</table><div class="dica" style="padding:10px 14px">Teste pareado por projeto sobre as médias das repetições (${est.projetos.length} projetos). Efeito: correlação rank-biserial, de −1 a +1, positivo favorece o primeiro modo. Com menos de ~6 projetos o teste não consegue dar p < 0,05.</div>`
+    : vazio("Sem comparações", "É preciso pelo menos 2 projetos rodados em 2 modos.");
+
+  // Gráfico por projeto: para cada modo, barra = média, traço = mínimo a máximo, pontos = repetições.
+  $("#bm-metrica").innerHTML = metricasDoCenario().map(([k, n]) => `<button data-m="${k}" class="${k === BM.metrica ? "ativo" : ""}">${n}</button>`).join("");
+  $$("#bm-metrica button").forEach((b) => b.addEventListener("click", () => { BM.metrica = b.dataset.m; desenharBenchmark(); }));
+  const k = BM.metrica, projetos = est.projetos;
+  const L = 1000, esq = 190, dir = 50, faixa = 14, alt = modos.length * faixa + 16, topo = 8, w = L - esq - dir;
   let g = "";
   [0, .25, .5, .75, 1].forEach((t) => {
     const x = esq + t * w;
@@ -550,24 +597,36 @@ function desenharBenchmark() {
   });
   projetos.forEach((nomeP, i) => {
     const y = topo + i * alt;
-    g += `<text x="${esq - 12}" y="${y + 26}" text-anchor="end" font-size="14" font-weight="500">${esc(nomeP)}</text>`;
-    ["conselho", "agente_unico"].forEach((m, j) => {
-      const l = porProjeto[nomeP][m]; if (!l) return;
-      const v = l[k] ?? 0, larg = Math.max(2, v * w), yy = y + 7 + j * 16;
-      g += `<g style="cursor:pointer" onclick="abrirFonte('${l.fonte}')"><title>${esc(nomeP)} · ${NOME_MODO[m]} · ${pct(l[k])}</title>
-        <rect x="${esq}" y="${yy}" width="${larg}" height="13" rx="3" fill="${COR_MODO[m]}"/>
-        <text x="${esq + larg + 6}" y="${yy + 11}" font-size="12" fill="var(--muted)">${pct(l[k])}</text></g>`;
+    g += `<text x="${esq - 12}" y="${y + alt / 2 + 4}" text-anchor="end" font-size="14" font-weight="500">${esc(nomeP)}</text>`;
+    modos.forEach((m, j) => {
+      const rs = execs.filter((e) => e.projeto === nomeP && e.modo === m && e[k] != null).sort((a, b) => a.rep - b.rep);
+      if (!rs.length) return;
+      const vs = rs.map((e) => e[k]), med = vs.reduce((a, b) => a + b, 0) / vs.length;
+      const yy = y + 8 + j * faixa;
+      g += `<rect x="${esq}" y="${yy}" width="${Math.max(2, med * w)}" height="${faixa - 4}" rx="3" fill="${COR_MODO[m]}" opacity=".35"><title>${esc(nomeP)} · ${NOME_MODO[m]} · média ${pct(med)}</title></rect>`;
+      if (vs.length > 1) g += `<line x1="${esq + Math.min(...vs) * w}" y1="${yy + (faixa - 4) / 2}" x2="${esq + Math.max(...vs) * w}" y2="${yy + (faixa - 4) / 2}" stroke="${COR_MODO[m]}" stroke-width="2"/>`;
+      rs.forEach((e) => {
+        g += `<circle cx="${esq + e[k] * w}" cy="${yy + (faixa - 4) / 2}" r="5" fill="${COR_MODO[m]}" stroke="var(--surface)" stroke-width="1.5" style="cursor:pointer" onclick="abrirFonte('${e.fonte}')"><title>${esc(nomeP)} · ${NOME_MODO[m]} · repetição ${e.rep} · ${pct(e[k])} (clique para abrir)</title></circle>`;
+      });
+      g += `<text x="${esq + med * w + 10}" y="${yy + 9}" font-size="11" fill="var(--muted)">${pct(med)}</text>`;
     });
   });
   $("#bm-grafico").setAttribute("viewBox", `0 0 ${L} ${topo + projetos.length * alt + 26}`);
-  $("#bm-grafico").innerHTML = projetos.length ? g : "";
+  $("#bm-grafico").innerHTML = g;
 
-  const cols = [["previstos", "extraídos"], ["gabarito", "gabarito"], ["acertos", "pares"], ["precisao", "precisão"], ["revocacao", "revocação"], ["f1", "F1"], ["classe", "classe"], ["subtipo", "subtipo"], ["rastreio", "rastreio"], ["sem_respaldo", "sem respaldo"]];
-  const fmt = (c, v) => v == null ? "–" : ["previstos", "gabarito", "acertos"].includes(c) ? v : pct(v);
-  $("#bm-tabela").innerHTML = linhas.length ? `<table><tr><th>projeto</th><th>modo</th>${cols.map(([, n]) => `<th class="num">${n}</th>`).join("")}</tr>` +
-    projetos.flatMap((nomeP) => ["conselho", "agente_unico"].map((m) => porProjeto[nomeP][m]).filter(Boolean)).map((l) =>
-      `<tr class="clicavel" onclick="abrirFonte('${l.fonte}')"><td><b>${esc(l.projeto)}</b></td><td><span class="selo" style="color:${COR_MODO[l.modo]}">${NOME_MODO[l.modo] || l.modo}</span></td>${cols.map(([c]) => `<td class="num">${fmt(c, l[c])}</td>`).join("")}</tr>`).join("") + "</table>"
-    : vazio("Nenhuma avaliação ainda", "Rode: python main.py avaliar todos");
+  // Tabela: média ± desvio por projeto e modo, com as repetições clicáveis.
+  const cols = metricasDoCenario().filter(([k]) => k !== "rastreio");
+  $("#bm-tabela").innerHTML = `<table><tr><th>projeto</th><th>modo</th><th>repetições</th>${cols.map(([, n]) => `<th class="num">${n}</th>`).join("")}</tr>` +
+    projetos.flatMap((nomeP) => modos.map((m) => {
+      const rs = execs.filter((e) => e.projeto === nomeP && e.modo === m).sort((a, b) => a.rep - b.rep);
+      if (!rs.length) return "";
+      const cel = (k) => { const vs = rs.map((e) => e[k]).filter((v) => v != null); if (!vs.length) return "–";
+        const md = vs.reduce((a, b) => a + b, 0) / vs.length, sd = vs.length > 1 ? Math.sqrt(vs.reduce((a, v) => a + (v - md) ** 2, 0) / (vs.length - 1)) : null;
+        return pct(md) + (sd != null ? `<small class="muted"> ±${Math.round(sd * 100)}</small>` : ""); };
+      return `<tr><td><b>${esc(nomeP)}</b></td><td><span class="selo" style="color:${COR_MODO[m]}">${NOME_MODO[m]}</span></td>
+        <td>${rs.map((e) => `<a class="rep-chip" onclick="abrirFonte('${e.fonte}')" title="abrir a repetição ${e.rep}">${e.rep}</a>`).join("")}</td>
+        ${cols.map(([k]) => `<td class="num">${cel(k)}</td>`).join("")}</tr>`;
+    })).join("") + "</table>";
 }
 
 // ============================================================ arquitetura
@@ -672,7 +731,7 @@ function cilindro(n, cor, on, titulo, sub) {
 
 function desenharArquitetura() {
   const passo = ARQ.passos[ARQ.pos], ev = passo?.ev;
-  const comConselho = !String(ARQ.conv?.modo || "").includes("agente_unico");
+  const comConselho = !/agente_unico|llm_puro/.test(String(ARQ.conv?.modo || ""));
   const lote = String(ARQ.conv?.modo || "").startsWith("transcricao");
   const { P, D, C, B, L, H } = layoutArquitetura(comConselho, ARQ.relevantes);
   const agora = momentoDoPasso(ARQ.pos);
@@ -1049,12 +1108,30 @@ async function carregarAvaliacao() {
   const a = AV.dados;
   if (!a?.metricas) { $("#av-metricas").innerHTML = ""; $("#av-tabela").innerHTML = vazio("Esta pasta não tem avaliação"); return; }
   const m = a.metricas;
+  desenharNavegacaoAvaliacao();
+  $("#av-btn-injecoes").hidden = a.cenario !== "sessoes";
+  if (a.cenario !== "sessoes" && AV.filtro === "injecoes") { AV.filtro = "todos"; $$("#av-filtro button").forEach((x) => x.classList.toggle("ativo", x.dataset.f === "todos")); }
   $("#av-sub").innerHTML = `<b>${esc(a.titulo)}</b><br>${a.modo === "conselho" ? '<span style="color:var(--lider)">com o conselho</span>' : '<span style="color:var(--gemeo)">agente único (baseline)</span>'}
     · provedor ${esc(a.provedor)} · ${m.previstos} extraídos · ${m.gabarito} no gabarito · ${m.acertos} pares (similaridade ≥ ${a.parametros.limiar_similaridade})`;
-  $("#av-metricas").innerHTML = METRICAS.map(([k, nomeM, dica]) => `<div class="metrica"><div class="nome">${nomeM}</div><div class="valor">${pct(m[k])}</div>
+  $("#av-metricas").innerHTML = (a.cenario === "sessoes" ? [...METRICAS, ...METRICAS_SESSOES] : METRICAS).map(([k, nomeM, dica]) => `<div class="metrica"><div class="nome">${nomeM}</div><div class="valor">${pct(m[k])}</div>
     <div class="barra"><i style="width:${(m[k] ?? 0) * 100}%;${k === "sem_respaldo" ? "background:var(--bad)" : ""}"></i></div><div class="dica">${dica}</div></div>`).join("");
   mostrarTabelaAvaliacao();
 }
+// Troca de modo e de repetição sem voltar ao seletor de pastas.
+function desenharNavegacaoAvaliacao() {
+  const partes = E.fonte.split("/");
+  if (partes.length !== 6) { $("#av-navega").innerHTML = ""; return; }
+  const [base, prov, cen, proj, modo, rep] = partes;
+  const prefixo = [base, prov, cen, proj].join("/") + "/";
+  const irmas = E.fontes.filter((f) => f.id.startsWith(prefixo) && f.avaliacao).map((f) => f.id.slice(prefixo.length).split("/"));
+  const modos = MODOS.filter((m) => irmas.some(([m2]) => m2 === m));
+  const reps = irmas.filter(([m2]) => m2 === modo).map(([, r]) => r).sort((a, b) => +a.slice(4) - +b.slice(4));
+  $("#av-navega").innerHTML = `<div class="grupo"><span>modo</span><div class="segmentos">${modos.map((m) =>
+      `<button class="${m === modo ? "ativo" : ""}" onclick="abrirFonte('${prefixo}${m}/${irmas.some(([m2, r]) => m2 === m && r === rep) ? rep : irmas.find(([m2]) => m2 === m)[1]}')"><span style="color:${COR_MODO[m]}">●</span> ${NOME_MODO[m]}</button>`).join("")}</div></div>
+    <div class="grupo"><span>repetição</span>${reps.map((r) => `<a class="rep-chip ${r === rep ? "sel" : ""}" onclick="abrirFonte('${prefixo}${modo}/${r}')">${r.slice(4)}</a>`).join("")}</div>
+    <div class="grupo"><span>cenário</span><span class="selo">${esc(NOME_CENARIO[cen] || cen)}</span></div>`;
+}
+
 $$("#av-filtro button").forEach((b) => b.addEventListener("click", () => {
   AV.filtro = b.dataset.f; $$("#av-filtro button").forEach((x) => x.classList.toggle("ativo", x === b)); mostrarTabelaAvaliacao();
 }));
@@ -1062,6 +1139,18 @@ function mostrarTabelaAvaliacao() {
   const a = AV.dados; if (!a?.metricas) return;
   const prev = Object.fromEntries(a.previstos.map((p) => [p.id, p]));
   const parGab = Object.fromEntries(a.pares.map((x) => [x.gabarito, x]));
+  if (AV.filtro === "injecoes") {
+    const inj = a.injecoes || [];
+    $("#av-contagem").textContent = `${inj.length} falas injetadas nas reuniões seguintes · ${inj.filter((i) => i.ok).length} tratadas corretamente`;
+    const certo = { repeticao: "não salvar de novo", mudanca: "salvar e ligar ao original" };
+    $("#av-tabela").innerHTML = inj.length ? `<table><tr><th>tipo</th><th>sessão</th><th>fala injetada</th><th>requisito original</th><th>o que o GigaBrain fez</th><th>resultado</th></tr>${inj.map((i) =>
+      `<tr><td><span class="selo ${i.tipo === "mudanca" ? "warn" : "info"}">${i.tipo === "mudanca" ? "mudança" : "repetição"}</span><div class="muted" style="font-size:12px;margin-top:4px">certo: ${certo[i.tipo]}</div></td>
+        <td class="num">${i.sessao}</td><td><span class="mono" style="font-size:12px">${i.turno}</span> ${esc(i.texto_injetado)}</td>
+        <td><span class="mono" style="font-size:12px">${esc(i.original.split(":")[1] || i.original)}${i.requisito_original ? " → " + i.requisito_original : ""}</span> ${esc(i.texto_original)}</td>
+        <td>${i.salvos.length ? "salvou " + i.salvos.join(", ") : '<span class="muted">não salvou nada</span>'}${i.tipo === "mudanca" && !i.original_extraido ? '<div class="muted" style="font-size:12px">o original não tinha sido extraído</div>' : ""}</td>
+        <td>${i.ok ? '<span class="ok-txt">✓ certo</span>' : '<span class="erro-txt">✗ errado</span>'}</td></tr>`).join("")}</table>` : vazio("Nenhuma injeção");
+    return;
+  }
   if (AV.filtro === "extras") {
     const extras = a.falsos_positivos.map((id) => prev[id]);
     $("#av-contagem").textContent = `${extras.length} requisito(s) extraído(s) sem par no gabarito`;

@@ -11,7 +11,11 @@ Comandos:
     python main.py alimentar pagamentos ata.md   entrega um documento a um especialista
     python main.py entradas               lista os projetos do dataset EntradasGigabrain
     python main.py avaliar 2008-keepass   processa a reunião e compara com o gabarito
-    python main.py avaliar todos --simulado      roda o dataset inteiro (conselho x agente único)
+    python main.py avaliar todos --simulado      roda o dataset inteiro (conselho, agente único e LLM puro)
+    python main.py avaliar todos --repeticoes 5  repete cada execução e compara com estatística
+    python main.py avaliar todos --cenario sessoes   várias reuniões com repetições e mudanças injetadas
+    python main.py anotacao exportar ligacoes.csv    amostra de ligações para anotação manual
+    python main.py anotacao kappa ligacoes.csv       concordância entre os dois anotadores
 
 Opção global --dados <pasta> escolhe onde fica o banco (padrão: dados/).
 
@@ -22,12 +26,13 @@ from __future__ import annotations
 
 import argparse
 import csv
+import json
 import os
 import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from gigabrain import demo, entradas, reuniao
+from gigabrain import anotacao, cenarios, demo, entradas, estatistica, reuniao
 from gigabrain.conselho import Conselho, abrir_contexto, alimentar_especialista
 from gigabrain.provedores import ErroProvedor, ProvedorSimulado, criar_provedor
 
@@ -131,20 +136,36 @@ def _formatar(v) -> str:
     return "  -  " if v is None else f"{v:.2f}" if isinstance(v, float) else str(v)
 
 
-def _rodar_avaliacao(args, nome: str, com_conselho: bool, raiz: str) -> dict:
-    """Uma execução (projeto + modo), com pasta, bancos e provedor próprios."""
+COLUNAS = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"]
+COLUNAS_SESSOES = ["repeticoes_evitadas", "mudancas_capturadas", "mudancas_ligadas"]
+
+
+def _pasta_execucao(raiz: str, cenario: str, projeto: str, modo: str, rep: int) -> str:
+    return os.path.join(raiz, cenario, projeto, modo, f"rep-{rep}")
+
+
+def _rodar_avaliacao(args, nome: str, modo: str, rep: int, raiz: str) -> dict:
+    """Uma execução (projeto + modo + repetição), com pasta, bancos e provedor próprios."""
     provedor = ProvedorSimulado() if args.simulado else criar_provedor("deepseek")
     projeto = entradas.carregar_projeto(nome, args.entradas)
-    modo = "conselho" if com_conselho else "agente_unico"
-    pasta = os.path.join(raiz, nome, modo)
+    pasta = _pasta_execucao(raiz, args.cenario, nome, modo, rep)
     if os.path.exists(pasta):
         shutil.rmtree(pasta)
     ctx = abrir_contexto(pasta, provedor, ver_agentes=args.ver_agentes)
+    ctx.com_qualidade = not args.sem_qualidade
     try:
-        relatorio = reuniao.processar_e_avaliar(ctx, projeto, pasta, com_conselho)
+        if args.cenario == "sessoes":
+            cenario = cenarios.gerar_sessoes(projeto, n_sessoes=args.sessoes)
+            relatorio = reuniao.processar_sessoes_e_avaliar(ctx, projeto, cenario, pasta, modo)
+        else:
+            relatorio = reuniao.processar_e_avaliar(ctx, projeto, pasta, modo)
     finally:
         ctx.banco.fechar()
-    return {"projeto": nome, "modo": modo, **relatorio["metricas"]}
+    return {"projeto": nome, "modo": modo, "rep": rep, **relatorio["metricas"]}
+
+
+def _linha(rotulo: str, modo: str, valores: dict, colunas: list[str]) -> str:
+    return f"{rotulo:<22} {modo:<13} " + " ".join(f"{_formatar(valores.get(c)):>9}" for c in colunas)
 
 
 def cmd_avaliar(args) -> None:
@@ -152,43 +173,67 @@ def cmd_avaliar(args) -> None:
     projetos = [p["pasta"] for p in entradas.listar_projetos(args.entradas) if int(p["requisitos_dialogo"]) > 0]
     if args.projeto != "todos":
         projetos = [args.projeto]
-    modos = {"ambos": [True, False], "conselho": [True], "agente_unico": [False]}[args.modo]
+    modos = list(reuniao.MODOS) if args.modo == "todos" else args.modo.split(",")
     raiz = os.path.join(RAIZ, "dados-avaliacao", nome_provedor)
+    reuniao.migrar_pastas_antigas(raiz)
 
-    # Cada (projeto, modo) é independente: roda várias ao mesmo tempo.
-    tarefas = [(nome, com_conselho) for nome in projetos for com_conselho in modos]
-    colunas = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"]
+    # Cada (projeto, modo, repetição) é independente: roda várias ao mesmo tempo.
+    tarefas = [(nome, modo, rep) for rep in range(1, args.repeticoes + 1) for nome in projetos for modo in modos]
+    colunas = COLUNAS + (COLUNAS_SESSOES if args.cenario == "sessoes" else [])
     linhas = []
-    print(f"{len(tarefas)} execução(ões), {args.paralelo} ao mesmo tempo")
+    print(f"{len(tarefas)} execução(ões) · cenário {args.cenario} · {args.paralelo} ao mesmo tempo")
     print(f"{'projeto':<22} {'modo':<13} " + " ".join(f"{c[:9]:>9}" for c in colunas))
     with ThreadPoolExecutor(max_workers=args.paralelo) as executor:
-        futuros = {executor.submit(_rodar_avaliacao, args, nome, cc, raiz): (nome, cc) for nome, cc in tarefas}
+        futuros = {executor.submit(_rodar_avaliacao, args, *t, raiz): t for t in tarefas}
         for futuro in as_completed(futuros):
-            nome, cc = futuros[futuro]
+            nome, modo, rep = futuros[futuro]
             try:
                 linha = futuro.result()
             except Exception as exc:  # uma execução com erro não derruba as outras
-                print(f"{nome:<22} {'conselho' if cc else 'agente_unico':<13} ERRO: {exc}")
+                print(f"{nome:<22} {modo:<13} rep {rep} ERRO: {exc}")
                 continue
             linhas.append(linha)
-            print(f"{nome:<22} {linha['modo']:<13} " + " ".join(f"{_formatar(linha[c]):>9}" for c in colunas), flush=True)
-    linhas.sort(key=lambda l: (l["projeto"], l["modo"] != "conselho"))
+            print(_linha(f"{nome} #{rep}", modo, linha, colunas), flush=True)
+    if not linhas:
+        return
+    linhas.sort(key=lambda l: (l["projeto"], reuniao.MODOS.index(l["modo"]), l["rep"]))
 
-    if len(linhas) > 1:
-        print()
-        for modo in dict.fromkeys(l["modo"] for l in linhas):
-            do_modo = [l for l in linhas if l["modo"] == modo]
-            media = {c: (sum(l[c] for l in do_modo if l[c] is not None) / max(1, sum(l[c] is not None for l in do_modo)))
-                     for c in colunas}
-            print(f"{'MÉDIA':<22} {modo:<13} " + " ".join(f"{_formatar(media[c]):>9}" for c in colunas))
+    resumo = estatistica.resumir(linhas)
+    print()
+    for modo, ms in resumo["por_modo"].items():
+        print(_linha("MÉDIA", modo, {c: v["media"] for c, v in ms.items()}, colunas))
+    if args.repeticoes > 1:
+        for modo, ms in resumo["por_modo"].items():
+            print(_linha("± entre repetições", modo, {c: v["desvio_entre_repeticoes"] for c, v in ms.items()}, colunas))
+    if resumo["comparacoes"]:
+        print("\nComparação pareada por projeto (Wilcoxon; efeito rank-biserial, >0 favorece o primeiro modo):")
+        for c in resumo["comparacoes"]:
+            marca = " *" if c["p"] < 0.05 else ""
+            print(f"  {c['metrica']:<20} {c['a']} {c['media_a']:.3f} x {c['b']} {c['media_b']:.3f}"
+                  f"  p={'<0.0001' if c['p'] < 0.0001 else format(c['p'], '.4f')}  efeito={c['efeito']:+.2f}  ({c['projetos']} projetos){marca}")
 
-    os.makedirs(raiz, exist_ok=True)
-    with open(os.path.join(raiz, "resumo.csv"), "w", encoding="utf-8", newline="") as f:
-        escritor = csv.DictWriter(f, fieldnames=["projeto", "modo", *colunas])
+    pasta_cenario = os.path.join(raiz, args.cenario)
+    os.makedirs(pasta_cenario, exist_ok=True)
+    with open(os.path.join(pasta_cenario, "resumo.csv"), "w", encoding="utf-8", newline="") as f:
+        escritor = csv.DictWriter(f, fieldnames=["projeto", "modo", "rep", *colunas], extrasaction="ignore")
         escritor.writeheader()
         escritor.writerows(linhas)
-    print(f"\nResumo em {os.path.relpath(os.path.join(raiz, 'resumo.csv'), RAIZ)}. Para ver um projeto no painel:")
-    print(f"python main.py --dados {os.path.relpath(os.path.join(raiz, projetos[0], 'conselho' if True in modos else 'agente_unico'), RAIZ)} painel")
+    with open(os.path.join(pasta_cenario, "estatisticas.json"), "w", encoding="utf-8") as f:
+        json.dump(resumo, f, ensure_ascii=False, indent=1)
+    print(f"\nResumo em {os.path.relpath(pasta_cenario, RAIZ)} (resumo.csv e estatisticas.json). Painel: python main.py painel")
+
+
+def cmd_anotacao(args) -> None:
+    if args.acao == "exportar":
+        n = anotacao.exportar(RAIZ, args.arquivo, args.amostra, provedor=args.provedor, cenario=args.cenario)
+        print(f"{n} ligação(ões) sorteada(s) em {args.arquivo}. Cada anotador preenche a sua coluna com c (correta) ou i (incorreta).")
+    else:
+        r = anotacao.kappa(args.arquivo)
+        if not r["anotadas"]:
+            sys.exit("Nenhuma linha com as duas colunas de anotação preenchidas.")
+        print(f"{r['anotadas']} ligações anotadas pelos dois · concordância {r['concordancia']:.0%} · kappa de Cohen {r['kappa']:.2f}")
+        print(f"precisão das ligações: anotador 1 {r['precisao_anotador_1']:.0%} · anotador 2 {r['precisao_anotador_2']:.0%}"
+              f" · consenso (os dois dizem correta) {r['precisao_consenso']:.0%}")
 
 
 def main() -> None:
@@ -230,12 +275,26 @@ def main() -> None:
 
     p = sub.add_parser("avaliar", help="processa reuniões do dataset e compara com o gabarito")
     p.add_argument("projeto", help="pasta do projeto (ex.: 2008-keepass) ou 'todos'")
-    p.add_argument("--modo", choices=["ambos", "conselho", "agente_unico"], default="ambos")
+    p.add_argument("--modo", default="todos",
+                   help="todos (padrão) ou lista separada por vírgula: conselho,agente_unico,llm_puro")
+    p.add_argument("--repeticoes", type=int, default=1, help="quantas vezes rodar cada projeto/modo")
+    p.add_argument("--cenario", choices=["reuniao", "sessoes"], default="reuniao",
+                   help="reuniao: uma reunião por projeto; sessoes: várias reuniões com repetições e mudanças injetadas")
+    p.add_argument("--sessoes", type=int, default=3, help="em quantas reuniões dividir (cenário sessoes)")
+    p.add_argument("--sem-qualidade", action="store_true", help="não consultar o especialista de qualidade (ablação)")
     p.add_argument("--simulado", action="store_true", help="baseline por regras, sem API")
     p.add_argument("--ver-agentes", action="store_true")
     p.add_argument("--paralelo", type=int, default=4, help="quantas execuções ao mesmo tempo (padrão: 4)")
     p.add_argument("--entradas", default=entradas.PASTA_PADRAO)
     p.set_defaults(func=cmd_avaliar)
+
+    p = sub.add_parser("anotacao", help="anotação manual das ligações (exportar amostra / calcular kappa)")
+    p.add_argument("acao", choices=["exportar", "kappa"])
+    p.add_argument("arquivo", help="CSV de saída (exportar) ou o CSV anotado (kappa)")
+    p.add_argument("--amostra", type=int, default=60)
+    p.add_argument("--provedor", default="deepseek-chat")
+    p.add_argument("--cenario", default="*")
+    p.set_defaults(func=cmd_anotacao)
 
     args = parser.parse_args()
     try:

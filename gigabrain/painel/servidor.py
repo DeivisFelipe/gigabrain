@@ -6,7 +6,7 @@ dados-avaliacao/<provedor>/<projeto>/<modo>/...). A página escolhe qual ver
 pelo parâmetro ?fonte=<caminho relativo>.
 
     GET /api/fontes                         pastas de dados encontradas
-    GET /api/benchmark                      todos os avaliacao.json, para comparar
+    GET /api/benchmark                      todas as avaliações (repetições, cenários) + estatística
     GET /api/resumo?fonte=...               contagens e lista de conversas
     GET /api/eventos?fonte=...&conversa=    mensagens de uma conversa, em ordem
     GET /api/requisitos?fonte=...           requisitos + ligações
@@ -25,16 +25,17 @@ import webbrowser
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlparse
 
-from .. import conhecimento
+from .. import conhecimento, estatistica
 from ..banco import ARQUIVO_ANTIGO, BASES, Banco
+from ..reuniao import migrar_pastas_antigas
 
 PASTA = os.path.dirname(os.path.abspath(__file__))
 IGNORAR = {".git", "venv", ".venv", "__pycache__", "node_modules", "conhecimento", "logs"}
-PROFUNDIDADE_MAX = 5
+PROFUNDIDADE_MAX = 7
 
 
 def descobrir_fontes(raiz: str) -> list[dict]:
-    """Toda pasta (até 5 níveis abaixo da raiz) que contém um banco do GigaBrain."""
+    """Toda pasta (até 7 níveis abaixo da raiz) que contém um banco do GigaBrain."""
     fontes = []
     for pasta, subpastas, arquivos in os.walk(raiz):
         rel = os.path.relpath(pasta, raiz).replace("\\", "/")
@@ -57,30 +58,41 @@ def _ler_json(caminho: str) -> dict:
         return json.load(f)
 
 
+def _identificar(fonte_id: str) -> dict | None:
+    """dados-avaliacao/<provedor>/<cenario>/<projeto>/<modo>/rep-<n>"""
+    partes = fonte_id.split("/")
+    if len(partes) != 6 or partes[0] != "dados-avaliacao" or not partes[5].startswith("rep-"):
+        return None
+    return {"provedor": partes[1], "cenario": partes[2], "projeto": partes[3], "modo": partes[4], "rep": int(partes[5][4:])}
+
+
 def benchmark(raiz: str) -> dict:
-    """Junta as métricas de todas as avaliações, para a aba Benchmark."""
-    linhas, em_andamento = [], []
+    """Junta todas as avaliações (com repetições e cenários) e calcula a estatística."""
+    for prov in os.listdir(os.path.join(raiz, "dados-avaliacao")) if os.path.isdir(os.path.join(raiz, "dados-avaliacao")) else []:
+        migrar_pastas_antigas(os.path.join(raiz, "dados-avaliacao", prov))
+    execucoes, em_andamento = [], []
     for fonte in descobrir_fontes(raiz):
-        if not fonte["id"].startswith("dados-avaliacao/"):
+        info = _identificar(fonte["id"])
+        if not info:
             continue
         arquivo = os.path.join(raiz, fonte["id"], "avaliacao.json")
-        if not fonte["avaliacao"]:
-            em_andamento.append(fonte["id"])
-            continue
         try:
-            av = _ler_json(arquivo)
-        except (OSError, json.JSONDecodeError):
+            metricas = _ler_json(arquivo)["metricas"] if fonte["avaliacao"] else None
+        except (OSError, json.JSONDecodeError, KeyError):
+            metricas = None
+        if metricas is None:
             em_andamento.append(fonte["id"])
             continue
-        linhas.append({
-            "fonte": fonte["id"],
-            "provedor": av.get("provedor"),
-            "projeto": av.get("projeto"),
-            "titulo": av.get("titulo"),
-            "modo": av.get("modo"),
-            **av["metricas"],
-        })
-    return {"linhas": linhas, "em_andamento": em_andamento}
+        execucoes.append({"fonte": fonte["id"], **info, **metricas})
+
+    grupos: dict[str, list] = {}
+    for e in execucoes:
+        grupos.setdefault(f"{e['provedor']}/{e['cenario']}", []).append(e)
+    return {
+        "execucoes": execucoes,
+        "em_andamento": em_andamento,
+        "estatisticas": {chave: estatistica.resumir(linhas) for chave, linhas in grupos.items()},
+    }
 
 
 def _rotas(banco: Banco, pasta: str, partes: list[str], query: dict) -> object:

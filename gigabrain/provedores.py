@@ -120,7 +120,12 @@ PALAVRAS_NFR = [
 ]
 
 
+# Marcadores de discurso no início da fala ("como eu disse", "na verdade, queremos mudar").
+MARCADORES = r"^(as i (said|mentioned)[^,:]*[,:]|just to (repeat|reiterate)[^,:]*[,:]|like i mentioned[^,:]*[,:]|again, as we discussed[,:]|actually,[^:]*:|we talked to the team[^:]*:|change of plan[^:]*:)\s*"
+
+
 def _limpar_fala(texto: str) -> str:
+    texto = re.sub(MARCADORES, "", texto.strip(), flags=re.I)
     texto = re.sub(HESITACOES, "", texto, flags=re.I)
     texto = re.sub(r"\b(\w+) \1\b", r"\1", texto, flags=re.I)  # "the the" -> "the"
     return re.sub(r"\s+", " ", texto).strip()
@@ -247,10 +252,37 @@ class ProvedorSimulado:
         entrada = _ultimo(mensagens)
         from .avaliacao import similaridade
         texto = entrada["rascunho"]["texto"]
-        for req in entrada.get("requisitos_do_tema", []):
-            if similaridade(texto, req.get("texto") or req.get("titulo") or "") >= 0.85:
-                return {"acao": "descartar", "duplicado_de": req["id"], "ligacoes": [], "motivo": f"repete o {req['id']}"}
+        salvos = entrada.get("requisitos_do_tema", []) + entrada.get("parecidos_de_outros_temas", [])
+        melhor = max(salvos, key=lambda r: similaridade(texto, r.get("texto") or r.get("titulo") or ""), default=None)
+        s = similaridade(texto, melhor.get("texto") or melhor.get("titulo") or "") if melhor else 0
+        numeros = lambda t: set(re.findall(r"\d+", t or ""))
+        if s >= 0.85 and numeros(texto) != numeros(melhor.get("texto") or melhor.get("titulo")):
+            # Mesmo assunto com outro valor: é uma mudança, não uma repetição.
+            return {"acao": "manter", "duplicado_de": None, "motivo": f"muda um valor do {melhor['id']}",
+                    "ligacoes": [{"tipo": "conflita_com", "alvo": melhor["id"], "motivo": "valor diferente do requisito salvo"}]}
+        if s >= 0.85:
+            return {"acao": "descartar", "duplicado_de": melhor["id"], "ligacoes": [], "motivo": f"repete o {melhor['id']}"}
+        if s >= 0.5:  # parecido, mas com algo novo: liga em vez de descartar
+            return {"acao": "manter", "duplicado_de": None, "motivo": f"parecido com o {melhor['id']}",
+                    "ligacoes": [{"tipo": "refina", "alvo": melhor["id"], "motivo": "detalha ou altera um requisito salvo"}]}
         return {"acao": "manter", "duplicado_de": None, "ligacoes": [], "motivo": "sem duplicados no tema"}
+
+    def _especialista_qualidade(self, mensagens: list[dict]) -> dict:
+        classe, subtipo = _classificar(_ultimo(mensagens)["rascunho"]["texto"])
+        return {"classe": classe, "subtipo": subtipo, "motivo": "palavras-chave da taxonomia"}
+
+    def _llm_puro(self, mensagens: list[dict]) -> dict:
+        """Baseline por regras sobre a reunião inteira (sem contexto de tópico)."""
+        requisitos = []
+        for linha in mensagens[-1]["content"].splitlines():
+            m = re.match(r"\[(T\d+)\] (\w+): (.*)", linha)
+            if not m or m.group(2) == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", m.group(3), re.I):
+                continue
+            for frase in re.split(r"(?<=[.!?])\s+", _limpar_fala(m.group(3))):
+                if len(frase.split()) >= 6:
+                    classe, subtipo = _classificar(frase)
+                    requisitos.append({"texto": frase, "classe": classe, "subtipo": subtipo, "turnos": [m.group(1)]})
+        return {"requisitos": requisitos}
 
     def _gemeo_decidir(self, mensagens: list[dict]) -> dict:
         """Segue a recomendação do especialista."""
@@ -349,6 +381,8 @@ class ProvedorSimulado:
             for rid in gatilho.get("em_revisao", []):
                 md = conhecimento.adicionar_item(md, "Pontos em aberto", f"{rid} precisa ser revisto porque {req['id']} mudou")
                 mudancas.append(f"{rid} em revisão")
+        elif gatilho["tipo"] == "reorganizar":
+            mudancas.append("nada a reorganizar")
         elif gatilho["tipo"] == "documento":
             for linha in gatilho["texto"].splitlines():
                 linha = linha.strip().lstrip("-*").strip()

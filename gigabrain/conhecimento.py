@@ -17,6 +17,47 @@ import os
 # Acima disso o especialista é instruído a resumir e reorganizar o arquivo.
 LIMITE_CARACTERES = 12000
 
+# Cada requisito salvo é anotado direto no arquivo (rápido, sem LLM). A cada N
+# anotações, o especialista usa o LLM para reorganizar o arquivo inteiro.
+REORGANIZAR_A_CADA = 5
+
+# Conhecimento fixo do especialista de qualidade (classe FR/NFR e subtipo).
+TAXONOMIA_NFR = """\
+# Especialista: qualidade (requisitos não funcionais)
+
+> Confere se cada requisito é funcional (FR) ou não funcional (NFR) e, se NFR, o subtipo.
+> Base: ISO/IEC 25010 e a taxonomia do dataset PURE/PROMISE.
+
+## Regras de negócio
+- FR: descreve um comportamento ou função do sistema (o que ele faz, entradas, saídas, regras).
+- NFR: descreve uma qualidade de como o sistema faz algo (quão rápido, seguro, fácil, disponível...).
+- Um requisito sobre o que o sistema faz com senhas ou dados (ex.: "a senha não tem limite de tamanho") é FR; só é NFR/SE se exigir proteção (criptografia, autenticação, controle de acesso).
+- Na dúvida entre FR e NFR, prefira FR.
+
+## Glossário
+- PE — desempenho/eficiência: tempo de resposta, vazão, latência, uso de recursos.
+- SE — segurança: autenticação, autorização, criptografia, privacidade, auditoria.
+- US — usabilidade: facilidade de aprender e usar, ajuda, mensagens ao usuário.
+- LF — aparência (look & feel): cores, fontes, layout, estilo visual.
+- A — disponibilidade: uptime, 24/7, janelas de manutenção.
+- SA — safety: evitar danos a pessoas, ao ambiente ou perda de dados por acidente.
+- PO — portabilidade: plataformas, sistemas operacionais, navegadores, dispositivos.
+- MN — manutenibilidade: modularidade, facilidade de alterar e testar.
+- SC — escalabilidade: crescer em usuários, dados ou carga.
+- L — legal/conformidade: leis, normas, licenças, regulamentos.
+- FT — tolerância a falhas: recuperação, backup, continuar funcionando com falhas.
+- OT — outra qualidade que não se encaixa acima.
+
+## Decisões (e o porquê)
+- (vazio)
+
+## Requisitos aprovados
+- (vazio)
+
+## Pontos em aberto
+- (vazio)
+"""
+
 SECOES = [
     "Regras de negócio",
     "Glossário",

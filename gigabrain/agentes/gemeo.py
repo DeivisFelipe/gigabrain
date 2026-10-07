@@ -101,6 +101,17 @@ Responda com um único objeto JSON:
 {"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "tema": "..."}]}
 """
 
+# Baseline "LLM puro": um pedido mínimo, sem as regras do Gêmeo, sem conselho.
+PROMPT_LLM_PURO = """\
+Extract the software requirements from the meeting transcript below. Write each requirement
+in the language of the transcript. For each one give its class (FR or NFR), the NFR subtype
+code if NFR (PE, SE, US, LF, A, SA, PO, MN, SC, L, FT, OT; null for FR) and the ids of the
+turns where it was said.
+
+Answer with a single JSON object:
+{"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "turnos": ["T8"]}]}
+"""
+
 FALAS_DE_CONTEXTO = 6
 SALVOS_NO_PROMPT = 30
 
@@ -111,6 +122,8 @@ seu rascunho e fez uma recomendação. Decida:
 - salvar o requisito (aplicando ou não as correções e ligações sugeridas), ou
 - descartá-lo (por exemplo, se repete um requisito já salvo ou não tem respaldo nas falas).
 Siga a recomendação quando ela se apoia nas falas; rejeite-a quando contraria o que foi dito.
+Só descarte por duplicado se o rascunho diz exatamente a mesma obrigação de um requisito
+salvo; se acrescenta ou detalha algo, salve e ligue com "refina".
 IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza.
 
 Responda com um único objeto JSON:
@@ -182,6 +195,21 @@ class GemeoDigital(Agente):
             })
         if rascunhos:
             self.enviar(GEMEO, "extracao", {"turno": fala["id"], "requisitos": rascunhos})
+        return rascunhos
+
+    def extrair_tudo_de_uma_vez(self, projeto: dict) -> list[dict]:
+        """Baseline "LLM puro": a reunião inteira num pedido só, com o prompt mínimo."""
+        resposta = self.chamar_llm("llm_puro", PROMPT_LLM_PURO, [{"role": "user", "content": "\n".join(
+            f"[{t['id']}] {t['falante']}: {t['texto']}" for t in projeto["turnos"])}])
+        rascunhos = []
+        for req in resposta.get("requisitos", []):
+            if not req.get("texto"):
+                continue
+            nfr = str(req.get("classe", "")).upper() == "NFR"
+            rascunhos.append({"indice": len(rascunhos), "texto": req["texto"].strip(), "classe": "NFR" if nfr else "FR",
+                              "subtipo": req.get("subtipo") if nfr else None, "tema": "geral",
+                              "turnos": [t for t in req.get("turnos", []) if isinstance(t, str)]})
+        self.enviar(GEMEO, "extracao", {"requisitos": rascunhos})
         return rascunhos
 
     def decidir(self, rascunho: dict, sugestao: dict, falas: dict[str, str], idioma: str = "en") -> dict:

@@ -57,19 +57,35 @@ Responda com um único objeto JSON:
 """
 
 
+PROMPT_QUALIDADE = """\
+Você é o especialista de qualidade do GigaBrain. Seu único trabalho é conferir a
+classificação de um rascunho de requisito: funcional (FR) ou não funcional (NFR) e, se NFR,
+o subtipo. Use as regras e o glossário do seu arquivo de conhecimento. Você só recomenda.
+
+Responda com um único objeto JSON:
+{"classe": "FR" | "NFR", "subtipo": "PE" | "SE" | "US" | "LF" | "A" | "SA" | "PO" | "MN" | "SC" | "L" | "FT" | "OT" | null,
+ "motivo": "curto"}
+"""
+
 PROMPT_REVISAR = """\
 Você é um especialista do GigaBrain e revisa UM rascunho de requisito do seu tema, extraído
 da transcrição de uma reunião pelo Gêmeo Digital. Você recebe o rascunho, as falas que ele
-cita, o seu arquivo de conhecimento e os requisitos do seu tema que já foram salvos.
-Você só RECOMENDA; quem decide é o Gêmeo Digital (Conselho Deliberativo).
+cita, o seu arquivo de conhecimento, os requisitos do seu tema já salvos e requisitos
+parecidos de outros temas. Você só RECOMENDA; quem decide é o Gêmeo Digital.
 
 Recomende uma ação:
 - "manter":    correto e com respaldo nas falas
 - "corrigir":  tem respaldo, mas o texto, a classe (FR/NFR) ou o subtipo precisam de ajuste
-- "descartar": repete um requisito já salvo (diga qual em "duplicado_de") ou não tem
-               respaldo nas falas citadas
-Aponte também ligações do rascunho com requisitos já salvos do tema ("alvo": "R3"):
-depende_de, conflita_com, refina. Não invente requisitos e mantenha as palavras originais.
+- "descartar": só em dois casos:
+    1. DUPLICADO: diz a MESMA obrigação que um requisito já salvo, sem nada novo
+       (diga qual em "duplicado_de"). Se o rascunho acrescenta, restringe, detalha ou
+       exemplifica algo de um requisito salvo, ele NÃO é duplicado: recomende "manter"
+       com a ligação "refina" para o salvo.
+    2. SEM RESPALDO: as falas citadas não dizem isso.
+Na dúvida, recomende "manter". Aponte ligações com requisitos já salvos ("alvo": "R3"):
+depende_de, conflita_com, refina. Mudança de um requisito salvo (outro valor, outra regra)
+é "conflita_com" ou, se o PO claramente trocou a regra, "substitui".
+Não invente requisitos e mantenha as palavras originais.
 IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza; traduzir
 não é uma correção.
 
@@ -105,6 +121,14 @@ class Especialista(Agente):
         })}])
         md = resposta.get("conhecimento_markdown") or conhecimento.modelo_inicial(tema, descricao)
         novo._gravar(md, "criação", {"criado_por": criado_por})
+        return novo
+
+    @classmethod
+    def criar_fixo(cls, ctx, id_: str, tema: str, descricao: str, md: str) -> Especialista:
+        """Especialista com conhecimento pronto (ex.: a taxonomia de qualidade), sem LLM."""
+        dados = ctx.banco.criar_especialista(id_, tema, descricao, conhecimento.caminho(ctx.pasta_conhecimento, id_))
+        novo = cls(ctx, dados)
+        novo._gravar(md, "criação", {"criado_por": "sistema", "conhecimento": "fixo"})
         return novo
 
     @classmethod
@@ -149,6 +173,22 @@ class Especialista(Agente):
             return None
         return self._gravar(md, motivo, {"gatilho": gatilho["tipo"], "mudancas": resposta.get("mudancas", [])})
 
+    def registrar_requisito(self, requisito: dict, ligacoes: list[dict], em_revisao: list[str]) -> int | None:
+        """Anota um requisito salvo no arquivo, sem LLM; reorganiza com o LLM de vez em quando."""
+        self.sincronizar()
+        md = self.ler_conhecimento()
+        md = conhecimento.adicionar_item(md, "Requisitos aprovados", f"{requisito['id']} ({requisito['classe']}) — {requisito['texto']}")
+        if requisito.get("motivo"):
+            md = conhecimento.adicionar_item(md, "Decisões (e o porquê)", f"{requisito['id']}: {requisito['motivo']}")
+        for lig in ligacoes:
+            md = conhecimento.adicionar_item(md, "Decisões (e o porquê)", f"{lig['origem']} {lig['tipo'].replace('_', ' ')} {lig['destino']}")
+        for rid in em_revisao:
+            md = conhecimento.adicionar_item(md, "Pontos em aberto", f"{rid} precisa ser revisto porque {requisito['id']} mudou")
+        versao = self._gravar(md, f"{requisito['id']} salvo", {"gatilho": "requisito_salvo", "mudancas": [f"anotei {requisito['id']}"]})
+        if versao and (versao % conhecimento.REORGANIZAR_A_CADA == 0 or len(md) > conhecimento.LIMITE_CARACTERES):
+            versao = self.atualizar({"tipo": "reorganizar"}, "reorganização periódica") or versao
+        return versao
+
     # ------------------------------------------------------------------ revisão de rascunho
 
     def revisar(self, rascunho: dict, falas: dict[str, str], idioma: str = "en") -> dict:
@@ -159,6 +199,7 @@ class Especialista(Agente):
             "idioma": idioma,
             "conhecimento": self.ler_conhecimento(),
             "requisitos_do_tema": self.requisitos_do_tema(),
+            "parecidos_de_outros_temas": self.parecidos_de_outros_temas(rascunho["texto"]),
             "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo", "turnos")},
             "falas": falas,
         })}])
@@ -175,6 +216,34 @@ class Especialista(Agente):
             "motivo": resposta.get("motivo", ""),
         }
         self.enviar(LIDER, "resposta_especialista", {**sugestao, "resposta": f"{acao}: {sugestao['motivo']}"})
+        return sugestao
+
+    def parecidos_de_outros_temas(self, texto: str, limite: int = 5) -> list[dict]:
+        """Requisitos de outros temas com palavras em comum: duplicados podem cruzar temas."""
+        from ..avaliacao import similaridade
+        candidatos = []
+        for req in self.ctx.banco.listar_requisitos(apenas_ativos=True):
+            if self.id in req["temas"]:
+                continue
+            s = similaridade(texto, req["conteudo"].get("texto") or req["titulo"])
+            if s >= 0.3:
+                candidatos.append((s, resumo_requisito(req)))
+        candidatos.sort(key=lambda c: -c[0])
+        return [r for _, r in candidatos[:limite]]
+
+    def revisar_qualidade(self, rascunho: dict) -> dict:
+        """Recomenda a classe (FR/NFR) e o subtipo do rascunho."""
+        resposta = self.chamar_llm("especialista_qualidade", PROMPT_QUALIDADE, [{"role": "user", "content": como_json({
+            "conhecimento": self.ler_conhecimento(),
+            "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo")},
+        })}])
+        classe = "NFR" if str(resposta.get("classe", rascunho["classe"])).upper() == "NFR" else "FR"
+        sugestao = {"classe": classe, "subtipo": resposta.get("subtipo") if classe == "NFR" else None,
+                    "motivo": resposta.get("motivo", "")}
+        self.enviar(LIDER, "resposta_especialista", {
+            "especialista_id": self.id, "acao": "classificar", **sugestao,
+            "resposta": f"classe {classe}{' / ' + sugestao['subtipo'] if sugestao['subtipo'] else ''}: {sugestao['motivo']}",
+        })
         return sugestao
 
     # ------------------------------------------------------------------ consulta
