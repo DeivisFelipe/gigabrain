@@ -1,0 +1,423 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GigaBrain · Painel</title>
+<style>
+:root {
+  --bg: #f6f7f9; --card: #ffffff; --ink: #1d2433; --muted: #6b7385; --line: #dfe3ea;
+  --po: #475569; --gemeo: #0891b2; --lider: #9333ea; --esp: #d97706; --sistema: #64748b; --llm: #94a3b8;
+  --ok: #16a34a; --warn: #d97706; --bad: #dc2626; --info: #2563eb;
+  --add: #dcfce7; --del: #fee2e2;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f131a; --card: #171c25; --ink: #e6e9ef; --muted: #8b93a5; --line: #2a3140;
+    --po: #cbd5e1; --gemeo: #22d3ee; --lider: #c084fc; --esp: #fbbf24; --sistema: #94a3b8; --llm: #64748b;
+    --add: #14361f; --del: #3d1a1a;
+  }
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 14px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+header { display: flex; align-items: center; gap: 24px; padding: 12px 20px; border-bottom: 1px solid var(--line); background: var(--card); flex-wrap: wrap; }
+header h1 { font-size: 17px; margin: 0; }
+header h1 span { color: var(--muted); font-weight: 400; }
+nav { display: flex; gap: 4px; flex-wrap: wrap; }
+nav button { border: 0; background: none; color: var(--muted); padding: 6px 12px; border-radius: 6px; cursor: pointer; font: inherit; }
+nav button.ativo { background: var(--bg); color: var(--ink); font-weight: 600; }
+.stats { margin-left: auto; color: var(--muted); font-size: 13px; }
+main { padding: 20px; max-width: 1280px; margin: 0 auto; }
+.aba { display: none; } .aba.ativa { display: block; }
+.card { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 16px; }
+.grade { display: grid; grid-template-columns: minmax(260px, 340px) 1fr; gap: 16px; align-items: start; }
+@media (max-width: 800px) { .grade { grid-template-columns: 1fr; } main { padding: 16px; } }
+.lista { display: flex; flex-direction: column; gap: 6px; max-height: 75vh; overflow: auto; }
+.item { padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; cursor: pointer; background: var(--card); }
+.item:hover { border-color: var(--muted); }
+.item.sel { outline: 2px solid var(--info); border-color: transparent; }
+.item small { color: var(--muted); display: block; }
+.badge { display: inline-block; padding: 1px 8px; border-radius: 99px; font-size: 12px; border: 1px solid currentColor; }
+.st-ativo { color: var(--ok); } .st-em_revisao { color: var(--warn); }
+.st-substituido, .st-dividido, .st-unido { color: var(--muted); }
+h2 { font-size: 15px; margin: 0 0 12px; } h3 { font-size: 14px; margin: 16px 0 6px; }
+.muted { color: var(--muted); }
+.controles { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+select, button.b { font: inherit; padding: 6px 10px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink); cursor: pointer; }
+button.b:hover { border-color: var(--muted); }
+svg { width: 100%; height: auto; display: block; }
+svg text { fill: var(--ink); font: 13px system-ui, sans-serif; }
+.legenda { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--muted); margin-top: 8px; }
+.legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 4px; vertical-align: -1px; }
+.msg-atual { margin-top: 12px; min-height: 120px; }
+.evento { display: grid; grid-template-columns: 70px 1fr; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.evento .hora { color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.quem { font-weight: 600; } .tipo { color: var(--muted); font-size: 12px; margin-left: 6px; }
+details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+pre { background: var(--bg); padding: 10px; border-radius: 6px; overflow: auto; font-size: 12px; margin: 6px 0 0; white-space: pre-wrap; }
+.md h1 { font-size: 16px; } .md h2 { font-size: 14px; margin: 14px 0 4px; } .md blockquote { margin: 0; color: var(--muted); }
+.md ul { margin: 4px 0; padding-left: 20px; }
+.diff div { font: 12px ui-monospace, Consolas, monospace; padding: 1px 6px; white-space: pre-wrap; }
+.diff .add { background: var(--add); } .diff .del { background: var(--del); text-decoration: line-through; }
+.trilha { border-left: 2px solid var(--line); margin-left: 6px; padding-left: 14px; }
+.trilha div { position: relative; padding: 4px 0; }
+.trilha div::before { content: ""; position: absolute; left: -20px; top: 10px; width: 10px; height: 10px; border-radius: 50%; background: var(--info); }
+.trilha div.lig::before { background: var(--lider); }
+.vazio { padding: 40px; text-align: center; color: var(--muted); }
+.versoes { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0; }
+.versoes button { font-size: 12px; }
+.versoes button.sel { outline: 2px solid var(--info); }
+</style>
+</head>
+<body>
+<header>
+  <h1>GigaBrain <span>· painel</span></h1>
+  <nav>
+    <button data-aba="arquitetura" class="ativo">Arquitetura</button>
+    <button data-aba="conversas">Conversas</button>
+    <button data-aba="requisitos">Requisitos</button>
+    <button data-aba="especialistas">Especialistas</button>
+  </nav>
+  <div class="stats" id="stats"></div>
+</header>
+
+<main>
+  <!-- ARQUITETURA: diagrama + reprodução de uma conversa -->
+  <section class="aba ativa" id="aba-arquitetura">
+    <div class="card">
+      <div class="controles">
+        <select id="arq-conversa"></select>
+        <button class="b" id="arq-voltar">◀</button>
+        <button class="b" id="arq-play">▶ Reproduzir</button>
+        <button class="b" id="arq-avancar">▶|</button>
+        <label class="muted"><input type="checkbox" id="arq-llm"> mostrar chamadas ao LLM</label>
+        <span class="muted" id="arq-pos"></span>
+      </div>
+      <svg id="arq-svg" viewBox="0 0 1000 520"></svg>
+      <div class="legenda">
+        <span><i style="background:var(--po)"></i>PO real</span>
+        <span><i style="background:var(--gemeo)"></i>Conselho Deliberativo</span>
+        <span><i style="background:var(--lider)"></i>Líder</span>
+        <span><i style="background:var(--esp)"></i>Especialistas (um por tema)</span>
+        <span><i style="background:var(--sistema)"></i>Banco local (requisitos, registro, log)</span>
+      </div>
+      <div class="msg-atual" id="arq-msg"><p class="muted">Escolha uma conversa e clique em Reproduzir para ver, passo a passo, quem fala com quem.</p></div>
+    </div>
+  </section>
+
+  <!-- CONVERSAS: linha do tempo das mensagens JSON -->
+  <section class="aba" id="aba-conversas">
+    <div class="grade">
+      <div class="card"><h2>Conversas</h2><div class="lista" id="conv-lista"></div></div>
+      <div class="card">
+        <div class="controles"><label class="muted"><input type="checkbox" id="conv-llm"> mostrar chamadas ao LLM</label></div>
+        <div id="conv-eventos" class="vazio">Escolha uma conversa.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- REQUISITOS: grafo de ligações + detalhe -->
+  <section class="aba" id="aba-requisitos">
+    <div class="card" style="margin-bottom:16px">
+      <h2>Ligações entre requisitos</h2>
+      <svg id="req-grafo"></svg>
+      <div class="legenda" id="req-legenda"></div>
+    </div>
+    <div class="grade">
+      <div class="card"><h2>Repositório de Requisitos</h2><div class="lista" id="req-lista"></div></div>
+      <div class="card" id="req-detalhe"><div class="vazio">Escolha um requisito.</div></div>
+    </div>
+  </section>
+
+  <!-- ESPECIALISTAS: registro + arquivo de conhecimento + versões -->
+  <section class="aba" id="aba-especialistas">
+    <div class="grade">
+      <div class="card"><h2>Registro de Especialistas</h2><div class="lista" id="esp-lista"></div></div>
+      <div class="card" id="esp-detalhe"><div class="vazio">Escolha um especialista.</div></div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = (s) => document.querySelector(s);
+const api = (url) => fetch(url).then((r) => r.json());
+const esc = (t) => String(t ?? "").replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const hora = (m) => (m || "").slice(11, 19);
+const cor = (p) => ({ po: "var(--po)", gemeo: "var(--gemeo)", lider: "var(--lider)", sistema: "var(--sistema)", todos: "var(--sistema)", llm: "var(--llm)" }[p] || (p.startsWith("especialista") ? "var(--esp)" : "var(--muted)"));
+const NOMES = { po: "PO", gemeo: "Gêmeo Digital", lider: "Líder", sistema: "Sistema", todos: "todos", llm: "LLM" };
+const nome = (p) => NOMES[p] || p.replace("especialista:", "Esp. ");
+const TIPO_LIG = {
+  refina: { cor: "#2563eb", txt: "refina" }, divide: { cor: "#9333ea", txt: "divide" }, junta: { cor: "#0891b2", txt: "junta" },
+  substitui: { cor: "#dc2626", txt: "substitui" }, depende_de: { cor: "#d97706", txt: "depende de" }, conflita_com: { cor: "#db2777", txt: "conflita com" },
+};
+
+function resumo(ev) {
+  const c = ev.conteudo || {};
+  if (ev.tipo === "decomposicao") return "temas: " + (c.subconsultas || []).map((s) => s.tema).join(", ");
+  if (ev.tipo === "chamada_llm") return `${c.papel} · ${c.duracao_ms} ms` + (c.tokens_entrada ? ` · ${c.tokens_entrada}+${c.tokens_saida} tokens` : "");
+  if (ev.tipo === "requisito_salvo") return `${c.requisito_id} v${c.versao}` + (c.ligacoes?.length ? " · " + c.ligacoes.map((l) => `${l.tipo} ${l.destino}`).join(", ") : "");
+  if (ev.tipo === "conhecimento_atualizado") return `${c.especialista_id} v${c.versao}: ${c.motivo}`;
+  if (ev.tipo === "especialista_criado") return `novo especialista "${c.especialista_id}"`;
+  if (ev.tipo === "requisito_em_revisao") return `${c.requisito_id} em revisão por causa de ${c.por_causa_de}`;
+  if (ev.tipo === "proposta") return (c.requisitos || []).map((r) => r.titulo).join(" · ");
+  for (const k of ["texto", "pergunta", "resumo", "resposta", "motivo", "erro"]) if (c[k]) return c[k];
+  return "";
+}
+
+// ------------------------------------------------------------------ abas
+document.querySelectorAll("nav button").forEach((b) => b.addEventListener("click", () => {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("ativo", x === b));
+  document.querySelectorAll(".aba").forEach((a) => a.classList.toggle("ativa", a.id === "aba-" + b.dataset.aba));
+  ({ requisitos: carregarRequisitos, especialistas: carregarEspecialistas, conversas: carregarConversas }[b.dataset.aba] || (() => {}))();
+}));
+
+let RESUMO = null;
+async function carregarResumo() {
+  RESUMO = await api("/api/resumo");
+  const st = Object.entries(RESUMO.por_status).map(([s, n]) => `${n} ${s.replace("_", " ")}`).join(", ");
+  $("#stats").textContent = `${RESUMO.conversas.length} conversas · ${RESUMO.requisitos} requisitos${st ? " (" + st + ")" : ""} · ${RESUMO.especialistas} especialistas`;
+}
+
+// ------------------------------------------------------------------ arquitetura
+const ARQ = { eventos: [], pos: -1, timer: null, especialistas: [] };
+
+function posicoes() {
+  const p = {
+    po: { x: 80, y: 190, rot: "PO real", cor: "var(--po)" },
+    gemeo: { x: 300, y: 190, rot: "Gêmeo Digital", cor: "var(--gemeo)" },
+    lider: { x: 560, y: 190, rot: "Líder", cor: "var(--lider)" },
+    llm: { x: 300, y: 420, rot: "LLM", cor: "var(--llm)" },
+    sistema: { x: 560, y: 420, rot: "Banco local", cor: "var(--sistema)" },
+  };
+  const n = Math.max(ARQ.especialistas.length, 1);
+  const passo = Math.min(90, 440 / n);
+  ARQ.especialistas.forEach((e, i) => {
+    p["especialista:" + e.id] = { x: 850, y: 40 + passo / 2 + i * passo + (440 - passo * n) / 2, rot: e.tema, cor: "var(--esp)", sub: `v${e.versao_conhecimento}` };
+  });
+  p.todos = p.sistema;
+  return p;
+}
+
+function desenharArquitetura(ativo) {
+  const P = posicoes();
+  const linha = (a, b, extra = "") => `<line x1="${P[a].x}" y1="${P[a].y}" x2="${P[b].x}" y2="${P[b].y}" stroke="var(--line)" stroke-width="2" ${extra}/>`;
+  let s = `<defs><marker id="seta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--info)"/></marker></defs>`;
+  // Molduras dos dois conselhos
+  s += `<rect x="20" y="110" width="400" height="160" rx="14" fill="none" stroke="var(--gemeo)" stroke-dasharray="5 5" opacity=".5"/>`;
+  s += `<text x="34" y="132" class="muted" style="fill:var(--gemeo);font-size:12px">Conselho Deliberativo</text>`;
+  s += `<rect x="470" y="20" width="510" height="480" rx="14" fill="none" stroke="var(--lider)" stroke-dasharray="5 5" opacity=".5"/>`;
+  s += `<text x="484" y="42" style="fill:var(--lider);font-size:12px">Conselho Consultivo</text>`;
+  s += linha("po", "gemeo") + linha("gemeo", "lider") + linha("lider", "sistema") + linha("gemeo", "llm", 'stroke-dasharray="3 4"');
+  ARQ.especialistas.forEach((e) => { s += linha("lider", "especialista:" + e.id); });
+
+  if (ativo) {
+    const de = P[ativo.de], para = P[ativo.para] || P.sistema;
+    if (de && para && de !== para) {
+      s += `<line x1="${de.x}" y1="${de.y}" x2="${para.x}" y2="${para.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#seta)" opacity=".9"/>`;
+      s += `<text x="${(de.x + para.x) / 2}" y="${(de.y + para.y) / 2 - 10}" text-anchor="middle" style="font-weight:600;fill:var(--info)">${esc(ativo.tipo)}</text>`;
+    } else if (de) {
+      s += `<circle cx="${de.x}" cy="${de.y}" r="44" fill="none" stroke="var(--info)" stroke-width="3"/>`;
+      s += `<text x="${de.x}" y="${de.y - 52}" text-anchor="middle" style="font-weight:600;fill:var(--info)">${esc(ativo.tipo)}</text>`;
+    }
+  }
+  const envolvidos = ativo ? [ativo.de, ativo.para] : [];
+  for (const [id, n] of Object.entries(P)) {
+    if (id === "todos") continue;
+    const on = envolvidos.includes(id) || (id === "sistema" && envolvidos.includes("todos"));
+    const larg = id.startsWith("especialista") ? 130 : 120;
+    s += `<g opacity="${ativo && !on ? 0.45 : 1}">
+      <rect x="${n.x - larg / 2}" y="${n.y - 22}" width="${larg}" height="44" rx="10" fill="var(--card)" stroke="${n.cor}" stroke-width="${on ? 4 : 2}"/>
+      <text x="${n.x}" y="${n.y + (n.sub ? -1 : 5)}" text-anchor="middle" style="font-weight:600">${esc(n.rot)}</text>
+      ${n.sub ? `<text x="${n.x}" y="${n.y + 14}" text-anchor="middle" class="muted" style="font-size:11px;fill:var(--muted)">conhecimento ${n.sub}</text>` : ""}
+    </g>`;
+  }
+  if (!ARQ.especialistas.length) s += `<text x="850" y="200" text-anchor="middle" style="fill:var(--muted)">nenhum especialista ainda</text>`;
+  $("#arq-svg").innerHTML = s;
+}
+
+function eventosVisiveis(lista, comLlm) { return lista.filter((e) => comLlm || e.tipo !== "chamada_llm"); }
+
+function mostrarPasso() {
+  const ev = ARQ.eventos[ARQ.pos];
+  desenharArquitetura(ev);
+  $("#arq-pos").textContent = ARQ.eventos.length ? `passo ${ARQ.pos + 1} de ${ARQ.eventos.length}` : "";
+  if (!ev) return;
+  $("#arq-msg").innerHTML = `<div class="card">
+    <span class="quem" style="color:${cor(ev.de)}">${esc(nome(ev.de))}</span> → <span class="quem" style="color:${cor(ev.para)}">${esc(nome(ev.para))}</span>
+    <span class="tipo">${esc(ev.tipo)} · ${hora(ev.momento)}</span>
+    <div style="margin-top:6px;white-space:pre-wrap">${esc(resumo(ev))}</div>
+    <details><summary>mensagem JSON</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details></div>`;
+}
+
+async function carregarArquitetura() {
+  ARQ.especialistas = await api("/api/especialistas");
+  const sel = $("#arq-conversa");
+  sel.innerHTML = RESUMO.conversas.map((c) => `<option value="${c.id}">${c.id} · ${c.modo} · ${c.status}</option>`).join("") || "<option>nenhuma conversa</option>";
+  await escolherConversaArq();
+}
+
+async function escolherConversaArq() {
+  parar();
+  const id = $("#arq-conversa").value;
+  ARQ.todos = id ? await api("/api/eventos?conversa=" + encodeURIComponent(id)) : [];
+  ARQ.eventos = eventosVisiveis(ARQ.todos, $("#arq-llm").checked);
+  ARQ.pos = -1;
+  mostrarPasso();
+}
+
+function parar() { clearInterval(ARQ.timer); ARQ.timer = null; $("#arq-play").textContent = "▶ Reproduzir"; }
+function avancar() { if (ARQ.pos < ARQ.eventos.length - 1) { ARQ.pos++; mostrarPasso(); } else parar(); }
+$("#arq-conversa").addEventListener("change", escolherConversaArq);
+$("#arq-llm").addEventListener("change", () => { ARQ.eventos = eventosVisiveis(ARQ.todos, $("#arq-llm").checked); ARQ.pos = -1; mostrarPasso(); });
+$("#arq-avancar").addEventListener("click", () => { parar(); avancar(); });
+$("#arq-voltar").addEventListener("click", () => { parar(); if (ARQ.pos > 0) { ARQ.pos--; mostrarPasso(); } });
+$("#arq-play").addEventListener("click", () => {
+  if (ARQ.timer) return parar();
+  if (ARQ.pos >= ARQ.eventos.length - 1) ARQ.pos = -1;
+  $("#arq-play").textContent = "❚❚ Pausar";
+  avancar();
+  ARQ.timer = setInterval(avancar, 1400);
+});
+
+// ------------------------------------------------------------------ conversas
+let CONV_SEL = null;
+async function carregarConversas() {
+  await carregarResumo();
+  $("#conv-lista").innerHTML = RESUMO.conversas.map((c) => `<div class="item ${c.id === CONV_SEL ? "sel" : ""}" data-id="${c.id}">
+    <b>${c.id}</b><small>${c.modo} · ${c.status} · ${c.eventos} mensagens</small></div>`).join("") || `<div class="muted">Nenhuma conversa ainda.</div>`;
+  document.querySelectorAll("#conv-lista .item").forEach((el) => el.addEventListener("click", () => { CONV_SEL = el.dataset.id; carregarConversas(); mostrarConversa(); }));
+}
+async function mostrarConversa() {
+  if (!CONV_SEL) return;
+  const eventos = eventosVisiveis(await api("/api/eventos?conversa=" + encodeURIComponent(CONV_SEL)), $("#conv-llm").checked);
+  $("#conv-eventos").className = "";
+  $("#conv-eventos").innerHTML = eventos.map((ev) => `<div class="evento">
+    <div class="hora">${hora(ev.momento)}</div>
+    <div><span class="quem" style="color:${cor(ev.de)}">${esc(nome(ev.de))}</span> → <span style="color:${cor(ev.para)}">${esc(nome(ev.para))}</span><span class="tipo">${esc(ev.tipo)}</span>
+    <div style="white-space:pre-wrap">${esc(resumo(ev))}</div>
+    <details><summary>JSON</summary><pre>${esc(JSON.stringify(ev.conteudo, null, 2))}</pre></details></div></div>`).join("");
+}
+$("#conv-llm").addEventListener("change", mostrarConversa);
+
+// ------------------------------------------------------------------ requisitos
+let REQ_SEL = null;
+async function carregarRequisitos() {
+  const { requisitos, ligacoes } = await api("/api/requisitos");
+  $("#req-lista").innerHTML = requisitos.map((r) => `<div class="item ${r.id === REQ_SEL ? "sel" : ""}" data-id="${r.id}">
+    <b>${r.id}</b> <span class="badge st-${r.status}">${r.status.replace("_", " ")}</span> <span class="muted">v${r.versao_atual}</span>
+    <div>${esc(r.titulo)}</div><small>${r.temas.join(", ")}</small></div>`).join("") || `<div class="muted">Nenhum requisito ainda.</div>`;
+  document.querySelectorAll("#req-lista .item").forEach((el) => el.addEventListener("click", () => { REQ_SEL = el.dataset.id; carregarRequisitos(); mostrarRequisito(); }));
+  desenharGrafo(requisitos, ligacoes);
+}
+
+function desenharGrafo(requisitos, ligacoes) {
+  const larg = Math.max(1000, requisitos.length * 140 + 80), alt = 300, meio = 150;
+  const X = {}; requisitos.forEach((r, i) => { X[r.id] = 70 + i * ((larg - 140) / Math.max(requisitos.length - 1, 1)); });
+  if (requisitos.length === 1) X[requisitos[0].id] = larg / 2;
+  let s = "";
+  ligacoes.forEach((l) => {
+    const a = X[l.origem_id], b = X[l.destino_id]; if (a == null || b == null) return;
+    const evolucao = ["refina", "divide", "junta", "substitui"].includes(l.tipo);
+    const h = Math.min(110, 30 + Math.abs(a - b) / 4) * (evolucao ? -1 : 1);
+    const y0 = meio + (evolucao ? -24 : 24), t = TIPO_LIG[l.tipo] || { cor: "gray", txt: l.tipo };
+    s += `<path d="M${a},${y0} C${a},${y0 + h} ${b},${y0 + h} ${b},${y0}" fill="none" stroke="${t.cor}" stroke-width="2.5" marker-end="url(#seta-${l.tipo})"/>`;
+    s += `<text x="${(a + b) / 2}" y="${y0 + h * 0.78 + (evolucao ? -4 : 12)}" text-anchor="middle" style="fill:${t.cor};font-size:12px">${l.origem_id} ${t.txt} ${l.destino_id}</text>`;
+  });
+  const defs = Object.entries(TIPO_LIG).map(([k, t]) => `<marker id="seta-${k}" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${t.cor}"/></marker>`).join("");
+  requisitos.forEach((r) => {
+    const apagado = !["ativo", "em_revisao"].includes(r.status);
+    s += `<g style="cursor:pointer" onclick="REQ_SEL='${r.id}';carregarRequisitos();mostrarRequisito()" opacity="${apagado ? 0.55 : 1}">
+      <rect x="${X[r.id] - 55}" y="${meio - 24}" width="110" height="48" rx="10" fill="var(--card)" stroke="${r.status === "em_revisao" ? "var(--warn)" : apagado ? "var(--muted)" : "var(--ok)"}" stroke-width="${r.id === REQ_SEL ? 4 : 2}" ${apagado ? 'stroke-dasharray="4 3"' : ""}/>
+      <text x="${X[r.id]}" y="${meio - 2}" text-anchor="middle" style="font-weight:700">${r.id} <tspan style="font-weight:400;fill:var(--muted)">v${r.versao_atual}</tspan></text>
+      <text x="${X[r.id]}" y="${meio + 14}" text-anchor="middle" style="font-size:11px;fill:var(--muted)">${r.status.replace("_", " ")}</text></g>`;
+  });
+  $("#req-grafo").setAttribute("viewBox", `0 0 ${larg} ${alt}`);
+  $("#req-grafo").innerHTML = `<defs>${defs}</defs>` + (requisitos.length ? s : `<text x="${larg / 2}" y="${meio}" text-anchor="middle" style="fill:var(--muted)">nenhum requisito ainda</text>`);
+  $("#req-legenda").innerHTML = `<span>Acima: evolução (de onde o requisito veio) · Abaixo: relações entre requisitos que convivem</span>` +
+    Object.values(TIPO_LIG).map((t) => `<span><i style="background:${t.cor}"></i>${t.txt}</span>`).join("");
+}
+
+async function mostrarRequisito() {
+  if (!REQ_SEL) return;
+  const r = await api("/api/requisito/" + REQ_SEL);
+  const c = r.conteudo;
+  const lig = r.ligacoes.map((l) => `<li>${l.origem_id} <b style="color:${TIPO_LIG[l.tipo]?.cor}">${TIPO_LIG[l.tipo]?.txt || l.tipo}</b> ${l.destino_id} <span class="muted">${esc(l.motivo || "")}</span></li>`).join("");
+  const fontes = r.fontes.map((f) => `<li>${esc(f.tipo)}: <b>${esc(f.ref)}</b>${f.versao ? ` (conhecimento v${f.versao})` : ""}</li>`).join("");
+  const trilha = r.trilha.map((p) => p.evento === "versao"
+    ? `<div><b>${p.requisito_id} v${p.versao}</b> ${esc(p.titulo)}<br><small class="muted">${p.momento.replace("T", " ")} · ${esc(p.motivo || "")}</small></div>`
+    : `<div class="lig"><b>${p.requisito_id} ${TIPO_LIG[p.tipo]?.txt || p.tipo} ${p.destino_id}</b><br><small class="muted">${p.momento.replace("T", " ")} · ${esc(p.motivo || "")}</small></div>`).join("");
+  const versoes = r.versoes.map((v) => `<details ${v.versao === r.versao_atual ? "" : ""}><summary>v${v.versao} · ${v.aprovado_em.replace("T", " ")} · ${esc(v.motivo || "")} · conversa ${esc(v.conversa_id)}</summary><pre>${esc(JSON.stringify(v.conteudo, null, 2))}</pre></details>`).join("");
+  $("#req-detalhe").innerHTML = `
+    <h2>${r.id} · ${esc(c.titulo)} <span class="badge st-${r.status}">${r.status.replace("_", " ")}</span></h2>
+    <div class="muted">${c.tipo === "enabler" ? "Requisito técnico (enabler)" : "Requisito de negócio"} · temas: ${r.temas.join(", ")} · versão atual v${r.versao_atual}</div>
+    <h3>História</h3><div>${esc(c.historia)}</div>
+    <h3>Critérios de aceite</h3><ul>${(c.criterios_aceite || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+    <h3>Ligações</h3>${lig ? `<ul>${lig}</ul>` : `<div class="muted">nenhuma</div>`}
+    <h3>Fontes (rastreabilidade)</h3><ul>${fontes}</ul>
+    <h3>Como chegamos aqui</h3><div class="trilha">${trilha}</div>
+    <h3>Versões</h3>${versoes}`;
+}
+
+// ------------------------------------------------------------------ especialistas
+let ESP_SEL = null, ESP_VER = null;
+async function carregarEspecialistas() {
+  const lista = await api("/api/especialistas");
+  $("#esp-lista").innerHTML = lista.map((e) => `<div class="item ${e.id === ESP_SEL ? "sel" : ""}" data-id="${e.id}">
+    <b>${esc(e.tema)}</b> <span class="muted">conhecimento v${e.versao_conhecimento}</span>
+    <small>${esc(e.descricao)}</small><small>${e.consultas} consulta(s) · atualizado ${e.atualizado_em.replace("T", " ")}</small></div>`).join("") || `<div class="muted">Nenhum especialista ainda.</div>`;
+  document.querySelectorAll("#esp-lista .item").forEach((el) => el.addEventListener("click", () => { ESP_SEL = el.dataset.id; ESP_VER = null; carregarEspecialistas(); mostrarEspecialista(); }));
+}
+
+function markdown(md) {
+  let html = "", lista = false;
+  for (const linha of md.split("\n")) {
+    if (lista && !linha.startsWith("- ")) { html += "</ul>"; lista = false; }
+    if (linha.startsWith("# ")) html += `<h1>${esc(linha.slice(2))}</h1>`;
+    else if (linha.startsWith("## ")) html += `<h2>${esc(linha.slice(3))}</h2>`;
+    else if (linha.startsWith("> ")) html += `<blockquote>${esc(linha.slice(2))}</blockquote>`;
+    else if (linha.startsWith("- ")) { if (!lista) { html += "<ul>"; lista = true; } html += `<li>${esc(linha.slice(2))}</li>`; }
+    else if (linha.trim()) html += `<p>${esc(linha)}</p>`;
+  }
+  return html + (lista ? "</ul>" : "");
+}
+
+function diff(antes, depois) {
+  const a = antes.split("\n"), b = depois.split("\n");
+  const L = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
+    L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0, out = "";
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { out += `<div>${esc(a[i]) || "&nbsp;"}</div>`; i++; j++; }
+    else if (j < b.length && (i >= a.length || L[i][j + 1] >= L[i + 1][j])) { out += `<div class="add">+ ${esc(b[j])}</div>`; j++; }
+    else { out += `<div class="del">- ${esc(a[i])}</div>`; i++; }
+  }
+  return out;
+}
+
+async function mostrarEspecialista() {
+  if (!ESP_SEL) return;
+  const e = await api("/api/especialista/" + ESP_SEL);
+  const v = ESP_VER ?? e.versoes.length;
+  const atual = e.versoes[v - 1], anterior = e.versoes[v - 2];
+  const botoes = e.versoes.map((x) => `<button class="b ${x.versao === v ? "sel" : ""}" data-v="${x.versao}" title="${esc(x.motivo)}">v${x.versao}</button>`).join("");
+  const mudancas = (atual?.origem?.mudancas || []).map((m) => `<li>${esc(m)}</li>`).join("");
+  $("#esp-detalhe").innerHTML = `
+    <h2>Especialista: ${esc(e.tema)}</h2>
+    <div class="muted">${esc(e.descricao)}<br>arquivo: <code>${esc(e.arquivo)}</code></div>
+    <h3>Versões do conhecimento</h3>
+    <div class="versoes">${botoes}</div>
+    ${atual ? `<div class="muted">v${atual.versao} · ${atual.criado_em.replace("T", " ")} · motivo: <b>${esc(atual.motivo)}</b> · hash ${atual.hash}</div>` : ""}
+    ${mudancas ? `<ul>${mudancas}</ul>` : ""}
+    <div class="grade" style="grid-template-columns:1fr 1fr;margin-top:12px">
+      <div><h3>Conteúdo (v${v})</h3><div class="md card">${markdown(atual?.conteudo || e.conteudo)}</div></div>
+      <div><h3>${anterior ? `O que mudou desde v${anterior.versao}` : "Primeira versão"}</h3><div class="diff card">${anterior ? diff(anterior.conteudo, atual.conteudo) : '<span class="muted">sem versão anterior</span>'}</div></div>
+    </div>`;
+  document.querySelectorAll("#esp-detalhe .versoes button").forEach((b) => b.addEventListener("click", () => { ESP_VER = Number(b.dataset.v); mostrarEspecialista(); }));
+}
+
+// ------------------------------------------------------------------ início
+carregarResumo().then(carregarArquitetura);
+</script>
+</body>
+</html>
