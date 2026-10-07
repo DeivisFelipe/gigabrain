@@ -285,7 +285,6 @@ details.json pre { background: var(--surface-2); border: 1px solid var(--line); 
           <select id="arq-vel" class="campo" title="velocidade"><option value="2000">0,5×</option><option value="1100" selected>1×</option><option value="550">2×</option><option value="250">4×</option></select>
           <div class="crescer"><input type="range" id="arq-pos" min="0" max="0" value="0"></div>
           <span class="muted mono" id="arq-contador" style="font-size:13px"></span>
-          <label class="chave"><input type="checkbox" id="arq-agrupar" checked>agrupar repetidas</label>
           <label class="chave"><input type="checkbox" id="arq-llm">chamadas ao LLM</label>
         </div>
         <div class="palco"><svg id="arq-svg"></svg></div>
@@ -576,7 +575,7 @@ function desenharBenchmark() {
 // - o Conselho Consultivo só aparece quando a conversa usou o conselho;
 // - um especialista só aparece quando passa a existir naquele momento da conversa;
 // - as três bases (Repositório, Registro, Log) são desenhadas separadas;
-// - mensagens iguais em sequência (ex.: 50 "requisito salvo") viram um passo só.
+// - 5 ou mais mensagens iguais em sequência (logs antigos, em lote) viram um passo só.
 const ARQ = { todos: [], passos: [], pos: -1, timer: null, especialistas: [], conversas: [], conv: null, relevantes: [], primeiroPasso: {} };
 
 function layoutArquitetura(comConselho, especialistas) {
@@ -630,19 +629,21 @@ function normalizar(ev) {
 }
 const noDe = (p) => (p === "po" || p === "sistema") ? "entrada" : p === "todos" ? "repositorio" : p;
 
-function agrupar(eventos, juntar) {
-  const passos = [];
+const MIN_AGRUPAR = 5;
+function agrupar(eventos) {
+  const sequencias = [];
   for (const ev of eventos) {
-    const ult = passos[passos.length - 1];
-    if (juntar && ult && ult.ev.de === ev.de && ult.ev.para === ev.para && ult.ev.tipo === ev.tipo) ult.lista.push(ev);
-    else passos.push({ ev, lista: [ev] });
+    const ult = sequencias[sequencias.length - 1];
+    if (ult && ult[0].de === ev.de && ult[0].para === ev.para && ult[0].tipo === ev.tipo) ult.push(ev);
+    else sequencias.push([ev]);
   }
-  return passos;
+  // Sequências curtas continuam passo a passo; só as longas viram um passo "×n".
+  return sequencias.flatMap((seq) => seq.length >= MIN_AGRUPAR ? [{ ev: seq[0], lista: seq }] : seq.map((ev) => ({ ev, lista: [ev] })));
 }
 
 function prepararConversa() {
-  const comLlm = $("#arq-llm").checked, juntar = $("#arq-agrupar").checked;
-  ARQ.passos = agrupar(ARQ.todos.filter((e) => comLlm || e.tipo !== "chamada_llm"), juntar);
+  const comLlm = $("#arq-llm").checked;
+  ARQ.passos = agrupar(ARQ.todos.filter((e) => comLlm || e.tipo !== "chamada_llm"));
   // Em que passo cada especialista aparece pela primeira vez nesta conversa.
   ARQ.primeiroPasso = {};
   ARQ.passos.forEach((p, i) => p.lista.forEach((ev) => {
@@ -835,7 +836,6 @@ function tocar() {
 }
 $("#arq-conversa").addEventListener("change", escolherConversa);
 $("#arq-llm").addEventListener("change", reiniciarPassos);
-$("#arq-agrupar").addEventListener("change", reiniciarPassos);
 $("#arq-avancar").addEventListener("click", () => { parar(); avancar(); });
 $("#arq-voltar").addEventListener("click", () => { parar(); if (ARQ.pos > 0) { ARQ.pos--; mostrarPasso(); } });
 $("#arq-play").addEventListener("click", () => ARQ.timer ? parar() : tocar());
