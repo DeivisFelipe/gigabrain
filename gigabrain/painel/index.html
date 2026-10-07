@@ -708,19 +708,6 @@ function desenharArquitetura() {
     }
   }
 
-  // Mensagem do passo atual.
-  if (ev) {
-    const rotulo = (NOME_TIPO[ev.tipo] || ev.tipo) + (passo.lista.length > 1 ? ` ×${passo.lista.length}` : "");
-    const de = P[noDe(ev.de)], para = P[noDe(ev.para)];
-    if (de && para && de !== para) {
-      const a = borda(de, para), b = borda(para, de);
-      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#ponta)"/>` + pilula((a.x + b.x) / 2, (a.y + b.y) / 2 - 14, rotulo);
-    } else if (de) {
-      s += `<rect x="${de.x - de.w / 2 - 8}" y="${de.y - (de.h || 56) / 2 - 8}" width="${de.w + 16}" height="${(de.h || 56) + 16}" rx="16" fill="none" stroke="var(--info)" stroke-width="3" stroke-dasharray="5 4"/>` +
-        pilula(de.x, de.y + (de.h || 56) / 2 + 24, rotulo);
-    }
-  }
-
   const caixa = (id, titulo, sub, cor) => {
     const n = P[id]; if (!n) return "";
     const on = ativos.includes(id), w = n.w, h = n.h || 56, maxCh = Math.floor(w / 8.2);
@@ -752,6 +739,22 @@ function desenharArquitetura() {
   s += base("repositorio", "Repositório de Requisitos", `requisitos.db · +${salvos} nesta conversa`);
   s += base("registro", "Registro de Especialistas", "especialistas.db + arquivos .md");
   s += base("log", "Log", `log.db · ${msgs} mensagem(ns) até aqui`);
+
+  // Mensagem do passo atual: desenhada por último para ficar por cima dos cards.
+  if (ev) {
+    const rotulo = (NOME_TIPO[ev.tipo] || ev.tipo) + (passo.lista.length > 1 ? ` ×${passo.lista.length}` : "");
+    const de = P[noDe(ev.de)], para = P[noDe(ev.para)];
+    if (de && para && de !== para) {
+      const a = borda(de, para), b = borda(para, de);
+      // Seta curta: o rótulo sobe acima dos cards para não cobrir o nome deles.
+      const curta = Math.hypot(b.x - a.x, b.y - a.y) < 260;
+      const yRot = curta ? Math.min(de.y - (de.h || 56) / 2, para.y - (para.h || 56) / 2) - 18 : (a.y + b.y) / 2 - 14;
+      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#ponta)"/>` + pilula((a.x + b.x) / 2, yRot, rotulo);
+    } else if (de) {
+      s += `<rect x="${de.x - de.w / 2 - 8}" y="${de.y - (de.h || 56) / 2 - 8}" width="${de.w + 16}" height="${(de.h || 56) + 16}" rx="16" fill="none" stroke="var(--info)" stroke-width="3" stroke-dasharray="5 4"/>` +
+        pilula(de.x, de.y + (de.h || 56) / 2 + 24, rotulo);
+    }
+  }
 
   $("#arq-svg").setAttribute("viewBox", `0 0 ${L} ${H}`);
   $("#arq-svg").innerHTML = s;
