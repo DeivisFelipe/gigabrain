@@ -406,7 +406,7 @@ const NOME_TIPO = {
   resposta_consolidada: "resposta consolidada", especialista_criado: "especialista criado", pendencia: "pendência",
   requisito_salvo: "requisito salvo", requisito_em_revisao: "requisito em revisão", conhecimento_atualizado: "conhecimento atualizado",
   chamada_llm: "chamada ao LLM", erro: "erro", transcricao: "transcrição", extracao: "rascunhos extraídos", revisao: "revisão",
-  decisao: "decisão (voto final)",
+  decisao: "decisão (voto final)", fala: "fala da reunião",
 };
 const TIPO_LIG = {
   refina: { cor: "#2563eb", txt: "refina" }, divide: { cor: "#7c3aed", txt: "divide" }, junta: { cor: "#0891b2", txt: "junta" },
@@ -430,7 +430,8 @@ function resumo(ev) {
     case "especialista_criado": return `Novo especialista "${c.especialista_id}": ${c.descricao || ""}`;
     case "requisito_em_revisao": return `${c.requisito_id} entrou em revisão por causa de ${c.por_causa_de}`;
     case "proposta": return (c.texto ? c.texto + "\n" : "") + (c.requisitos || []).map((r) => "• " + r.titulo).join("\n");
-    case "extracao": return `${(c.requisitos || []).length} requisito(s) candidato(s) extraído(s) de ${c.projeto}`;
+    case "extracao": return `${(c.requisitos || []).length} rascunho(s)${c.turno ? " da fala " + c.turno : ""}:\n` + (c.requisitos || []).map((r) => "• " + r.texto).join("\n");
+    case "fala": return `[${c.turno}] ${c.falante}: ${c.texto}`;
     case "revisao": return `${c.tema}: ${c.mantidos} mantido(s), ${(c.removidos || []).length} removido(s), ${(c.corrigidos || []).length} corrigido(s)`;
     case "transcricao": return `${c.titulo} · ${c.turnos} turnos`;
     case "decisao": return (c.salvar ? "✓ " : "✗ ") + (c.texto || "") + (c.recomendacao ? ` (especialista recomendou: ${c.recomendacao})` : "");

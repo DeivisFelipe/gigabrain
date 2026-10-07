@@ -221,28 +221,25 @@ class ProvedorSimulado:
             "requisitos": [requisito],
         }
 
-    def _gemeo_extrair(self, mensagens: list[dict]) -> dict:
-        """Baseline por regras: cada frase de stakeholder com cara de requisito vira um."""
+    def _gemeo_rascunhar(self, mensagens: list[dict]) -> dict:
+        """Baseline por regras: cada frase da fala com cara de requisito vira um rascunho."""
         entrada = _ultimo(mensagens)
-        tema, extrair, requisitos = "geral", False, []
-        for linha in entrada["transcricao"].splitlines():
-            m = re.match(r"\[(T\d+)\] (\w+): (.*)", linha)
-            if not m:
-                continue
-            turno, falante, texto = m.groups()
-            extrair = extrair or turno == entrada.get("extrair_a_partir_de")
-            if falante == "Analyst":
-                topico = re.search(r"(?:next topic|talk about|move on to)[:\s]+([^.?]+)", texto, re.I)
-                if topico:
-                    tema = topico.group(1).strip().lower()
-                continue
-            if not extrair or re.search(r"\b(sorry|on mute|hear me|connection)\b", texto, re.I):
-                continue
-            for frase in re.split(r"(?<=[.!?])\s+", _limpar_fala(texto)):
-                if len(frase.split()) < 6:
-                    continue
+        tema = "geral"
+        for linha in entrada.get("contexto", []):
+            topico = re.search(r"\] Analyst: .*?(?:next topic|talk about|move on to)[:\s]+([^.?]+)", linha, re.I)
+            if topico:
+                tema = topico.group(1).strip().lower()
+        m = re.match(r"\[(T\d+)\] (\w+): (.*)", entrada["fala"])
+        if not m:
+            return {"requisitos": []}
+        _, falante, texto = m.groups()
+        if falante == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", texto, re.I):
+            return {"requisitos": []}
+        requisitos = []
+        for frase in re.split(r"(?<=[.!?])\s+", _limpar_fala(texto)):
+            if len(frase.split()) >= 6:
                 classe, subtipo = _classificar(frase)
-                requisitos.append({"texto": frase, "classe": classe, "subtipo": subtipo, "tema": tema, "turnos": [turno]})
+                requisitos.append({"texto": frase, "classe": classe, "subtipo": subtipo, "tema": tema})
         return {"requisitos": requisitos}
 
     def _especialista_revisar(self, mensagens: list[dict]) -> dict:
@@ -352,10 +349,6 @@ class ProvedorSimulado:
             for rid in gatilho.get("em_revisao", []):
                 md = conhecimento.adicionar_item(md, "Pontos em aberto", f"{rid} precisa ser revisto porque {req['id']} mudou")
                 mudancas.append(f"{rid} em revisão")
-        elif gatilho["tipo"] == "lote_aprovado":
-            for req in gatilho["requisitos"]:
-                md = conhecimento.adicionar_item(md, "Requisitos aprovados", f"{req['id']} ({req['classe']}) — {req['titulo']}")
-            mudancas.append(f"registrei {len(gatilho['requisitos'])} requisito(s) da transcrição")
         elif gatilho["tipo"] == "documento":
             for linha in gatilho["texto"].splitlines():
                 linha = linha.strip().lstrip("-*").strip()

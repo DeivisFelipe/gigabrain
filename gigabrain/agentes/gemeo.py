@@ -73,15 +73,17 @@ Seja direto e conciso. Não repita o que o PO já disse.
 """
 
 
-PROMPT_EXTRAIR = """\
-Você é o Gêmeo Digital do GigaBrain. Recebe um trecho da transcrição de uma reunião de
-elicitação (Analyst, Client, TechLead, EndUser) e extrai os requisitos de software ditos
-pelos stakeholders.
+PROMPT_RASCUNHAR = """\
+Você é o Gêmeo Digital do GigaBrain e acompanha uma reunião de elicitação (Analyst, Client,
+TechLead, EndUser) FALA POR FALA. Você recebe a fala atual de um stakeholder, as falas
+anteriores como contexto e os requisitos que você já salvou nesta reunião. Rascunhe os
+requisitos de software ditos NESTA fala: pode ser nenhum, um ou mais.
 
 Regras:
-- Um requisito por obrigação distinta. Uma fala pode conter mais de um requisito.
-- O Analyst só conduz e confirma ("Just to confirm, ..."): não duplique o que ele repete.
-- Ignore falas fora do tópico (problemas de conexão, microfone, risadas).
+- Um requisito por obrigação distinta. Fala sem requisito (contexto, cumprimento,
+  problema de conexão, confirmação) -> lista vazia.
+- Não rascunhe de novo algo que já está em "ja_salvos". Um detalhe novo sobre o mesmo
+  assunto é outro requisito.
 - IDIOMA: escreva "texto" no idioma do campo "idioma" (en = inglês). NUNCA traduza,
   mesmo que estas instruções estejam em português. Copie as palavras do stakeholder,
   tirando só hesitações (uh, erm, you know, i mean), repetições ("the the") e o início
@@ -92,17 +94,15 @@ Regras:
   LF (aparência), A (disponibilidade), SA (safety), PO (portabilidade),
   MN (manutenibilidade), SC (escalabilidade), L (legal), FT (tolerância a falhas),
   OT (outro). Para FR use null.
-- "tema": tema de negócio curto, em português, no singular ou plural consistente
-  (ex.: "banco de dados", "busca", "segurança"). Use o tópico que o Analyst anunciou.
-- "turnos": os ids dos turnos onde o requisito foi dito (ex.: ["T8"]), sem os de contexto.
-- Os primeiros turnos do trecho podem ser só contexto do bloco anterior: extraia apenas
-  requisitos ditos a partir do turno "extrair_a_partir_de".
+- "tema": tema de negócio curto, em português (ex.: "banco de dados", "busca",
+  "segurança"). Use o tópico que o Analyst anunciou no contexto.
 
 Responda com um único objeto JSON:
-{"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "tema": "...", "turnos": ["T8"]}]}
+{"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "tema": "..."}]}
 """
 
-TURNOS_POR_BLOCO = 40
+FALAS_DE_CONTEXTO = 6
+SALVOS_NO_PROMPT = 30
 
 PROMPT_DECIDIR = """\
 Você é o Gêmeo Digital, representante do PO no Conselho Deliberativo do GigaBrain, e tem o
@@ -155,32 +155,34 @@ class GemeoDigital(Agente):
     def ouvir_sistema(self, aviso: str) -> dict:
         return self._decidir({"de": "sistema", "aviso": aviso})
 
-    def extrair_da_transcricao(self, projeto: dict) -> list[dict]:
-        """Lê a reunião em blocos de turnos e devolve os requisitos candidatos."""
+    def rascunhar(self, projeto: dict, indice_fala: int, ja_salvos: list[dict], proximo_indice: int) -> list[dict]:
+        """Lê UMA fala da reunião (com as anteriores como contexto) e devolve os rascunhos dela."""
         turnos = projeto["turnos"]
-        candidatos: list[dict] = []
-        for inicio in range(0, len(turnos), TURNOS_POR_BLOCO):
-            # Repete os 2 turnos anteriores para não perder o tópico anunciado pelo Analyst.
-            bloco = turnos[max(0, inicio - 2):inicio + TURNOS_POR_BLOCO]
-            resposta = self.chamar_llm("gemeo_extrair", PROMPT_EXTRAIR, [{"role": "user", "content": como_json({
-                "projeto": projeto["titulo"],
-                "idioma": projeto.get("idioma", "en"),
-                "extrair_a_partir_de": turnos[inicio]["id"],
-                "transcricao": "\n".join(f"[{t['id']}] {t['falante']}: {t['texto']}" for t in bloco),
-            })}])
-            for req in resposta.get("requisitos", []):
-                if not req.get("texto"):
-                    continue
-                candidatos.append({
-                    "indice": len(candidatos),
-                    "texto": req["texto"].strip(),
-                    "classe": "NFR" if str(req.get("classe", "")).upper() == "NFR" else "FR",
-                    "subtipo": req.get("subtipo") if str(req.get("classe", "")).upper() == "NFR" else None,
-                    "tema": req.get("tema") or "geral",
-                    "turnos": [t for t in req.get("turnos", []) if isinstance(t, str)],
-                })
-        self.enviar(GEMEO, "extracao", {"projeto": projeto["id"], "requisitos": candidatos})
-        return candidatos
+        fala = turnos[indice_fala]
+        linha = lambda t: f"[{t['id']}] {t['falante']}: {t['texto']}"
+        resposta = self.chamar_llm("gemeo_rascunhar", PROMPT_RASCUNHAR, [{"role": "user", "content": como_json({
+            "projeto": projeto["titulo"],
+            "idioma": projeto.get("idioma", "en"),
+            "contexto": [linha(t) for t in turnos[max(0, indice_fala - FALAS_DE_CONTEXTO):indice_fala]],
+            "fala": linha(fala),
+            "ja_salvos": ja_salvos[-SALVOS_NO_PROMPT:],
+        })}])
+        rascunhos = []
+        for req in resposta.get("requisitos", []):
+            if not req.get("texto"):
+                continue
+            nfr = str(req.get("classe", "")).upper() == "NFR"
+            rascunhos.append({
+                "indice": proximo_indice + len(rascunhos),
+                "texto": req["texto"].strip(),
+                "classe": "NFR" if nfr else "FR",
+                "subtipo": req.get("subtipo") if nfr else None,
+                "tema": req.get("tema") or "geral",
+                "turnos": [fala["id"]],
+            })
+        if rascunhos:
+            self.enviar(GEMEO, "extracao", {"turno": fala["id"], "requisitos": rascunhos})
+        return rascunhos
 
     def decidir(self, rascunho: dict, sugestao: dict, falas: dict[str, str], idioma: str = "en") -> dict:
         """Voto final: salvar (como está ou corrigido) ou descartar o rascunho."""

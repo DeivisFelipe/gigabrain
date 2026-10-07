@@ -1,18 +1,17 @@
-"""Processa a transcrição de uma reunião inteira (modo pós-reunião em lote).
+"""Processa a transcrição de uma reunião, fala por fala (modo pós-reunião em lote).
 
-    transcrição ──▶ Gêmeo lista os rascunhos de requisito (citando turnos)
-                       │
-                       ├─ agente único (baseline): cada rascunho vai direto para o Repositório
-                       │
-                       └─ conselho, UM rascunho por vez:
-                            Gêmeo ──consulta──▶ Líder ──▶ especialista do tema
-                              ▲                               │ recomenda: manter, corrigir,
-                              └──── recomendação ◀────────────┘ descartar, ligações
-                            Gêmeo decide (voto final) ──▶ Repositório de Requisitos
-                          o próximo rascunho já é revisado sabendo dos que foram salvos
-                       │
-                       ▼
-          especialistas atualizam o conhecimento ──▶ avaliação contra o gabarito
+    para cada fala de stakeholder:
+      Reunião ──fala──▶ Gêmeo rascunha os requisitos daquela fala
+                          │
+                          ├─ agente único (baseline): salva o rascunho direto
+                          │
+                          └─ conselho, um rascunho por vez:
+                               Gêmeo ──consulta──▶ Líder ──▶ especialista do tema
+                                 ▲                               │ recomenda: manter, corrigir,
+                                 └──── recomendação ◀────────────┘ descartar, ligações
+                               Gêmeo decide (voto final) ──▶ Repositório de Requisitos
+                               especialista aprende na hora (atualiza o conhecimento)
+      ──▶ próxima fala
 
 Não há PO na reunião processada em lote: o Gêmeo Digital, que representa o PO no
 Conselho Deliberativo, dá o voto final. O Conselho Consultivo só recomenda.
@@ -65,46 +64,51 @@ def processar(ctx: Contexto, projeto: dict, com_conselho: bool = True) -> dict:
 
     gemeo = GemeoDigital(ctx)
     lider = Lider(ctx) if com_conselho else None
-    rascunhos = gemeo.extrair_da_transcricao(projeto)
+    previstos, descartados, total = [], [], 0
 
-    previstos, descartados, salvos_por_tema = [], [], {}
-    for rascunho in rascunhos:
-        sugestao = None
-        if com_conselho:
-            citadas = {t: falas[t] for t in rascunho["turnos"] if t in falas}
-            gemeo.enviar(LIDER, "consulta", {
-                "pergunta": f"rascunho {rascunho['indice'] + 1}/{len(rascunhos)}: {rascunho['texto'][:100]}",
-                "rascunho": rascunho,
-            })
-            sugestao = lider.consultar_rascunho(rascunho, citadas, idioma)
-            final = gemeo.decidir(rascunho, sugestao, citadas, idioma)
-        else:
-            final = {"salvar": True, "texto": rascunho["texto"], "classe": rascunho["classe"],
-                     "subtipo": rascunho["subtipo"], "ligacoes": [], "motivo": "extraído da transcrição"}
-        if not final["salvar"]:
-            descartados.append({**rascunho, "recomendacao": sugestao, "motivo": final["motivo"]})
+    for i, turno in enumerate(projeto["turnos"]):
+        if turno["falante"] == "Analyst":  # o Analyst só conduz; vira contexto das próximas falas
             continue
-        resultado = _salvar(ctx, projeto, rascunho, final, sugestao)
-        previstos.append({"id": resultado["requisito_id"], "texto": final["texto"], "classe": final["classe"],
-                          "subtipo": final["subtipo"], "turnos": rascunho["turnos"], "tema": rascunho["tema"]})
-        salvos_por_tema.setdefault(slug(rascunho["tema"]), []).append(previstos[-1])
+        _registrar(ctx, SISTEMA, GEMEO, "fala", {"turno": turno["id"], "falante": turno["falante"], "texto": turno["texto"]})
+        ja_salvos = [{"id": p["id"], "texto": p["texto"]} for p in previstos]
+        rascunhos = gemeo.rascunhar(projeto, i, ja_salvos, total)
+        total += len(rascunhos)
 
-    if com_conselho:
-        _atualizar_especialistas(ctx, salvos_por_tema)
+        for rascunho in rascunhos:  # cada rascunho vai até o fim antes do próximo
+            sugestao = None
+            if com_conselho:
+                citadas = {t: falas[t] for t in rascunho["turnos"] if t in falas}
+                gemeo.enviar(LIDER, "consulta", {"pergunta": f"rascunho da fala {turno['id']}: {rascunho['texto'][:100]}", "rascunho": rascunho})
+                sugestao = lider.consultar_rascunho(rascunho, citadas, idioma)
+                final = gemeo.decidir(rascunho, sugestao, citadas, idioma)
+            else:
+                final = {"salvar": True, "texto": rascunho["texto"], "classe": rascunho["classe"],
+                         "subtipo": rascunho["subtipo"], "ligacoes": [], "motivo": "extraído da transcrição"}
+            if not final["salvar"]:
+                descartados.append({**rascunho, "recomendacao": sugestao, "motivo": final["motivo"]})
+                continue
+            resultado = _salvar(ctx, projeto, rascunho, final, sugestao)
+            previstos.append({"id": resultado["requisito_id"], "texto": final["texto"], "classe": final["classe"],
+                              "subtipo": final["subtipo"], "turnos": rascunho["turnos"], "tema": rascunho["tema"]})
+            if com_conselho:
+                _especialista_aprende(ctx, rascunho["tema"], resultado, final)
+
     ctx.banco.encerrar_conversa(ctx.conversa_id, "aprovada")
     return {"conversa_id": ctx.conversa_id, "previstos": previstos, "descartados": descartados}
 
 
-def _atualizar_especialistas(ctx: Contexto, salvos_por_tema: dict[str, list[dict]]) -> None:
-    """No fim da reunião, uma atualização por especialista com os requisitos do tema dele."""
-    for tema_slug, grupo in salvos_por_tema.items():
-        esp = Especialista.carregar(ctx, tema_slug)
-        if not esp:
-            continue
-        esp.atualizar({
-            "tipo": "lote_aprovado",
-            "requisitos": [{"id": r["id"], "versao": 1, "titulo": r["texto"][:80], "classe": r["classe"]} for r in grupo],
-        }, f"{len(grupo)} requisito(s) da transcrição")
+def _especialista_aprende(ctx: Contexto, tema: str, resultado: dict, final: dict) -> None:
+    """Logo depois de salvar, o especialista do tema registra o requisito no conhecimento."""
+    esp = Especialista.carregar(ctx, slug(tema))
+    if not esp:
+        return
+    esp.atualizar({
+        "tipo": "requisito_aprovado",
+        "requisito": {"id": resultado["requisito_id"], "versao": resultado["versao"], "titulo": final["texto"][:80],
+                      "texto": final["texto"], "classe": final["classe"], "motivo": final.get("motivo")},
+        "ligacoes": resultado["ligacoes"],
+        "em_revisao": resultado["em_revisao"],
+    }, f"{resultado['requisito_id']} salvo")
 
 
 def processar_e_avaliar(ctx: Contexto, projeto: dict, pasta_saida: str, com_conselho: bool = True) -> dict:
