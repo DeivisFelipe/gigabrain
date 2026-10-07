@@ -51,6 +51,7 @@ class ProvedorOpenAICompativel:
                 model=self.modelo,
                 messages=conversa,
                 response_format={"type": "json_object"},
+                max_tokens=8192,  # extrair requisitos de um bloco de reunião gera respostas longas
             )
             uso = resposta.usage
             self.ultimo_uso = {
@@ -101,6 +102,40 @@ def _adivinhar_temas(texto: str) -> list[str]:
         if chave in t and tema not in temas:
             temas.append(tema)
     return temas or ["geral"]
+
+
+HESITACOES = r"\b(uh|uhm|um|erm|you know|i mean|sort of|basically)\b,?\s*|\[(crosstalk|laughter)\]\s*"
+
+PALAVRAS_NFR = [
+    ("PE", r"response time|seconds?\b|performance|fast|latency|throughput"),
+    ("SE", r"secur|encrypt|authenticat|password|permission|access control|privacy"),
+    ("US", r"easy|easily|intuitive|usab|user[- ]friendly|learn"),
+    ("LF", r"look|colou?r|font|layout|appearance"),
+    ("A", r"availab|24 ?/ ?7|uptime"),
+    ("PO", r"portab|platform|browser|operating system|windows|linux"),
+    ("MN", r"maintain|modular"),
+    ("SC", r"scal|concurrent users"),
+    ("L", r"licen[cs]e|law|legal|regulat|complian"),
+    ("FT", r"backup|recover|fault|failure"),
+]
+
+
+# Marcadores de discurso no início da fala ("como eu disse", "na verdade, queremos mudar").
+MARCADORES = r"^(as i (said|mentioned)[^,:]*[,:]|just to (repeat|reiterate)[^,:]*[,:]|like i mentioned[^,:]*[,:]|again, as we discussed[,:]|actually,[^:]*:|we talked to the team[^:]*:|change of plan[^:]*:)\s*"
+
+
+def _limpar_fala(texto: str) -> str:
+    texto = re.sub(MARCADORES, "", texto.strip(), flags=re.I)
+    texto = re.sub(HESITACOES, "", texto, flags=re.I)
+    texto = re.sub(r"\b(\w+) \1\b", r"\1", texto, flags=re.I)  # "the the" -> "the"
+    return re.sub(r"\s+", " ", texto).strip()
+
+
+def _classificar(frase: str) -> tuple[str, str | None]:
+    for subtipo, padrao in PALAVRAS_NFR:
+        if re.search(padrao, frase, re.I):
+            return "NFR", subtipo
+    return "FR", None
 
 
 def _ultimo(mensagens: list[dict]) -> dict:
@@ -191,6 +226,77 @@ class ProvedorSimulado:
             "requisitos": [requisito],
         }
 
+    def _gemeo_rascunhar(self, mensagens: list[dict]) -> dict:
+        """Baseline por regras: cada frase da fala com cara de requisito vira um rascunho."""
+        entrada = _ultimo(mensagens)
+        tema = "geral"
+        for linha in entrada.get("contexto", []):
+            topico = re.search(r"\] Analyst: .*?(?:next topic|talk about|move on to)[:\s]+([^.?]+)", linha, re.I)
+            if topico:
+                tema = topico.group(1).strip().lower()
+        m = re.match(r"\[(T\d+)\] (\w+): (.*)", entrada["fala"])
+        if not m:
+            return {"requisitos": []}
+        _, falante, texto = m.groups()
+        if falante == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", texto, re.I):
+            return {"requisitos": []}
+        requisitos = []
+        for frase in re.split(r"(?<=[.!?])\s+", _limpar_fala(texto)):
+            if len(frase.split()) >= 6:
+                classe, subtipo = _classificar(frase)
+                requisitos.append({"texto": frase, "classe": classe, "subtipo": subtipo, "tema": tema})
+        return {"requisitos": requisitos}
+
+    def _especialista_revisar(self, mensagens: list[dict]) -> dict:
+        """Recomenda descartar o rascunho quase igual a um requisito já salvo do tema."""
+        entrada = _ultimo(mensagens)
+        from .avaliacao import similaridade
+        texto = entrada["rascunho"]["texto"]
+        salvos = entrada.get("requisitos_do_tema", []) + entrada.get("parecidos_de_outros_temas", [])
+        melhor = max(salvos, key=lambda r: similaridade(texto, r.get("texto") or r.get("titulo") or ""), default=None)
+        s = similaridade(texto, melhor.get("texto") or melhor.get("titulo") or "") if melhor else 0
+        numeros = lambda t: set(re.findall(r"\d+", t or ""))
+        if s >= 0.85 and numeros(texto) != numeros(melhor.get("texto") or melhor.get("titulo")):
+            # Mesmo assunto com outro valor: é uma mudança, não uma repetição.
+            return {"acao": "manter", "duplicado_de": None, "motivo": f"muda um valor do {melhor['id']}",
+                    "ligacoes": [{"tipo": "conflita_com", "alvo": melhor["id"], "motivo": "valor diferente do requisito salvo"}]}
+        if s >= 0.85:
+            return {"acao": "descartar", "duplicado_de": melhor["id"], "ligacoes": [], "motivo": f"repete o {melhor['id']}"}
+        if s >= 0.5:  # parecido, mas com algo novo: liga em vez de descartar
+            return {"acao": "manter", "duplicado_de": None, "motivo": f"parecido com o {melhor['id']}",
+                    "ligacoes": [{"tipo": "refina", "alvo": melhor["id"], "motivo": "detalha ou altera um requisito salvo"}]}
+        return {"acao": "manter", "duplicado_de": None, "ligacoes": [], "motivo": "sem duplicados no tema"}
+
+    def _especialista_qualidade(self, mensagens: list[dict]) -> dict:
+        classe, subtipo = _classificar(_ultimo(mensagens)["rascunho"]["texto"])
+        return {"classe": classe, "subtipo": subtipo, "motivo": "palavras-chave da taxonomia"}
+
+    def _llm_puro(self, mensagens: list[dict]) -> dict:
+        """Baseline por regras sobre a reunião inteira (sem contexto de tópico)."""
+        requisitos = []
+        for linha in mensagens[-1]["content"].splitlines():
+            m = re.match(r"\[(T\d+)\] (\w+): (.*)", linha)
+            if not m or m.group(2) == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", m.group(3), re.I):
+                continue
+            for frase in re.split(r"(?<=[.!?])\s+", _limpar_fala(m.group(3))):
+                if len(frase.split()) >= 6:
+                    classe, subtipo = _classificar(frase)
+                    requisitos.append({"texto": frase, "classe": classe, "subtipo": subtipo, "turnos": [m.group(1)]})
+        return {"requisitos": requisitos}
+
+    def _gemeo_decidir(self, mensagens: list[dict]) -> dict:
+        """Segue a recomendação do especialista."""
+        entrada = _ultimo(mensagens)
+        rec, rascunho = entrada["recomendacao"], entrada["rascunho"]
+        return {
+            "salvar": rec["acao"] != "descartar",
+            "texto": rec.get("texto") or rascunho["texto"],
+            "classe": rec.get("classe") or rascunho["classe"],
+            "subtipo": rec.get("subtipo") or rascunho["subtipo"],
+            "ligacoes": rec.get("ligacoes", []),
+            "motivo": f"segui a recomendação ({rec['acao']}): {rec.get('motivo', '')}",
+        }
+
     # Líder -----------------------------------------------------------------
 
     def _lider_decompor(self, mensagens: list[dict]) -> dict:
@@ -275,6 +381,8 @@ class ProvedorSimulado:
             for rid in gatilho.get("em_revisao", []):
                 md = conhecimento.adicionar_item(md, "Pontos em aberto", f"{rid} precisa ser revisto porque {req['id']} mudou")
                 mudancas.append(f"{rid} em revisão")
+        elif gatilho["tipo"] == "reorganizar":
+            mudancas.append("nada a reorganizar")
         elif gatilho["tipo"] == "documento":
             for linha in gatilho["texto"].splitlines():
                 linha = linha.strip().lstrip("-*").strip()

@@ -7,13 +7,15 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import sqlite3
 import tempfile
 import unittest
 
 from gigabrain import conhecimento
 from gigabrain.agentes import Especialista
 from gigabrain.aprovacao import eh_aprovacao
-from gigabrain.banco import Banco
+from gigabrain.banco import SCHEMA, Banco
 from gigabrain.conselho import Conselho, abrir_contexto, alimentar_especialista
 from gigabrain.provedores import ProvedorSimulado
 
@@ -36,7 +38,7 @@ class TestBanco(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
-        self.banco = Banco(os.path.join(self.tmp.name, "t.db"))
+        self.banco = Banco(self.tmp.name)
         self.addCleanup(self.banco.fechar)
 
     def test_versoes_e_ligacoes(self):
@@ -63,6 +65,24 @@ class TestBanco(unittest.TestCase):
     def test_ignora_ligacao_para_requisito_inexistente(self):
         r = self.banco.salvar_requisito(requisito("x"), None, ligacoes=[{"tipo": "refina", "alvo": "R99"}])
         self.assertEqual(r["ligacoes"], [])
+
+    def test_bancos_separados_e_migracao_do_formato_antigo(self):
+        for arquivo in ("requisitos.db", "especialistas.db", "log.db"):
+            self.assertTrue(os.path.exists(os.path.join(self.tmp.name, arquivo)), arquivo)
+
+        # Pasta no formato antigo: tudo num gigabrain.db.
+        antiga = os.path.join(self.tmp.name, "antiga")
+        os.makedirs(antiga)
+        con = sqlite3.connect(os.path.join(antiga, "gigabrain.db"))
+        con.executescript(re.sub(r"(main|esp|log)[.]", "", SCHEMA))
+        con.execute("INSERT INTO conversa VALUES ('c-1', '2026-01-01T00:00:00', NULL, 'pos_reuniao', 'aberta')")
+        con.commit()
+        con.close()
+        banco = Banco(antiga)
+        self.addCleanup(banco.fechar)
+        self.assertEqual([c["id"] for c in banco.listar_conversas()], ["c-1"])
+        self.assertTrue(os.path.exists(os.path.join(antiga, "gigabrain.db.migrado")))
+        self.assertFalse(os.path.exists(os.path.join(antiga, "gigabrain.db")))
 
     def test_conhecimento_nao_duplica_versao_igual(self):
         self.banco.criar_especialista("pagamentos", "pagamentos", "d", "arq.md")

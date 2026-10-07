@@ -33,6 +33,7 @@ class Contexto:
     pasta_conhecimento: str
     modo: str = "pos_reuniao"
     conversa_id: str | None = None
+    com_qualidade: bool = True  # consultar o especialista de qualidade (classe FR/NFR e subtipo)
 
 
 def resumo_requisito(req: dict) -> dict:
@@ -43,6 +44,7 @@ def resumo_requisito(req: dict) -> dict:
         "versao": req["versao_atual"],
         "status": req["status"],
         "titulo": c.get("titulo"),
+        "texto": c.get("texto"),
         "historia": c.get("historia"),
         "criterios_aceite": c.get("criterios_aceite", []),
         "temas": req["temas"],

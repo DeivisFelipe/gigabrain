@@ -12,7 +12,7 @@ O PO sempre tem a palavra final: nada é salvo sem aprovação explícita.
 
 from __future__ import annotations
 
-from ..mensagens import LIDER, PO
+from ..mensagens import GEMEO, LIDER, PO
 from .base import Agente, como_json
 
 SYSTEM_PROMPT = """\
@@ -73,6 +73,69 @@ Seja direto e conciso. Não repita o que o PO já disse.
 """
 
 
+PROMPT_RASCUNHAR = """\
+Você é o Gêmeo Digital do GigaBrain e acompanha uma reunião de elicitação (Analyst, Client,
+TechLead, EndUser) FALA POR FALA. Você recebe a fala atual de um stakeholder, as falas
+anteriores como contexto e os requisitos que você já salvou nesta reunião. Rascunhe os
+requisitos de software ditos NESTA fala: pode ser nenhum, um ou mais.
+
+Regras:
+- Granularidade: um requisito por funcionalidade ou regra dita na fala, do jeito que o
+  stakeholder a formulou. NÃO quebre uma frase em vários requisitos: uma lista de campos,
+  opções ou exemplos da mesma funcionalidade é UM requisito só. Frases diferentes com
+  obrigações diferentes são requisitos diferentes.
+- Fala sem requisito -> lista vazia: apresentação geral do produto (o que ele é, para que
+  serve, licença), cumprimentos, problemas de conexão, confirmações.
+- Não rascunhe de novo algo que já está em "ja_salvos". Um detalhe novo sobre o mesmo
+  assunto é outro requisito.
+- IDIOMA: escreva "texto" no idioma do campo "idioma" (en = inglês). NUNCA traduza,
+  mesmo que estas instruções estejam em português. Copie as palavras do stakeholder,
+  tirando só hesitações (uh, erm, you know, i mean), repetições ("the the") e o início
+  coloquial ("I'd like", "we'd need to be able to"). Ex.: fala "Uh, I'd like the the
+  system to export reports to PDF" -> texto "The system shall export reports to PDF".
+- "classe": "FR" (funcional) ou "NFR" (não funcional).
+- "subtipo" só para NFR: PE (desempenho), SE (segurança), US (usabilidade),
+  LF (aparência), A (disponibilidade), SA (safety), PO (portabilidade),
+  MN (manutenibilidade), SC (escalabilidade), L (legal), FT (tolerância a falhas),
+  OT (outro). Para FR use null.
+- "tema": tema de negócio curto, em português (ex.: "banco de dados", "busca",
+  "segurança"). Use o tópico que o Analyst anunciou no contexto.
+
+Responda com um único objeto JSON:
+{"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "tema": "..."}]}
+"""
+
+# Baseline "LLM puro": um pedido mínimo, sem as regras do Gêmeo, sem conselho.
+PROMPT_LLM_PURO = """\
+Extract the software requirements from the meeting transcript below. Write each requirement
+in the language of the transcript. For each one give its class (FR or NFR), the NFR subtype
+code if NFR (PE, SE, US, LF, A, SA, PO, MN, SC, L, FT, OT; null for FR) and the ids of the
+turns where it was said.
+
+Answer with a single JSON object:
+{"requisitos": [{"texto": "...", "classe": "FR", "subtipo": null, "turnos": ["T8"]}]}
+"""
+
+FALAS_DE_CONTEXTO = 6
+SALVOS_NO_PROMPT = 30
+
+PROMPT_DECIDIR = """\
+Você é o Gêmeo Digital, representante do PO no Conselho Deliberativo do GigaBrain, e tem o
+voto final sobre o que entra no Repositório de Requisitos. O especialista do tema revisou o
+seu rascunho e fez uma recomendação. Decida:
+- salvar o requisito (aplicando ou não as correções e ligações sugeridas), ou
+- descartá-lo (por exemplo, se repete um requisito já salvo ou não tem respaldo nas falas).
+Siga a recomendação quando ela se apoia nas falas; rejeite-a quando contraria o que foi dito.
+Descarte por duplicado quando o rascunho diz o mesmo que um requisito salvo, mesmo com
+outras palavras; salve e ligue com "refina" só quando ele traz informação nova.
+IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza.
+
+Responda com um único objeto JSON:
+{"salvar": true, "texto": "...", "classe": "FR" | "NFR", "subtipo": null,
+ "ligacoes": [{"tipo": "depende_de", "alvo": "R2", "motivo": "..."}], "motivo": "por que decidiu assim"}
+"""
+
+
 class GemeoDigital(Agente):
     nome = "gemeo"
 
@@ -108,3 +171,74 @@ class GemeoDigital(Agente):
 
     def ouvir_sistema(self, aviso: str) -> dict:
         return self._decidir({"de": "sistema", "aviso": aviso})
+
+    def rascunhar(self, projeto: dict, indice_fala: int, ja_salvos: list[dict], proximo_indice: int) -> list[dict]:
+        """Lê UMA fala da reunião (com as anteriores como contexto) e devolve os rascunhos dela."""
+        turnos = projeto["turnos"]
+        fala = turnos[indice_fala]
+        linha = lambda t: f"[{t['id']}] {t['falante']}: {t['texto']}"
+        resposta = self.chamar_llm("gemeo_rascunhar", PROMPT_RASCUNHAR, [{"role": "user", "content": como_json({
+            "projeto": projeto["titulo"],
+            "idioma": projeto.get("idioma", "en"),
+            "contexto": [linha(t) for t in turnos[max(0, indice_fala - FALAS_DE_CONTEXTO):indice_fala]],
+            "fala": linha(fala),
+            "ja_salvos": ja_salvos[-SALVOS_NO_PROMPT:],
+        })}])
+        rascunhos = []
+        for req in resposta.get("requisitos", []):
+            if not req.get("texto"):
+                continue
+            nfr = str(req.get("classe", "")).upper() == "NFR"
+            rascunhos.append({
+                "indice": proximo_indice + len(rascunhos),
+                "texto": req["texto"].strip(),
+                "classe": "NFR" if nfr else "FR",
+                "subtipo": req.get("subtipo") if nfr else None,
+                "tema": req.get("tema") or "geral",
+                "turnos": [fala["id"]],
+            })
+        if rascunhos:
+            self.enviar(GEMEO, "extracao", {"turno": fala["id"], "requisitos": rascunhos})
+        return rascunhos
+
+    def extrair_tudo_de_uma_vez(self, projeto: dict) -> list[dict]:
+        """Baseline "LLM puro": a reunião inteira num pedido só, com o prompt mínimo."""
+        resposta = self.chamar_llm("llm_puro", PROMPT_LLM_PURO, [{"role": "user", "content": "\n".join(
+            f"[{t['id']}] {t['falante']}: {t['texto']}" for t in projeto["turnos"])}])
+        rascunhos = []
+        for req in resposta.get("requisitos", []):
+            if not req.get("texto"):
+                continue
+            nfr = str(req.get("classe", "")).upper() == "NFR"
+            rascunhos.append({"indice": len(rascunhos), "texto": req["texto"].strip(), "classe": "NFR" if nfr else "FR",
+                              "subtipo": req.get("subtipo") if nfr else None, "tema": "geral",
+                              "turnos": [t for t in req.get("turnos", []) if isinstance(t, str)]})
+        self.enviar(GEMEO, "extracao", {"requisitos": rascunhos})
+        return rascunhos
+
+    def decidir(self, rascunho: dict, sugestao: dict, falas: dict[str, str], idioma: str = "en") -> dict:
+        """Voto final: salvar (como está ou corrigido) ou descartar o rascunho."""
+        if sugestao["acao"] == "manter" and not sugestao.get("ligacoes"):
+            decisao = {"salvar": True, "texto": rascunho["texto"], "classe": rascunho["classe"],
+                       "subtipo": rascunho["subtipo"], "ligacoes": [], "motivo": "especialista concordou com o rascunho"}
+        else:
+            resposta = self.chamar_llm("gemeo_decidir", PROMPT_DECIDIR, [{"role": "user", "content": como_json({
+                "idioma": idioma,
+                "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo", "turnos")},
+                "recomendacao": sugestao,
+                "falas": falas,
+            })}])
+            classe = "NFR" if str(resposta.get("classe", rascunho["classe"])).upper() == "NFR" else "FR"
+            decisao = {
+                "salvar": bool(resposta.get("salvar", True)),
+                "texto": (resposta.get("texto") or rascunho["texto"]).strip(),
+                "classe": classe,
+                "subtipo": resposta.get("subtipo") if classe == "NFR" else None,
+                "ligacoes": [l for l in resposta.get("ligacoes", []) if isinstance(l, dict) and l.get("alvo")],
+                "motivo": resposta.get("motivo", ""),
+            }
+        self.enviar(GEMEO, "decisao", {
+            "rascunho": rascunho["indice"], "salvar": decisao["salvar"], "recomendacao": sugestao["acao"],
+            "texto": ("salvar: " if decisao["salvar"] else "descartar: ") + decisao["motivo"],
+        })
+        return decisao

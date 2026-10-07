@@ -17,7 +17,7 @@ from __future__ import annotations
 
 from .. import conhecimento
 from ..banco import slug
-from ..mensagens import LIDER, SISTEMA, especialista
+from ..mensagens import LIDER, REGISTRO, especialista
 from .base import Agente, como_json, resumo_requisito
 
 PROMPT_RESPONDER = """\
@@ -57,6 +57,47 @@ Responda com um único objeto JSON:
 """
 
 
+PROMPT_QUALIDADE = """\
+Você é o especialista de qualidade do GigaBrain. Seu único trabalho é conferir a
+classificação de um rascunho de requisito: funcional (FR) ou não funcional (NFR) e, se NFR,
+o subtipo. Use as regras e o glossário do seu arquivo de conhecimento. Você só recomenda.
+
+Responda com um único objeto JSON:
+{"classe": "FR" | "NFR", "subtipo": "PE" | "SE" | "US" | "LF" | "A" | "SA" | "PO" | "MN" | "SC" | "L" | "FT" | "OT" | null,
+ "motivo": "curto"}
+"""
+
+PROMPT_REVISAR = """\
+Você é um especialista do GigaBrain e revisa UM rascunho de requisito do seu tema, extraído
+da transcrição de uma reunião pelo Gêmeo Digital. Você recebe o rascunho, as falas que ele
+cita, o seu arquivo de conhecimento, os requisitos do seu tema já salvos e requisitos
+parecidos de outros temas. Você só RECOMENDA; quem decide é o Gêmeo Digital.
+
+Recomende uma ação:
+- "manter":    correto e com respaldo nas falas
+- "corrigir":  tem respaldo, mas o texto, a classe (FR/NFR) ou o subtipo precisam de ajuste
+- "descartar": em dois casos:
+    1. DUPLICADO: diz o mesmo que um requisito já salvo, mesmo com outras palavras
+       ("must" x "needs to", "the user shall" x "the system shall allow the user to")
+       ou com "como eu disse antes" na frente (diga qual em "duplicado_de").
+       Compare o CONTEÚDO: se não há nenhuma informação nova, é duplicado.
+    2. SEM RESPALDO: as falas citadas não dizem isso.
+Só é "refina" (recomende "manter" com a ligação) quando o rascunho traz informação
+NOVA sobre um requisito salvo: um campo, uma condição, um limite ou um caso a mais.
+Se não há duplicado nem informação nova a ligar, recomende "manter". Aponte ligações com requisitos já salvos ("alvo": "R3"):
+depende_de, conflita_com, refina. Mudança de um requisito salvo (outro valor, outra regra)
+é "conflita_com" ou, se o PO claramente trocou a regra, "substitui".
+Não invente requisitos e mantenha as palavras originais.
+IDIOMA: "texto" fica no idioma do campo "idioma" (en = inglês). NUNCA traduza; traduzir
+não é uma correção.
+
+Responda com um único objeto JSON:
+{"acao": "manter" | "corrigir" | "descartar", "texto": "só se corrigir", "classe": "só se corrigir",
+ "subtipo": "só se corrigir", "duplicado_de": "R3" ou null,
+ "ligacoes": [{"tipo": "depende_de", "alvo": "R2", "motivo": "..."}], "motivo": "curto"}
+"""
+
+
 class Especialista(Agente):
     def __init__(self, ctx, dados: dict):
         super().__init__(ctx)
@@ -85,6 +126,14 @@ class Especialista(Agente):
         return novo
 
     @classmethod
+    def criar_fixo(cls, ctx, id_: str, tema: str, descricao: str, md: str) -> Especialista:
+        """Especialista com conhecimento pronto (ex.: a taxonomia de qualidade), sem LLM."""
+        dados = ctx.banco.criar_especialista(id_, tema, descricao, conhecimento.caminho(ctx.pasta_conhecimento, id_))
+        novo = cls(ctx, dados)
+        novo._gravar(md, "criação", {"criado_por": "sistema", "conhecimento": "fixo"})
+        return novo
+
+    @classmethod
     def carregar(cls, ctx, id_: str) -> Especialista | None:
         dados = ctx.banco.obter_especialista(id_)
         return cls(ctx, dados) if dados else None
@@ -101,7 +150,7 @@ class Especialista(Agente):
         conhecimento.escrever(self.arquivo, md)
         versao = self.ctx.banco.registrar_conhecimento(self.id, conhecimento.ler(self.arquivo), motivo, origem)
         if versao:
-            self.enviar(SISTEMA, "conhecimento_atualizado", {
+            self.enviar(REGISTRO, "conhecimento_atualizado", {
                 "especialista_id": self.id, "versao": versao, "motivo": motivo, **origem,
             })
         return versao
@@ -125,6 +174,79 @@ class Especialista(Agente):
         if not md:
             return None
         return self._gravar(md, motivo, {"gatilho": gatilho["tipo"], "mudancas": resposta.get("mudancas", [])})
+
+    def registrar_requisito(self, requisito: dict, ligacoes: list[dict], em_revisao: list[str]) -> int | None:
+        """Anota um requisito salvo no arquivo, sem LLM; reorganiza com o LLM de vez em quando."""
+        self.sincronizar()
+        md = self.ler_conhecimento()
+        md = conhecimento.adicionar_item(md, "Requisitos aprovados", f"{requisito['id']} ({requisito['classe']}) — {requisito['texto']}")
+        if requisito.get("motivo"):
+            md = conhecimento.adicionar_item(md, "Decisões (e o porquê)", f"{requisito['id']}: {requisito['motivo']}")
+        for lig in ligacoes:
+            md = conhecimento.adicionar_item(md, "Decisões (e o porquê)", f"{lig['origem']} {lig['tipo'].replace('_', ' ')} {lig['destino']}")
+        for rid in em_revisao:
+            md = conhecimento.adicionar_item(md, "Pontos em aberto", f"{rid} precisa ser revisto porque {requisito['id']} mudou")
+        versao = self._gravar(md, f"{requisito['id']} salvo", {"gatilho": "requisito_salvo", "mudancas": [f"anotei {requisito['id']}"]})
+        if versao and (versao % conhecimento.REORGANIZAR_A_CADA == 0 or len(md) > conhecimento.LIMITE_CARACTERES):
+            versao = self.atualizar({"tipo": "reorganizar"}, "reorganização periódica") or versao
+        return versao
+
+    # ------------------------------------------------------------------ revisão de rascunho
+
+    def revisar(self, rascunho: dict, falas: dict[str, str], idioma: str = "en") -> dict:
+        """Recomenda o que fazer com um rascunho de requisito (não decide)."""
+        self.sincronizar()
+        resposta = self.chamar_llm("especialista_revisar", PROMPT_REVISAR, [{"role": "user", "content": como_json({
+            "tema": self.tema,
+            "idioma": idioma,
+            "conhecimento": self.ler_conhecimento(),
+            "requisitos_do_tema": self.requisitos_do_tema(),
+            "parecidos_de_outros_temas": self.parecidos_de_outros_temas(rascunho["texto"]),
+            "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo", "turnos")},
+            "falas": falas,
+        })}])
+        acao = resposta.get("acao") if resposta.get("acao") in ("manter", "corrigir", "descartar") else "manter"
+        sugestao = {
+            "especialista_id": self.id,
+            "versao_conhecimento": self.ctx.banco.obter_especialista(self.id)["versao_conhecimento"],
+            "acao": acao,
+            "texto": resposta.get("texto") if acao == "corrigir" else None,
+            "classe": resposta.get("classe") if acao == "corrigir" else None,
+            "subtipo": resposta.get("subtipo") if acao == "corrigir" else None,
+            "duplicado_de": resposta.get("duplicado_de"),
+            "ligacoes": [l for l in resposta.get("ligacoes", []) if isinstance(l, dict) and l.get("alvo")],
+            "motivo": resposta.get("motivo", ""),
+        }
+        self.enviar(LIDER, "resposta_especialista", {**sugestao, "resposta": f"{acao}: {sugestao['motivo']}"})
+        return sugestao
+
+    def parecidos_de_outros_temas(self, texto: str, limite: int = 5) -> list[dict]:
+        """Requisitos de outros temas com palavras em comum: duplicados podem cruzar temas."""
+        from ..avaliacao import similaridade
+        candidatos = []
+        for req in self.ctx.banco.listar_requisitos(apenas_ativos=True):
+            if self.id in req["temas"]:
+                continue
+            s = similaridade(texto, req["conteudo"].get("texto") or req["titulo"])
+            if s >= 0.3:
+                candidatos.append((s, resumo_requisito(req)))
+        candidatos.sort(key=lambda c: -c[0])
+        return [r for _, r in candidatos[:limite]]
+
+    def revisar_qualidade(self, rascunho: dict) -> dict:
+        """Recomenda a classe (FR/NFR) e o subtipo do rascunho."""
+        resposta = self.chamar_llm("especialista_qualidade", PROMPT_QUALIDADE, [{"role": "user", "content": como_json({
+            "conhecimento": self.ler_conhecimento(),
+            "rascunho": {k: rascunho[k] for k in ("texto", "classe", "subtipo")},
+        })}])
+        classe = "NFR" if str(resposta.get("classe", rascunho["classe"])).upper() == "NFR" else "FR"
+        sugestao = {"classe": classe, "subtipo": resposta.get("subtipo") if classe == "NFR" else None,
+                    "motivo": resposta.get("motivo", "")}
+        self.enviar(LIDER, "resposta_especialista", {
+            "especialista_id": self.id, "acao": "classificar", **sugestao,
+            "resposta": f"classe {classe}{' / ' + sugestao['subtipo'] if sugestao['subtipo'] else ''}: {sugestao['motivo']}",
+        })
+        return sugestao
 
     # ------------------------------------------------------------------ consulta
 

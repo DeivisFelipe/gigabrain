@@ -1,25 +1,30 @@
-"""Banco local (SQLite) do GigaBrain.
+"""Bancos locais (SQLite) do GigaBrain.
 
-Guarda três coisas:
+São três bases separadas, cada uma num arquivo da pasta de dados:
 
-1. Repositório de Requisitos
+1. Repositório de Requisitos  (requisitos.db)
    - requisito:          o requisito "vivo" (id R1, R2..., status, versão atual)
    - requisito_versao:   cada versão aprovada, sem apagar as anteriores
    - requisito_ligacao:  ligações entre requisitos ("R2 refina R1")
-2. Registro de Especialistas
+2. Registro de Especialistas  (especialistas.db)
    - especialista:               quem existe e qual tema cobre
    - especialista_conhecimento:  cada versão do arquivo de conhecimento
-3. Log
+3. Log  (log.db)
    - conversa:  cada sessão com o PO
    - evento:    cada mensagem JSON trocada entre os agentes
 
 Ligações sempre se leem "origem <tipo> destino". Ex.: "R3 substitui R1".
+
+Os três arquivos são abertos numa conexão só (ATTACH), então as consultas
+continuam simples. Pastas antigas, com tudo num gigabrain.db, são migradas
+automaticamente na primeira abertura.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 import sqlite3
 import unicodedata
@@ -46,7 +51,7 @@ STATUS_APOS_LIGACAO = {
 LIGACOES_DE_EVOLUCAO = ("refina", "divide", "junta", "substitui")
 
 SCHEMA = """
-CREATE TABLE IF NOT EXISTS conversa (
+CREATE TABLE IF NOT EXISTS log.conversa (
     id            TEXT PRIMARY KEY,
     iniciada_em   TEXT NOT NULL,
     encerrada_em  TEXT,
@@ -54,7 +59,7 @@ CREATE TABLE IF NOT EXISTS conversa (
     status        TEXT NOT NULL            -- aberta | aprovada | encerrada
 );
 
-CREATE TABLE IF NOT EXISTS requisito (
+CREATE TABLE IF NOT EXISTS main.requisito (
     id            TEXT PRIMARY KEY,        -- R1, R2, ...
     titulo        TEXT NOT NULL,
     tipo          TEXT NOT NULL,           -- negocio | enabler
@@ -65,28 +70,28 @@ CREATE TABLE IF NOT EXISTS requisito (
     atualizado_em TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS requisito_versao (
+CREATE TABLE IF NOT EXISTS main.requisito_versao (
     requisito_id  TEXT NOT NULL REFERENCES requisito(id),
     versao        INTEGER NOT NULL,
     conteudo      TEXT NOT NULL,           -- JSON: titulo, historia, criterios_aceite...
     fontes        TEXT NOT NULL,           -- JSON: de onde veio cada informação
     motivo        TEXT,                    -- por que essa versão existe
-    conversa_id   TEXT REFERENCES conversa(id),
+    conversa_id   TEXT,                    -- conversa no log.db
     aprovado_em   TEXT NOT NULL,
     PRIMARY KEY (requisito_id, versao)
 );
 
-CREATE TABLE IF NOT EXISTS requisito_ligacao (
+CREATE TABLE IF NOT EXISTS main.requisito_ligacao (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
     origem_id     TEXT NOT NULL REFERENCES requisito(id),
     tipo          TEXT NOT NULL,
     destino_id    TEXT NOT NULL REFERENCES requisito(id),
     motivo        TEXT,
-    conversa_id   TEXT REFERENCES conversa(id),
+    conversa_id   TEXT,                    -- conversa no log.db
     criado_em     TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS especialista (
+CREATE TABLE IF NOT EXISTS esp.especialista (
     id                  TEXT PRIMARY KEY,  -- slug do tema: pagamentos
     tema                TEXT NOT NULL,
     descricao           TEXT NOT NULL,
@@ -97,7 +102,7 @@ CREATE TABLE IF NOT EXISTS especialista (
     atualizado_em       TEXT NOT NULL
 );
 
-CREATE TABLE IF NOT EXISTS especialista_conhecimento (
+CREATE TABLE IF NOT EXISTS esp.especialista_conhecimento (
     especialista_id TEXT NOT NULL REFERENCES especialista(id),
     versao          INTEGER NOT NULL,
     conteudo        TEXT NOT NULL,         -- o Markdown inteiro daquela versão
@@ -108,7 +113,7 @@ CREATE TABLE IF NOT EXISTS especialista_conhecimento (
     PRIMARY KEY (especialista_id, versao)
 );
 
-CREATE TABLE IF NOT EXISTS evento (
+CREATE TABLE IF NOT EXISTS log.evento (
     id           INTEGER PRIMARY KEY AUTOINCREMENT,
     mensagem_id  TEXT NOT NULL,
     conversa_id  TEXT,
@@ -119,10 +124,18 @@ CREATE TABLE IF NOT EXISTS evento (
     conteudo     TEXT NOT NULL            -- JSON da mensagem
 );
 
-CREATE INDEX IF NOT EXISTS idx_evento_conversa ON evento(conversa_id);
-CREATE INDEX IF NOT EXISTS idx_ligacao_origem ON requisito_ligacao(origem_id);
-CREATE INDEX IF NOT EXISTS idx_ligacao_destino ON requisito_ligacao(destino_id);
+CREATE INDEX IF NOT EXISTS log.idx_evento_conversa ON evento(conversa_id);
+CREATE INDEX IF NOT EXISTS main.idx_ligacao_origem ON requisito_ligacao(origem_id);
+CREATE INDEX IF NOT EXISTS main.idx_ligacao_destino ON requisito_ligacao(destino_id);
 """
+
+# apelido na conexão -> (arquivo, tabelas)
+BASES = {
+    "main": ("requisitos.db", ["requisito", "requisito_versao", "requisito_ligacao"]),
+    "esp": ("especialistas.db", ["especialista", "especialista_conhecimento"]),
+    "log": ("log.db", ["conversa", "evento"]),
+}
+ARQUIVO_ANTIGO = "gigabrain.db"
 
 
 def slug(texto: str) -> str:
@@ -135,13 +148,51 @@ def _palavras(texto: str) -> set[str]:
     return {p for p in slug(texto).split("-") if len(p) > 3}
 
 
+def existe_banco(pasta: str) -> bool:
+    return any(os.path.exists(os.path.join(pasta, a)) for a in (BASES["main"][0], ARQUIVO_ANTIGO))
+
+
 class Banco:
-    def __init__(self, caminho: str):
-        self.caminho = caminho
-        self.con = sqlite3.connect(caminho, check_same_thread=False)
+    def __init__(self, pasta: str):
+        os.makedirs(pasta, exist_ok=True)
+        self.pasta = pasta
+        antigo = os.path.join(pasta, ARQUIVO_ANTIGO)
+        migrar = os.path.exists(antigo) and not os.path.exists(os.path.join(pasta, BASES["main"][0]))
+
+        self.con = sqlite3.connect(os.path.join(pasta, BASES["main"][0]), check_same_thread=False)
         self.con.row_factory = sqlite3.Row
+        for apelido, (arquivo, _) in BASES.items():
+            if apelido != "main":
+                self.con.execute(f"ATTACH DATABASE ? AS {apelido}", (os.path.join(pasta, arquivo),))
         self.con.execute("PRAGMA foreign_keys = ON")
+        # WAL + synchronous NORMAL: cada evento do log vira uma transação, e sem
+        # isso o Windows espera o disco a cada mensagem (lento com centenas delas).
+        for apelido in BASES:
+            self.con.execute(f"PRAGMA {apelido}.journal_mode = WAL")
+            self.con.execute(f"PRAGMA {apelido}.synchronous = NORMAL")
         self.con.executescript(SCHEMA)
+        if migrar:
+            self._migrar(antigo)
+
+    def _migrar(self, antigo: str) -> None:
+        """Copia uma pasta do formato antigo (tudo em gigabrain.db) para os três arquivos."""
+        # Conexão separada e fechada antes de renomear: no Windows, um arquivo
+        # aberto (mesmo só para leitura) não pode ser renomeado.
+        velho = sqlite3.connect(antigo)
+        try:
+            with self.con:
+                for apelido, (_, tabelas) in BASES.items():
+                    for tabela in tabelas:
+                        linhas = velho.execute(f"SELECT * FROM {tabela}").fetchall()
+                        if linhas:
+                            marcas = ", ".join("?" * len(linhas[0]))
+                            self.con.executemany(f"INSERT INTO {apelido}.{tabela} VALUES ({marcas})", linhas)
+        finally:
+            velho.close()
+        os.replace(antigo, antigo + ".migrado")
+        for sufixo in ("-wal", "-shm"):
+            if os.path.exists(antigo + sufixo):
+                os.remove(antigo + sufixo)
 
     def fechar(self) -> None:
         self.con.close()
@@ -264,26 +315,39 @@ class Banco:
 
             salvas = []
             for lig in ligacoes or []:
-                tipo_lig, destino = lig.get("tipo"), lig.get("alvo")
-                if tipo_lig not in TIPOS_LIGACAO or not destino or destino == req_id:
-                    continue
-                if not self._um("SELECT id FROM requisito WHERE id = ?", (destino,)):
-                    continue
-                self.con.execute(
-                    """INSERT INTO requisito_ligacao (origem_id, tipo, destino_id, motivo, conversa_id, criado_em)
-                       VALUES (?, ?, ?, ?, ?, ?)""",
-                    (req_id, tipo_lig, destino, lig.get("motivo"), conversa_id, momento),
-                )
-                if tipo_lig in STATUS_APOS_LIGACAO:
-                    self.con.execute(
-                        "UPDATE requisito SET status = ?, atualizado_em = ? WHERE id = ?",
-                        (STATUS_APOS_LIGACAO[tipo_lig], momento, destino),
-                    )
-                    # O destino deixou de valer: quem dependia dele precisa ser revisto.
-                    em_revisao += [r for r in self._marcar_dependentes(destino, momento, exceto=req_id) if r not in em_revisao]
-                salvas.append({"origem": req_id, "tipo": tipo_lig, "destino": destino})
+                feita = self._inserir_ligacao(req_id, lig.get("tipo"), lig.get("alvo"), lig.get("motivo"), conversa_id, momento)
+                if feita:
+                    em_revisao += [r for r in feita.pop("em_revisao") if r not in em_revisao]
+                    salvas.append(feita)
 
         return {"requisito_id": req_id, "versao": versao, "ligacoes": salvas, "em_revisao": em_revisao}
+
+    def _inserir_ligacao(self, origem: str, tipo: str, destino: str, motivo: str | None,
+                         conversa_id: str | None, momento: str) -> dict | None:
+        if tipo not in TIPOS_LIGACAO or not destino or destino == origem:
+            return None
+        if not self._um("SELECT id FROM requisito WHERE id = ?", (destino,)):
+            return None
+        self.con.execute(
+            """INSERT INTO requisito_ligacao (origem_id, tipo, destino_id, motivo, conversa_id, criado_em)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (origem, tipo, destino, motivo, conversa_id, momento),
+        )
+        em_revisao = []
+        if tipo in STATUS_APOS_LIGACAO:
+            self.con.execute(
+                "UPDATE requisito SET status = ?, atualizado_em = ? WHERE id = ?",
+                (STATUS_APOS_LIGACAO[tipo], momento, destino),
+            )
+            # O destino deixou de valer: quem dependia dele precisa ser revisto.
+            em_revisao = self._marcar_dependentes(destino, momento, exceto=origem)
+        return {"origem": origem, "tipo": tipo, "destino": destino, "em_revisao": em_revisao}
+
+    def ligar(self, origem: str, tipo: str, destino: str, motivo: str | None = None,
+              conversa_id: str | None = None) -> dict | None:
+        """Cria uma ligação entre dois requisitos que já existem."""
+        with self.con:
+            return self._inserir_ligacao(origem, tipo, destino, motivo, conversa_id, agora())
 
     def _marcar_dependentes(self, requisito_id: str, momento: str, exceto: str | None = None) -> list[str]:
         """Coloca "em_revisao" quem tem `depende_de` apontando para o requisito."""
@@ -441,6 +505,11 @@ class Banco:
                 (versao, momento, id_),
             )
         return versao
+
+    def datas_conhecimento(self, id_: str) -> list[str]:
+        """Quando cada versão do conhecimento foi criada (para o painel reproduzir no tempo)."""
+        return [l["criado_em"] for l in self._todos(
+            "SELECT criado_em FROM especialista_conhecimento WHERE especialista_id = ? ORDER BY versao", (id_,))]
 
     def versoes_conhecimento(self, id_: str) -> list[dict]:
         linhas = self._todos(
