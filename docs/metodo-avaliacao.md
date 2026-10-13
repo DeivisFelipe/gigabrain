@@ -88,4 +88,4 @@ contribuição dele na classificação FR/NFR e no subtipo.
 ## Pacote de replicação
 
 Código, dataset, logs de todas as execuções (mensagens JSON de cada agente, incluindo as
-chamadas ao LLM) e o guia `REPRODUCAO.md`.
+chamadas ao LLM) e as instruções do README.
