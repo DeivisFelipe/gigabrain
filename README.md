@@ -174,6 +174,13 @@ O painel (`python main.py painel`) mostra todas as pastas de dados (seletor na l
 - **Especialistas**: o arquivo de conhecimento, cada versão e o que mudou entre elas
 - **Avaliação**: comparação com o gabarito, troca de modo e repetição, e as falas injetadas
 
+## API para a aplicação web
+
+`python main.py api` sobe uma API REST (FastAPI) para o PO conversar com o Gêmeo pela web
+e consultar o histórico de conversas, requisitos e especialistas. Documentação interativa
+em `http://127.0.0.1:8000/docs`; guia de integração em [docs/API.md](docs/API.md).
+Use `--simulado` para desenvolver o front sem chave de API.
+
 ## Roteiro para ler o código
 
 | Ordem | Arquivo | O que tem |
@@ -197,5 +204,6 @@ O painel (`python main.py painel`) mostra todas as pastas de dados (seletor na l
 | 17 | `gigabrain/anotacao.py` | amostra de ligações para anotação manual e kappa |
 | 18 | `main.py` e `gigabrain/demo.py` | linha de comando e demonstração |
 | 19 | `gigabrain/painel/` | servidor e página do painel |
+| 20 | `gigabrain/api.py` | API REST para a aplicação web |
 
 `arquitetura.html` e `editor.html` são a nota e o editor do diagrama original.

@@ -45,6 +45,7 @@ TIPOS = {
     "pergunta_ao_po": "Gêmeo -> PO. {texto, duvidas?}",
     "proposta": "Gêmeo -> PO. {texto, requisitos: [...]}",
     "aprovacao": "PO -> Gêmeo. {texto}",
+    "confirmacao": "Gêmeo -> PO. {texto, salvos}: o que foi gravado depois da aprovação",
     "consulta": "Gêmeo -> Líder ou Líder -> Especialista. {pergunta, ...}",
     "decomposicao": "Líder -> Líder. {subconsultas: [...]}",
     "resposta_especialista": "Especialista -> Líder. {resposta, requisitos_relacionados, conflitos, duvidas_para_po, confianca}",
