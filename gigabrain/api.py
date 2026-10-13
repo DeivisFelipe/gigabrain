@@ -1,26 +1,26 @@
-"""API REST do GigaBrain para a aplicação web de conversa com o PO.
+"""REST API of GigaBrain for the web application where the PO talks to the system.
 
-Rodar:  python main.py api                (DeepSeek, porta 8000)
-        python main.py api --simulado     (sem chave, respostas por regras)
-Documentação interativa: http://127.0.0.1:8000/docs   (OpenAPI em /openapi.json)
+Run:  python main.py api               (DeepSeek, port 8000)
+      python main.py api --simulated   (no key, rule-based answers)
+Interactive docs: http://127.0.0.1:8000/docs   (OpenAPI at /openapi.json)
 
-Fluxo da conversa:
+Conversation flow:
 
-    POST /api/v1/conversas                       abre uma conversa -> {id}
-    POST /api/v1/conversas/{id}/mensagens        o PO fala -> resposta do Gêmeo
-         (pergunta, proposta de requisitos ou confirmação do que foi salvo)
-    POST /api/v1/conversas/{id}/aprovar          aprova a proposta pendente (botão)
-    POST /api/v1/conversas/{id}/encerrar         encerra sem aprovar
+    POST /api/v1/conversations                     open a conversation -> {id}
+    POST /api/v1/conversations/{id}/messages       the PO writes -> answer of the Twin
+         (a question, a proposal of requirements or a confirmation of what was saved)
+    POST /api/v1/conversations/{id}/approve        approve the pending proposal (button)
+    POST /api/v1/conversations/{id}/close          close without approving
 
-Histórico (somente leitura):
+History (read only):
 
-    GET  /api/v1/conversas[/{id}[/eventos]]      conversas, mensagens e bastidores
-    GET  /api/v1/requisitos[/{id}]               requisitos, versões, ligações e trilha
-    GET  /api/v1/ligacoes, /api/v1/especialistas[/{id}]
+    GET  /api/v1/conversations[/{id}[/events]]     conversations, messages and behind the scenes
+    GET  /api/v1/requirements[/{id}]               requirements, versions, links and trace
+    GET  /api/v1/links, /api/v1/experts[/{id}]
 
-Cada conversa ativa fica na memória do servidor (o Gêmeo guarda o histórico
-dela). Se a API for reiniciada, as conversas abertas param de aceitar
-mensagens (409) e o PO abre outra; o histórico continua consultável.
+Each active conversation lives in the server's memory (the Twin keeps its history). If
+the API restarts, open conversations stop accepting messages (409) and the PO opens a
+new one; the history is still available.
 """
 
 from __future__ import annotations
@@ -35,285 +35,286 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from . import conhecimento
-from .banco import Banco
-from .conselho import Conselho, abrir_contexto
-from .log import resumo as resumo_da_mensagem
-from .mensagens import GEMEO, PO, Mensagem
+from . import knowledge, requirement_format
+from .council import Council, open_context
+from .database import Database
+from .log import summary as message_summary
+from .messages import PO, TWIN, Message
 
-# Mensagens que o PO vê na tela; o resto são os bastidores (agentes conversando).
-TIPOS_DA_CONVERSA = ("pedido_po", "aprovacao", "pergunta_ao_po", "proposta", "confirmacao")
-MODOS_DE_CONVERSA = ("pos_reuniao", "reuniao")
-
-
-# ---------------------------------------------------------------------------- modelos
-
-class NovaConversa(BaseModel):
-    modo: Literal["pos_reuniao", "reuniao"] = Field(
-        "pos_reuniao", description="pos_reuniao: pode criar especialistas novos. reuniao: rápido, só usa os existentes.")
+# Messages the PO sees on screen; the rest happens behind the scenes (agents talking).
+CONVERSATION_KINDS = ("po_request", "approval", "question_to_po", "proposal", "confirmation")
+CONVERSATION_MODES = ("after_meeting", "in_meeting")
 
 
-class NovaMensagem(BaseModel):
-    texto: str = Field(..., min_length=1, max_length=8000, description="O que o PO escreveu.",
-                       examples=["Quero notificar o cliente quando o pagamento for confirmado"])
+# ---------------------------------------------------------------------------- models
+
+class NewConversation(BaseModel):
+    mode: Literal["after_meeting", "in_meeting"] = Field(
+        "after_meeting", description="after_meeting: may create new experts. in_meeting: faster, only uses existing experts.")
 
 
-class Bastidor(BaseModel):
+class NewMessage(BaseModel):
+    text: str = Field(..., min_length=1, max_length=8000, description="What the PO wrote.",
+                      examples=["I want to notify the customer when the payment is confirmed"])
+
+
+class BehindTheScenes(BaseModel):
     id: int
-    momento: str
-    de: str
-    para: str
-    tipo: str
-    resumo: str
+    timestamp: str
+    sender: str
+    recipient: str
+    kind: str
+    summary: str
 
 
-class RespostaDoGemeo(BaseModel):
-    acao: Literal["perguntar", "propor", "aprovado"] = Field(
-        ..., description="perguntar: o Gêmeo precisa de mais informação. propor: há requisitos para o PO aprovar. "
-                         "aprovado: os requisitos foram salvos e a conversa terminou.")
-    mensagem: str = Field(..., description="Texto para mostrar ao PO.")
-    requisitos_propostos: list[dict] = Field(default_factory=list,
-                                             description="Com acao=propor: titulo, historia, criterios_aceite, tipo, temas, base, ligacoes.")
-    salvos: list[str] = Field(default_factory=list, description="Com acao=aprovado: ids gravados (ex.: R3).")
-    proposta_pendente: bool = Field(..., description="Se há proposta esperando aprovação (habilita o botão Aprovar).")
-    conversa_ativa: bool
-    bastidores: list[Bastidor] = Field(default_factory=list,
-                                       description="O que os agentes fizeram para chegar a esta resposta.")
+class TwinAnswer(BaseModel):
+    action: Literal["ask", "propose", "approved"] = Field(
+        ..., description="ask: the Twin needs more information. propose: there are requirements for the PO to approve. "
+                         "approved: the requirements were saved and the conversation ended.")
+    message: str = Field(..., description="Text to show to the PO.")
+    proposed_requirements: list[dict] = Field(
+        default_factory=list,
+        description="With action=propose: title, statement (EARS), story, acceptance_criteria (Given/When/Then), "
+                    "class, subtype, topics, base, links, and 'quality' (automatic checks).")
+    saved: list[str] = Field(default_factory=list, description="With action=approved: saved ids (e.g. R3).")
+    pending_proposal: bool = Field(..., description="Whether a proposal is waiting for approval (enables the Approve button).")
+    conversation_active: bool
+    behind_the_scenes: list[BehindTheScenes] = Field(default_factory=list, description="What the agents did to reach this answer.")
 
 
-# ---------------------------------------------------------------------------- estado
+# ---------------------------------------------------------------------------- state
 
 @dataclass
-class ConversaAtiva:
-    conselho: Conselho
-    trava: threading.Lock = field(default_factory=threading.Lock)
+class ActiveConversation:
+    council: Council
+    lock: threading.Lock = field(default_factory=threading.Lock)
 
 
-def _bastidor(ev: dict) -> dict:
-    msg = SimpleNamespace(tipo=ev["tipo"], conteudo=ev["conteudo"])
-    return {k: ev[k] for k in ("id", "momento", "de", "para", "tipo")} | {"resumo": resumo_da_mensagem(msg)}
+def _behind(event: dict) -> dict:
+    msg = SimpleNamespace(kind=event["kind"], content=event["content"])
+    return {k: event[k] for k in ("id", "timestamp", "sender", "recipient", "kind")} | {"summary": message_summary(msg)}
 
 
-def _mensagem_da_conversa(ev: dict) -> dict:
-    c = ev["conteudo"]
+def _with_quality(requirements: list[dict]) -> list[dict]:
+    return [{**r, "quality": requirement_format.check(r)} for r in requirements]
+
+
+def _conversation_message(event: dict) -> dict:
+    c = event["content"]
     return {
-        "id": ev["id"],
-        "momento": ev["momento"],
-        "autor": "po" if ev["de"] == PO else "gemeo",
-        "tipo": ev["tipo"],
-        "texto": c.get("texto", ""),
-        "requisitos_propostos": c.get("requisitos", []) if ev["tipo"] == "proposta" else [],
-        "salvos": c.get("salvos", []),
+        "id": event["id"],
+        "timestamp": event["timestamp"],
+        "author": "po" if event["sender"] == PO else "twin",
+        "kind": event["kind"],
+        "text": c.get("text", ""),
+        "proposed_requirements": _with_quality(c.get("requirements", [])) if event["kind"] == "proposal" else [],
+        "saved": c.get("saved", []),
     }
 
 
-def _resumo_requisito(r: dict) -> dict:
-    c = r["conteudo"]
+def _requirement_summary(r: dict) -> dict:
+    c = r["content"]
     return {
-        "id": r["id"], "titulo": r["titulo"], "status": r["status"], "versao_atual": r["versao_atual"],
-        "tipo": r["tipo"], "temas": r["temas"], "texto": c.get("texto") or c.get("historia"),
-        "classe": c.get("classe"), "criado_em": r["criado_em"], "atualizado_em": r["atualizado_em"],
+        "id": r["id"], "title": r["title"], "status": r["status"], "current_version": r["current_version"],
+        "kind": r["kind"], "topics": r["topics"], "statement": c.get("statement"), "story": c.get("story"),
+        "acceptance_criteria": len(c.get("acceptance_criteria") or []), "class": c.get("class"),
+        "subtype": c.get("subtype"), "created_at": r["created_at"], "updated_at": r["updated_at"],
     }
 
 
-# ---------------------------------------------------------------------------- aplicação
+# ---------------------------------------------------------------------------- application
 
-def criar_app(pasta_dados: str, criar_provedor: Callable[[], object], origens: list[str] | None = None,
-              token: str | None = None) -> FastAPI:
-    ativas: dict[str, ConversaAtiva] = {}
-    trava_ativas = threading.Lock()
+def create_app(data_folder: str, create_provider: Callable[[], object], origins: list[str] | None = None,
+               token: str | None = None) -> FastAPI:
+    active: dict[str, ActiveConversation] = {}
+    active_lock = threading.Lock()
 
     @asynccontextmanager
-    async def ciclo_de_vida(_app):
+    async def lifespan(_app):
         yield
-        for conversa_id in list(ativas):  # ao desligar, fecha as conexões das conversas abertas
-            finalizar(conversa_id)
+        for conversation_id in list(active):  # on shutdown, close the connections of open conversations
+            finish(conversation_id)
 
-    app = FastAPI(
-        lifespan=ciclo_de_vida,
-        title="GigaBrain API",
-        version="1.0.0",
-        description="Conversa do PO real com o Gêmeo Digital e histórico do Repositório de Requisitos.",
-    )
-    app.add_middleware(CORSMiddleware, allow_origins=origens or ["*"], allow_methods=["*"], allow_headers=["*"])
+    app = FastAPI(lifespan=lifespan, title="GigaBrain API", version="1.0.0",
+                  description="Conversation of the PO with the Digital Twin and history of the Requirements Repository.")
+    app.add_middleware(CORSMiddleware, allow_origins=origins or ["*"], allow_methods=["*"], allow_headers=["*"])
 
-    def autorizar(authorization: str | None = Header(None)) -> None:
+    def authorize(authorization: str | None = Header(None)) -> None:
         if token and authorization != f"Bearer {token}":
-            raise HTTPException(401, "Token inválido ou ausente (cabeçalho Authorization: Bearer <token>).")
+            raise HTTPException(401, "Missing or invalid token (header Authorization: Bearer <token>).")
 
-    def obter_banco():
-        banco = Banco(pasta_dados)
+    def get_db():
+        db = Database(data_folder)
         try:
-            yield banco
+            yield db
         finally:
-            banco.fechar()
+            db.close()
 
-    protegido = [Depends(autorizar)]
+    protected = [Depends(authorize)]
 
-    def ativa(conversa_id: str) -> ConversaAtiva:
-        with trava_ativas:
-            sessao = ativas.get(conversa_id)
-        if not sessao:
-            raise HTTPException(409, "Esta conversa não está ativa (foi encerrada, aprovada ou a API reiniciou). Abra uma nova.")
-        return sessao
+    def get_active(conversation_id: str) -> ActiveConversation:
+        with active_lock:
+            session = active.get(conversation_id)
+        if not session:
+            raise HTTPException(409, "This conversation is not active (it was closed, approved or the API restarted). Open a new one.")
+        return session
 
-    def finalizar(conversa_id: str) -> None:
-        with trava_ativas:
-            sessao = ativas.pop(conversa_id, None)
-        if sessao:
-            sessao.conselho.ctx.banco.fechar()
+    def finish(conversation_id: str) -> None:
+        with active_lock:
+            session = active.pop(conversation_id, None)
+        if session:
+            session.council.ctx.db.close()
 
-    def responder(sessao: ConversaAtiva, resposta: dict, desde: int) -> dict:
-        ctx = sessao.conselho.ctx
-        eventos = [e for e in ctx.banco.listar_eventos(ctx.conversa_id, limite=5000) if e["id"] > desde]
-        corpo = {
-            "acao": resposta["acao"],
-            "mensagem": resposta.get("mensagem_ao_po", ""),
-            "requisitos_propostos": resposta.get("requisitos", []) if resposta["acao"] == "propor" else [],
-            "salvos": [s["requisito_id"] for s in resposta.get("salvos", [])],
-            "proposta_pendente": bool(sessao.conselho.proposta_pendente),
-            "conversa_ativa": resposta["acao"] != "aprovado",
-            "bastidores": [_bastidor(e) for e in eventos if e["tipo"] not in TIPOS_DA_CONVERSA],
+    def reply(session: ActiveConversation, answer: dict, since: int) -> dict:
+        ctx = session.council.ctx
+        events = [e for e in ctx.db.list_events(ctx.conversation_id, limit=5000) if e["id"] > since]
+        body = {
+            "action": answer["action"],
+            "message": answer.get("message_to_po", ""),
+            "proposed_requirements": _with_quality(answer.get("requirements", [])) if answer["action"] == "propose" else [],
+            "saved": [s["requirement_id"] for s in answer.get("saved", [])],
+            "pending_proposal": bool(session.council.pending_proposal),
+            "conversation_active": answer["action"] != "approved",
+            "behind_the_scenes": [_behind(e) for e in events if e["kind"] not in CONVERSATION_KINDS],
         }
-        if resposta["acao"] == "aprovado":
-            finalizar(ctx.conversa_id)
-        return corpo
+        if answer["action"] == "approved":
+            finish(ctx.conversation_id)
+        return body
 
-    def ultimo_evento(sessao: ConversaAtiva) -> int:
-        linha = sessao.conselho.ctx.banco.con.execute(
-            "SELECT COALESCE(MAX(id), 0) FROM evento WHERE conversa_id = ?", (sessao.conselho.ctx.conversa_id,)).fetchone()
-        return linha[0]
+    def last_event(session: ActiveConversation) -> int:
+        row = session.council.ctx.db.con.execute(
+            "SELECT COALESCE(MAX(id), 0) FROM event WHERE conversation_id = ?", (session.council.ctx.conversation_id,)).fetchone()
+        return row[0]
 
-    # ------------------------------------------------------------------ saúde
+    # ------------------------------------------------------------------ health
 
-    @app.get("/api/v1/saude", tags=["sistema"])
-    def saude() -> dict:
-        provedor = criar_provedor()
-        return {"status": "ok", "provedor": getattr(provedor, "nome", "?"), "conversas_ativas": len(ativas)}
+    @app.get("/api/v1/health", tags=["system"])
+    def health() -> dict:
+        return {"status": "ok", "provider": getattr(create_provider(), "name", "?"), "active_conversations": len(active)}
 
-    # ------------------------------------------------------------------ conversa
+    # ------------------------------------------------------------------ conversation
 
-    @app.post("/api/v1/conversas", tags=["conversa"], status_code=201, dependencies=protegido)
-    def abrir_conversa(dados: NovaConversa | None = None) -> dict:
-        """Abre uma conversa do PO com o Gêmeo Digital."""
-        modo = (dados or NovaConversa()).modo
-        conselho = Conselho(abrir_contexto(pasta_dados, criar_provedor(), modo=modo))
-        conversa_id = conselho.iniciar()
-        with trava_ativas:
-            ativas[conversa_id] = ConversaAtiva(conselho)
-        return {"id": conversa_id, "modo": modo, "status": "aberta", "ativa": True}
+    @app.post("/api/v1/conversations", tags=["conversation"], status_code=201, dependencies=protected)
+    def open_conversation(data: NewConversation | None = None) -> dict:
+        """Open a conversation of the PO with the Digital Twin."""
+        mode = (data or NewConversation()).mode
+        council = Council(open_context(data_folder, create_provider(), mode=mode))
+        conversation_id = council.start()
+        with active_lock:
+            active[conversation_id] = ActiveConversation(council)
+        return {"id": conversation_id, "mode": mode, "status": "open", "active": True}
 
-    @app.post("/api/v1/conversas/{conversa_id}/mensagens", tags=["conversa"], response_model=RespostaDoGemeo,
-              dependencies=protegido)
-    def enviar_mensagem(conversa_id: str, dados: NovaMensagem) -> dict:
-        """O PO envia uma fala. Pode levar de alguns segundos a ~1 minuto: o Gêmeo pode consultar
-        o Líder e os especialistas antes de responder. "aprovado" (texto) também aprova a proposta pendente."""
-        sessao = ativa(conversa_id)
-        with sessao.trava:  # uma fala por vez em cada conversa
-            desde = ultimo_evento(sessao)
+    @app.post("/api/v1/conversations/{conversation_id}/messages", tags=["conversation"], response_model=TwinAnswer,
+              dependencies=protected)
+    def send_message(conversation_id: str, data: NewMessage) -> dict:
+        """The PO sends a message. It may take from a few seconds to ~1 minute: the Twin may consult
+        the Leader and the experts before answering. Writing "approved" also approves the pending proposal."""
+        session = get_active(conversation_id)
+        with session.lock:  # one message at a time per conversation
+            since = last_event(session)
             try:
-                resposta = sessao.conselho.falar(dados.texto.strip())
-            except Exception as exc:  # falha do LLM: a conversa continua utilizável
-                raise HTTPException(502, f"O modelo de linguagem falhou: {exc}") from exc
-            return responder(sessao, resposta, desde)
+                answer = session.council.talk(data.text.strip())
+            except Exception as exc:  # LLM failure: the conversation is still usable
+                raise HTTPException(502, f"The language model failed: {exc}") from exc
+            return reply(session, answer, since)
 
-    @app.post("/api/v1/conversas/{conversa_id}/aprovar", tags=["conversa"], response_model=RespostaDoGemeo,
-              dependencies=protegido)
-    def aprovar(conversa_id: str) -> dict:
-        """Aprova a proposta pendente (equivale ao PO escrever "aprovado")."""
-        sessao = ativa(conversa_id)
-        with sessao.trava:
-            if not sessao.conselho.proposta_pendente:
-                raise HTTPException(409, "Não há proposta pendente para aprovar.")
-            desde = ultimo_evento(sessao)
-            sessao.conselho.ctx.registro.registrar(
-                Mensagem(PO, GEMEO, "aprovacao", {"texto": "aprovado (botão)"}, sessao.conselho.ctx.conversa_id))
-            return responder(sessao, sessao.conselho.aprovar(), desde)
+    @app.post("/api/v1/conversations/{conversation_id}/approve", tags=["conversation"], response_model=TwinAnswer,
+              dependencies=protected)
+    def approve(conversation_id: str) -> dict:
+        """Approve the pending proposal (same as the PO writing "approved")."""
+        session = get_active(conversation_id)
+        with session.lock:
+            if not session.council.pending_proposal:
+                raise HTTPException(409, "There is no pending proposal to approve.")
+            since = last_event(session)
+            session.council.ctx.recorder.record(
+                Message(PO, TWIN, "approval", {"text": "approved (button)"}, session.council.ctx.conversation_id))
+            return reply(session, session.council.approve(), since)
 
-    @app.post("/api/v1/conversas/{conversa_id}/encerrar", tags=["conversa"], dependencies=protegido)
-    def encerrar(conversa_id: str) -> dict:
-        """Encerra a conversa sem aprovar nada."""
-        sessao = ativa(conversa_id)
-        with sessao.trava:
-            sessao.conselho.encerrar("encerrada")
-        finalizar(conversa_id)
-        return {"id": conversa_id, "status": "encerrada", "ativa": False}
+    @app.post("/api/v1/conversations/{conversation_id}/close", tags=["conversation"], dependencies=protected)
+    def close(conversation_id: str) -> dict:
+        """Close the conversation without approving anything."""
+        session = get_active(conversation_id)
+        with session.lock:
+            session.council.end("closed")
+        finish(conversation_id)
+        return {"id": conversation_id, "status": "closed", "active": False}
 
-    # ------------------------------------------------------------------ histórico de conversas
+    # ------------------------------------------------------------------ conversation history
 
-    @app.get("/api/v1/conversas", tags=["histórico"], dependencies=protegido)
-    def listar_conversas(somente_do_po: bool = Query(True, description="false inclui as reuniões processadas em lote"),
-                         banco: Banco = Depends(obter_banco)) -> list[dict]:
-        conversas = banco.listar_conversas()
-        if somente_do_po:
-            conversas = [c for c in conversas if c["modo"] in MODOS_DE_CONVERSA]
-        return [{**c, "ativa": c["id"] in ativas} for c in conversas]
+    @app.get("/api/v1/conversations", tags=["history"], dependencies=protected)
+    def list_conversations(only_po: bool = Query(True, description="false also returns meetings processed in batch"),
+                           db: Database = Depends(get_db)) -> list[dict]:
+        conversations = db.list_conversations()
+        if only_po:
+            conversations = [c for c in conversations if c["mode"] in CONVERSATION_MODES]
+        return [{**c, "active": c["id"] in active} for c in conversations]
 
-    @app.get("/api/v1/conversas/{conversa_id}", tags=["histórico"], dependencies=protegido)
-    def obter_conversa(conversa_id: str, banco: Banco = Depends(obter_banco)) -> dict:
-        """A conversa como o PO a vê: as mensagens dele e as respostas do Gêmeo."""
-        conversa = next((c for c in banco.listar_conversas() if c["id"] == conversa_id), None)
-        if not conversa:
-            raise HTTPException(404, "Conversa não encontrada.")
-        eventos = banco.listar_eventos(conversa_id, limite=5000)
-        sessao = ativas.get(conversa_id)
+    @app.get("/api/v1/conversations/{conversation_id}", tags=["history"], dependencies=protected)
+    def get_conversation(conversation_id: str, db: Database = Depends(get_db)) -> dict:
+        """The conversation as the PO sees it: their messages and the Twin's answers."""
+        conversation = next((c for c in db.list_conversations() if c["id"] == conversation_id), None)
+        if not conversation:
+            raise HTTPException(404, "Conversation not found.")
+        events = db.list_events(conversation_id, limit=5000)
+        session = active.get(conversation_id)
         return {
-            **conversa,
-            "ativa": sessao is not None,
-            "proposta_pendente": bool(sessao and sessao.conselho.proposta_pendente),
-            "mensagens": [_mensagem_da_conversa(e) for e in eventos if e["tipo"] in TIPOS_DA_CONVERSA],
-            "requisitos_salvos": [e["conteudo"]["requisito_id"] for e in eventos if e["tipo"] == "requisito_salvo"],
+            **conversation,
+            "active": session is not None,
+            "pending_proposal": bool(session and session.council.pending_proposal),
+            "messages": [_conversation_message(e) for e in events if e["kind"] in CONVERSATION_KINDS],
+            "saved_requirements": [e["content"]["requirement_id"] for e in events if e["kind"] == "requirement_saved"],
         }
 
-    @app.get("/api/v1/conversas/{conversa_id}/eventos", tags=["histórico"], dependencies=protegido)
-    def eventos_da_conversa(conversa_id: str, desde: int = Query(0, description="só eventos com id maior que este"),
-                            completo: bool = Query(False, description="true inclui o JSON completo de cada mensagem"),
-                            banco: Banco = Depends(obter_banco)) -> list[dict]:
-        """Bastidores: todas as mensagens JSON entre os agentes, em ordem."""
-        eventos = [e for e in banco.listar_eventos(conversa_id, limite=5000) if e["id"] > desde]
-        return [_bastidor(e) | ({"conteudo": e["conteudo"]} if completo else {}) for e in eventos]
+    @app.get("/api/v1/conversations/{conversation_id}/events", tags=["history"], dependencies=protected)
+    def conversation_events(conversation_id: str, since: int = Query(0, description="only events with a larger id"),
+                            full: bool = Query(False, description="true includes the full JSON of each message"),
+                            db: Database = Depends(get_db)) -> list[dict]:
+        """Behind the scenes: every JSON message between the agents, in order."""
+        events = [e for e in db.list_events(conversation_id, limit=5000) if e["id"] > since]
+        return [_behind(e) | ({"content": e["content"]} if full else {}) for e in events]
 
-    # ------------------------------------------------------------------ requisitos
+    # ------------------------------------------------------------------ requirements
 
-    @app.get("/api/v1/requisitos", tags=["histórico"], dependencies=protegido)
-    def listar_requisitos(status: str | None = Query(None, description="ativo, em_revisao, substituido, dividido, unido"),
-                          tema: str | None = None, busca: str | None = Query(None, description="texto livre"),
-                          banco: Banco = Depends(obter_banco)) -> list[dict]:
-        requisitos = [_resumo_requisito(r) for r in banco.listar_requisitos()]
+    @app.get("/api/v1/requirements", tags=["history"], dependencies=protected)
+    def list_requirements(status: str | None = Query(None, description="active, under_review, superseded, split, merged"),
+                          topic: str | None = None, search: str | None = Query(None, description="free text"),
+                          db: Database = Depends(get_db)) -> list[dict]:
+        requirements = [_requirement_summary(r) for r in db.list_requirements()]
         if status:
-            requisitos = [r for r in requisitos if r["status"] == status]
-        if tema:
-            requisitos = [r for r in requisitos if tema in r["temas"]]
-        if busca:
-            b = busca.lower()
-            requisitos = [r for r in requisitos if b in " ".join([r["id"], r["titulo"], r["texto"] or "", *r["temas"]]).lower()]
-        return requisitos
+            requirements = [r for r in requirements if r["status"] == status]
+        if topic:
+            requirements = [r for r in requirements if topic in r["topics"]]
+        if search:
+            s = search.lower()
+            requirements = [r for r in requirements if s in " ".join([r["id"], r["title"], r["statement"] or "", *r["topics"]]).lower()]
+        return requirements
 
-    @app.get("/api/v1/requisitos/{requisito_id}", tags=["histórico"], dependencies=protegido)
-    def obter_requisito(requisito_id: str, banco: Banco = Depends(obter_banco)) -> dict:
-        """Conteúdo atual, todas as versões, ligações, fontes e a trilha ("como chegamos aqui")."""
-        req = banco.obter_requisito(requisito_id)
+    @app.get("/api/v1/requirements/{requirement_id}", tags=["history"], dependencies=protected)
+    def get_requirement(requirement_id: str, db: Database = Depends(get_db)) -> dict:
+        """Current content, all versions, links, sources, quality checks and the trace ("how did we get here")."""
+        req = db.get_requirement(requirement_id)
         if not req:
-            raise HTTPException(404, "Requisito não encontrado.")
-        return {**req, "versoes": banco.versoes_requisito(requisito_id),
-                "ligacoes": banco.listar_ligacoes(requisito_id), "trilha": banco.trilha(requisito_id)}
+            raise HTTPException(404, "Requirement not found.")
+        return {**req, "quality": requirement_format.check(req["content"]), "versions": db.requirement_versions(requirement_id),
+                "links": db.list_links(requirement_id), "trace": db.trace(requirement_id)}
 
-    @app.get("/api/v1/ligacoes", tags=["histórico"], dependencies=protegido)
-    def listar_ligacoes(banco: Banco = Depends(obter_banco)) -> list[dict]:
-        return banco.listar_ligacoes()
+    @app.get("/api/v1/links", tags=["history"], dependencies=protected)
+    def list_links(db: Database = Depends(get_db)) -> list[dict]:
+        return db.list_links()
 
-    # ------------------------------------------------------------------ especialistas
+    # ------------------------------------------------------------------ experts
 
-    @app.get("/api/v1/especialistas", tags=["histórico"], dependencies=protegido)
-    def listar_especialistas(banco: Banco = Depends(obter_banco)) -> list[dict]:
-        return banco.listar_especialistas()
+    @app.get("/api/v1/experts", tags=["history"], dependencies=protected)
+    def list_experts(db: Database = Depends(get_db)) -> list[dict]:
+        return db.list_experts()
 
-    @app.get("/api/v1/especialistas/{especialista_id}", tags=["histórico"], dependencies=protegido)
-    def obter_especialista(especialista_id: str, banco: Banco = Depends(obter_banco)) -> dict:
-        """O arquivo de conhecimento atual e todas as versões dele."""
-        esp = banco.obter_especialista(especialista_id)
-        if not esp:
-            raise HTTPException(404, "Especialista não encontrado.")
-        return {**esp, "conhecimento": conhecimento.ler(esp["arquivo"]), "versoes": banco.versoes_conhecimento(especialista_id)}
+    @app.get("/api/v1/experts/{expert_id}", tags=["history"], dependencies=protected)
+    def get_expert(expert_id: str, db: Database = Depends(get_db)) -> dict:
+        """The current knowledge file and all its versions."""
+        exp = db.get_expert(expert_id)
+        if not exp:
+            raise HTTPException(404, "Expert not found.")
+        return {**exp, "knowledge": knowledge.read(exp["file"]), "versions": db.knowledge_versions(expert_id)}
 
     return app

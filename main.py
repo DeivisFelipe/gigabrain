@@ -1,26 +1,25 @@
-"""GigaBrain: linha de comando.
+"""GigaBrain command line.
 
-Comandos:
-    python main.py conversar              conversa com o Gêmeo Digital (DeepSeek)
-    python main.py conversar --simulado   idem, sem chamar API (respostas por regras)
-    python main.py demo                   roda conversas prontas e popula dados-demo/
-    python main.py painel                 painel visual com todas as pastas de dados (seletor no topo)
-    python main.py api                    API REST para a aplicação web (documentação em /docs)
-    python main.py requisitos             lista os requisitos
-    python main.py trilha R3              mostra como se chegou no R3
-    python main.py especialistas          lista os especialistas
-    python main.py alimentar pagamentos ata.md   entrega um documento a um especialista
-    python main.py entradas               lista os projetos do dataset EntradasGigabrain
-    python main.py avaliar 2008-keepass   processa a reunião e compara com o gabarito
-    python main.py avaliar todos --simulado      roda o dataset inteiro (conselho, agente único e LLM puro)
-    python main.py avaliar todos --repeticoes 5  repete cada execução e compara com estatística
-    python main.py avaliar todos --cenario sessoes   várias reuniões com repetições e mudanças injetadas
-    python main.py anotacao exportar ligacoes.csv    amostra de ligações para anotação manual
-    python main.py anotacao kappa ligacoes.csv       concordância entre os dois anotadores
+Commands:
+    python main.py chat                       talk to the Digital Twin (DeepSeek)
+    python main.py chat --simulated           same, without calling an API (rule-based answers)
+    python main.py demo                       runs sample conversations into data-demo/
+    python main.py dashboard                  visual dashboard of every data folder
+    python main.py api                        REST API for the web application (docs at /docs)
+    python main.py requirements               list the requirements
+    python main.py trace R3                   show how R3 came to be
+    python main.py experts                    list the experts
+    python main.py feed payments minutes.md   give a project document to an expert
+    python main.py dataset                    list the projects of the test dataset
+    python main.py evaluate 2008-keepass      process the meeting and compare with the gold standard
+    python main.py evaluate all --repetitions 5      every project, 5 times, with statistics
+    python main.py evaluate all --scenario sessions  several meetings with injected repetitions and changes
+    python main.py annotation export links.csv       sample of links for manual annotation
+    python main.py annotation kappa links.csv        agreement between the two annotators
 
-Opção global --dados <pasta> escolhe onde fica o banco (padrão: dados/).
+Global option --data <folder> chooses where the databases live (default: data/).
 
-Para usar a DeepSeek:  set DEEPSEEK_API_KEY=sua-chave   (PowerShell: $env:DEEPSEEK_API_KEY="...")
+To use DeepSeek:  $env:DEEPSEEK_API_KEY="your-key"  (PowerShell)  or  export DEEPSEEK_API_KEY=your-key
 """
 
 from __future__ import annotations
@@ -33,299 +32,299 @@ import shutil
 import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from gigabrain import anotacao, cenarios, demo, entradas, estatistica, reuniao
-from gigabrain.conselho import Conselho, abrir_contexto, alimentar_especialista
-from gigabrain.provedores import ErroProvedor, ProvedorSimulado, criar_provedor
+from gigabrain import annotation, dataset, demo, meeting, requirement_format, scenarios, stats
+from gigabrain.council import Council, feed_expert, open_context
+from gigabrain.providers import ProviderError, SimulatedProvider, create_provider
 
-RAIZ = os.path.dirname(os.path.abspath(__file__))
+ROOT = os.path.dirname(os.path.abspath(__file__))
 
 
-def cmd_conversar(args) -> None:
-    provedor = ProvedorSimulado() if args.simulado else criar_provedor("deepseek")
-    ctx = abrir_contexto(args.dados, provedor, modo=args.modo, ver_agentes=not args.silencioso)
-    conselho = Conselho(ctx)
-    conversa = conselho.iniciar()
+def _provider(simulated: bool):
+    return SimulatedProvider() if simulated else create_provider("deepseek")
 
-    print(f"=== GigaBrain · conversa {conversa} · modo {args.modo} · provedor {provedor.nome} ===")
-    print("Descreva o que você quer. Responda 'aprovado' quando a proposta estiver boa.")
-    print("Digite 'sair' para encerrar sem aprovar.\n")
+
+def _print_requirement(req: dict) -> None:
+    print(f"\n  ## {req.get('title')}  ({req.get('class')}{'/' + req['subtype'] if req.get('subtype') else ''}, "
+          f"topics: {', '.join(req.get('topics', []))})")
+    print(f"  Statement: {req.get('statement')}")
+    if req.get("story"):
+        print(f"  Story: {requirement_format.story_text(req['story'])}")
+    for c in req.get("acceptance_criteria", []):
+        print(f"   - {c.get('scenario')}: Given {c.get('given')} / When {c.get('when')} / Then {c.get('then')}")
+    if req.get("base"):
+        print(f"  -> new version of {req['base']}")
+    for link in req.get("links", []):
+        print(f"  -> {link['kind']} {link['target']}: {link.get('reason', '')}")
+
+
+def cmd_chat(args) -> None:
+    provider = _provider(args.simulated)
+    ctx = open_context(args.data, provider, mode=args.mode, show_agents=not args.quiet)
+    council = Council(ctx)
+    conversation = council.start()
+
+    print(f"=== GigaBrain · conversation {conversation} · mode {args.mode} · provider {provider.name} ===")
+    print("Describe what you need. Reply 'approved' when the proposal is good. Type 'exit' to leave without approving.\n")
     while True:
         try:
-            fala = input("PO> ").strip()
+            text = input("PO> ").strip()
         except (EOFError, KeyboardInterrupt):
-            fala = "sair"
-        if not fala:
+            text = "exit"
+        if not text:
             continue
-        if fala.lower() in ("sair", "exit", "quit"):
-            conselho.encerrar()
-            print("Conversa encerrada sem aprovar.")
+        if text.lower() in ("exit", "quit"):
+            council.end()
+            print("Conversation closed without approval.")
             break
         try:
-            resposta = conselho.falar(fala)
-        except Exception as exc:  # falha de API não derruba a conversa
-            print(f"\n[erro: {exc}]\n")
+            answer = council.talk(text)
+        except Exception as exc:  # an API failure does not end the conversation
+            print(f"\n[error: {exc}]\n")
             continue
-        print(f"\nGêmeo> {resposta['mensagem_ao_po']}")
-        for req in resposta.get("requisitos", []):
-            print(f"\n  ## {req.get('titulo')}  ({req.get('tipo', 'negocio')}, temas: {', '.join(req.get('temas', []))})")
-            print(f"  {req.get('historia')}")
-            for crit in req.get("criterios_aceite", []):
-                print(f"   - {crit}")
-            if req.get("base"):
-                print(f"  -> nova versão de {req['base']}")
-            for lig in req.get("ligacoes", []):
-                print(f"  -> {lig['tipo']} {lig['alvo']}: {lig.get('motivo', '')}")
+        print(f"\nTwin> {answer['message_to_po']}")
+        for req in answer.get("requirements", []):
+            _print_requirement(req)
         print()
-        if resposta["acao"] == "aprovado":
+        if answer["action"] == "approved":
             break
-    ctx.banco.fechar()
+    ctx.db.close()
 
 
 def cmd_demo(args) -> None:
-    pasta = args.dados if args.dados != "dados" else os.path.join(RAIZ, "dados-demo")
-    if os.path.exists(pasta):
-        shutil.rmtree(pasta)
-    demo.rodar(pasta)
-    print(f"\nPronto. Veja no painel: python main.py --dados {os.path.relpath(pasta, RAIZ)} painel")
+    folder = args.data if args.data != "data" else os.path.join(ROOT, "data-demo")
+    if os.path.exists(folder):
+        shutil.rmtree(folder)
+    demo.run(folder)
+    print("\nDone. See it in the dashboard: python main.py dashboard")
 
 
-def cmd_painel(args) -> None:
-    from gigabrain.painel.servidor import servir
-    # Sem --dados, o painel mostra todas as pastas de dados do projeto (com seletor).
-    raiz = args.dados if args.dados != "dados" else RAIZ
-    servir(raiz, args.porta, abrir_navegador=not args.sem_navegador)
+def cmd_dashboard(args) -> None:
+    from gigabrain.dashboard.server import serve
+    # Without --data, the dashboard shows every data folder of the project (with a selector).
+    serve(args.data if args.data != "data" else ROOT, args.port, open_browser=not args.no_browser)
 
 
-def cmd_requisitos(args) -> None:
-    ctx = abrir_contexto(args.dados, ProvedorSimulado())
-    for req in ctx.banco.listar_requisitos():
-        print(f"{req['id']:>4}  v{req['versao_atual']}  {req['status']:<12} {req['titulo']}  [{', '.join(req['temas'])}]")
-    for lig in ctx.banco.listar_ligacoes():
-        print(f"      {lig['origem_id']} {lig['tipo']} {lig['destino_id']}")
+def cmd_requirements(args) -> None:
+    ctx = open_context(args.data, SimulatedProvider())
+    for req in ctx.db.list_requirements():
+        print(f"{req['id']:>4}  v{req['current_version']}  {req['status']:<12} {req['content'].get('statement') or req['title']}  [{', '.join(req['topics'])}]")
+    for link in ctx.db.list_links():
+        print(f"      {link['source_id']} {link['kind']} {link['target_id']}")
 
 
-def cmd_trilha(args) -> None:
-    ctx = abrir_contexto(args.dados, ProvedorSimulado())
-    for passo in ctx.banco.trilha(args.requisito):
-        if passo["evento"] == "versao":
-            print(f"{passo['momento']}  {passo['requisito_id']} v{passo['versao']}  {passo['titulo']}  ({passo['motivo']})")
+def cmd_trace(args) -> None:
+    ctx = open_context(args.data, SimulatedProvider())
+    for step in ctx.db.trace(args.requirement):
+        if step["event"] == "version":
+            print(f"{step['timestamp']}  {step['requirement_id']} v{step['version']}  {step['title']}  ({step['reason']})")
         else:
-            print(f"{passo['momento']}  {passo['requisito_id']} {passo['tipo']} {passo['destino_id']}  ({passo['motivo']})")
+            print(f"{step['timestamp']}  {step['requirement_id']} {step['kind']} {step['target_id']}  ({step['reason']})")
 
 
-def cmd_especialistas(args) -> None:
-    ctx = abrir_contexto(args.dados, ProvedorSimulado())
-    for esp in ctx.banco.listar_especialistas():
-        print(f"{esp['id']:<16} v{esp['versao_conhecimento']}  {esp['consultas']} consulta(s)  {esp['arquivo']}")
+def cmd_experts(args) -> None:
+    ctx = open_context(args.data, SimulatedProvider())
+    for exp in ctx.db.list_experts():
+        print(f"{exp['id']:<16} v{exp['knowledge_version']}  {exp['consultations']} consultation(s)  {exp['file']}")
 
 
-def cmd_alimentar(args) -> None:
-    provedor = ProvedorSimulado() if args.simulado else criar_provedor("deepseek")
-    ctx = abrir_contexto(args.dados, provedor, ver_agentes=True)
-    with open(args.arquivo, encoding="utf-8") as f:
-        versao = alimentar_especialista(ctx, args.especialista, os.path.basename(args.arquivo), f.read())
-    print(f"Conhecimento de {args.especialista}: " + (f"versão {versao}" if versao else "sem mudanças"))
+def cmd_feed(args) -> None:
+    ctx = open_context(args.data, _provider(args.simulated), show_agents=True)
+    with open(args.file, encoding="utf-8") as f:
+        version = feed_expert(ctx, args.expert, os.path.basename(args.file), f.read())
+    print(f"Knowledge of {args.expert}: " + (f"version {version}" if version else "no changes"))
 
 
-def cmd_entradas(args) -> None:
-    for p in entradas.listar_projetos(args.entradas):
-        print(f"{p['pasta']:<22} tier {p['qualidade_tier']}  {p['requisitos_dialogo']:>3} requisitos  "
-              f"{p['palavras_transcricao']:>5} palavras  {p['nome_projeto']}")
+def cmd_dataset(args) -> None:
+    for p in dataset.list_projects(args.dataset):
+        print(f"{p['folder']:<22} tier {p['tier']}  {p['requirements']:>3} requirements  {p['words']:>5} words  {p['name']}")
 
 
-def _formatar(v) -> str:
+def _fmt(v) -> str:
     return "  -  " if v is None else f"{v:.2f}" if isinstance(v, float) else str(v)
 
 
-COLUNAS = ["previstos", "gabarito", "acertos", "precisao", "revocacao", "f1", "classe", "subtipo", "rastreio", "sem_respaldo"]
-COLUNAS_SESSOES = ["repeticoes_evitadas", "mudancas_capturadas", "mudancas_ligadas"]
+COLUMNS = ["predicted", "gold", "hits", "precision", "recall", "f1", "class", "subtype", "trace", "unsupported",
+           "ears", "story", "gherkin", "not_vague"]
+SESSION_COLUMNS = ["repetitions_avoided", "changes_captured", "changes_linked"]
 
 
-def _pasta_execucao(raiz: str, cenario: str, projeto: str, modo: str, rep: int) -> str:
-    return os.path.join(raiz, cenario, projeto, modo, f"rep-{rep}")
-
-
-def _rodar_avaliacao(args, nome: str, modo: str, rep: int, raiz: str) -> dict:
-    """Uma execução (projeto + modo + repetição), com pasta, bancos e provedor próprios."""
-    provedor = ProvedorSimulado() if args.simulado else criar_provedor("deepseek")
-    projeto = entradas.carregar_projeto(nome, args.entradas)
-    pasta = _pasta_execucao(raiz, args.cenario, nome, modo, rep)
-    if os.path.exists(pasta):
-        shutil.rmtree(pasta)
-    ctx = abrir_contexto(pasta, provedor, ver_agentes=args.ver_agentes)
-    ctx.com_qualidade = not args.sem_qualidade
+def _run_evaluation(args, project_name: str, mode: str, rep: int, root: str) -> dict:
+    """One run (project + mode + repetition), with its own folder, databases and provider."""
+    project = dataset.load_project(project_name, args.dataset)
+    folder = os.path.join(root, args.scenario, project_name, mode, f"rep-{rep}")
+    if os.path.exists(folder):
+        shutil.rmtree(folder)
+    ctx = open_context(folder, _provider(args.simulated), show_agents=args.show_agents)
+    ctx.with_quality = not args.no_quality
     try:
-        if args.cenario == "sessoes":
-            cenario = cenarios.gerar_sessoes(projeto, n_sessoes=args.sessoes)
-            relatorio = reuniao.processar_sessoes_e_avaliar(ctx, projeto, cenario, pasta, modo)
+        if args.scenario == "sessions":
+            scenario = scenarios.generate_sessions(project, n_sessions=args.sessions)
+            report = meeting.process_sessions_and_evaluate(ctx, project, scenario, folder, mode)
         else:
-            relatorio = reuniao.processar_e_avaliar(ctx, projeto, pasta, modo)
+            report = meeting.process_and_evaluate(ctx, project, folder, mode)
     finally:
-        ctx.banco.fechar()
-    return {"projeto": nome, "modo": modo, "rep": rep, **relatorio["metricas"]}
+        ctx.db.close()
+    return {"project": project_name, "mode": mode, "rep": rep, **report["metrics"]}
 
 
-def _linha(rotulo: str, modo: str, valores: dict, colunas: list[str]) -> str:
-    return f"{rotulo:<22} {modo:<13} " + " ".join(f"{_formatar(valores.get(c)):>9}" for c in colunas)
+def _row(label: str, mode: str, values: dict, columns: list[str]) -> str:
+    return f"{label:<22} {mode:<13} " + " ".join(f"{_fmt(values.get(c)):>9}" for c in columns)
 
 
-def cmd_avaliar(args) -> None:
-    nome_provedor = ProvedorSimulado.nome if args.simulado else criar_provedor("deepseek").nome
-    projetos = [p["pasta"] for p in entradas.listar_projetos(args.entradas) if int(p["requisitos_dialogo"]) > 0]
-    if args.projeto != "todos":
-        projetos = [args.projeto]
-    modos = list(reuniao.MODOS) if args.modo == "todos" else args.modo.split(",")
-    raiz = os.path.join(RAIZ, "dados-avaliacao", nome_provedor)
-    reuniao.migrar_pastas_antigas(raiz)
+def cmd_evaluate(args) -> None:
+    provider_name = SimulatedProvider.name if args.simulated else create_provider("deepseek").name
+    projects = [p["folder"] for p in dataset.list_projects(args.dataset) if p["requirements"] > 0]
+    if args.project != "all":
+        projects = [args.project]
+    modes = list(meeting.MODES) if args.mode == "all" else args.mode.split(",")
+    root = os.path.join(ROOT, "data-eval", provider_name)
 
-    # Cada (projeto, modo, repetição) é independente: roda várias ao mesmo tempo.
-    tarefas = [(nome, modo, rep) for rep in range(1, args.repeticoes + 1) for nome in projetos for modo in modos]
-    colunas = COLUNAS + (COLUNAS_SESSOES if args.cenario == "sessoes" else [])
-    linhas = []
-    print(f"{len(tarefas)} execução(ões) · cenário {args.cenario} · {args.paralelo} ao mesmo tempo")
-    print(f"{'projeto':<22} {'modo':<13} " + " ".join(f"{c[:9]:>9}" for c in colunas))
-    with ThreadPoolExecutor(max_workers=args.paralelo) as executor:
-        futuros = {executor.submit(_rodar_avaliacao, args, *t, raiz): t for t in tarefas}
-        for futuro in as_completed(futuros):
-            nome, modo, rep = futuros[futuro]
+    # Each (project, mode, repetition) is independent: several run at the same time.
+    tasks = [(name, mode, rep) for rep in range(1, args.repetitions + 1) for name in projects for mode in modes]
+    columns = COLUMNS + (SESSION_COLUMNS if args.scenario == "sessions" else [])
+    rows = []
+    print(f"{len(tasks)} run(s) · scenario {args.scenario} · {args.parallel} at a time")
+    print(f"{'project':<22} {'mode':<13} " + " ".join(f"{c[:9]:>9}" for c in columns))
+    with ThreadPoolExecutor(max_workers=args.parallel) as executor:
+        futures = {executor.submit(_run_evaluation, args, *t, root): t for t in tasks}
+        for future in as_completed(futures):
+            name, mode, rep = futures[future]
             try:
-                linha = futuro.result()
-            except Exception as exc:  # uma execução com erro não derruba as outras
-                print(f"{nome:<22} {modo:<13} rep {rep} ERRO: {exc}")
+                row = future.result()
+            except Exception as exc:  # one failed run does not stop the others
+                print(f"{name:<22} {mode:<13} rep {rep} ERROR: {exc}")
                 continue
-            linhas.append(linha)
-            print(_linha(f"{nome} #{rep}", modo, linha, colunas), flush=True)
-    if not linhas:
+            rows.append(row)
+            print(_row(f"{name} #{rep}", mode, row, columns), flush=True)
+    if not rows:
         return
-    linhas.sort(key=lambda l: (l["projeto"], reuniao.MODOS.index(l["modo"]), l["rep"]))
+    rows.sort(key=lambda r: (r["project"], meeting.MODES.index(r["mode"]), r["rep"]))
 
-    resumo = estatistica.resumir(linhas)
+    summary = stats.summarize(rows)
     print()
-    for modo, ms in resumo["por_modo"].items():
-        print(_linha("MÉDIA", modo, {c: v["media"] for c, v in ms.items()}, colunas))
-    if args.repeticoes > 1:
-        for modo, ms in resumo["por_modo"].items():
-            print(_linha("± entre repetições", modo, {c: v["desvio_entre_repeticoes"] for c, v in ms.items()}, colunas))
-    if resumo["comparacoes"]:
-        print("\nComparação pareada por projeto (Wilcoxon; efeito rank-biserial, >0 favorece o primeiro modo):")
-        for c in resumo["comparacoes"]:
-            marca = " *" if c["p"] < 0.05 else ""
-            print(f"  {c['metrica']:<20} {c['a']} {c['media_a']:.3f} x {c['b']} {c['media_b']:.3f}"
-                  f"  p={'<0.0001' if c['p'] < 0.0001 else format(c['p'], '.4f')}  efeito={c['efeito']:+.2f}  ({c['projetos']} projetos){marca}")
+    for mode, ms in summary["per_mode"].items():
+        print(_row("MEAN", mode, {c: v["mean"] for c, v in ms.items()}, columns))
+    if args.repetitions > 1:
+        for mode, ms in summary["per_mode"].items():
+            print(_row("± between repetitions", mode, {c: v["stdev_between_repetitions"] for c, v in ms.items()}, columns))
+    if summary["comparisons"]:
+        print("\nPaired comparison by project (Wilcoxon; rank-biserial effect, >0 favors the first mode):")
+        for c in summary["comparisons"]:
+            mark = " *" if c["p"] < 0.05 else ""
+            print(f"  {c['metric']:<20} {c['a']} {c['mean_a']:.3f} x {c['b']} {c['mean_b']:.3f}"
+                  f"  p={'<0.0001' if c['p'] < 0.0001 else format(c['p'], '.4f')}  effect={c['effect']:+.2f}  ({c['projects']} projects){mark}")
 
-    pasta_cenario = os.path.join(raiz, args.cenario)
-    os.makedirs(pasta_cenario, exist_ok=True)
-    with open(os.path.join(pasta_cenario, "resumo.csv"), "w", encoding="utf-8", newline="") as f:
-        escritor = csv.DictWriter(f, fieldnames=["projeto", "modo", "rep", *colunas], extrasaction="ignore")
-        escritor.writeheader()
-        escritor.writerows(linhas)
-    with open(os.path.join(pasta_cenario, "estatisticas.json"), "w", encoding="utf-8") as f:
-        json.dump(resumo, f, ensure_ascii=False, indent=1)
-    print(f"\nResumo em {os.path.relpath(pasta_cenario, RAIZ)} (resumo.csv e estatisticas.json). Painel: python main.py painel")
+    scenario_folder = os.path.join(root, args.scenario)
+    os.makedirs(scenario_folder, exist_ok=True)
+    with open(os.path.join(scenario_folder, "summary.csv"), "w", encoding="utf-8", newline="") as f:
+        writer = csv.DictWriter(f, fieldnames=["project", "mode", "rep", *columns], extrasaction="ignore")
+        writer.writeheader()
+        writer.writerows(rows)
+    with open(os.path.join(scenario_folder, "statistics.json"), "w", encoding="utf-8") as f:
+        json.dump(summary, f, ensure_ascii=False, indent=1)
+    print(f"\nSummary in {os.path.relpath(scenario_folder, ROOT)} (summary.csv and statistics.json). Dashboard: python main.py dashboard")
 
 
-def cmd_anotacao(args) -> None:
-    if args.acao == "exportar":
-        n = anotacao.exportar(RAIZ, args.arquivo, args.amostra, provedor=args.provedor, cenario=args.cenario)
-        print(f"{n} ligação(ões) sorteada(s) em {args.arquivo}. Cada anotador preenche a sua coluna com c (correta) ou i (incorreta).")
+def cmd_annotation(args) -> None:
+    if args.action == "export":
+        n = annotation.export(ROOT, args.file, args.sample, provider=args.provider, scenario=args.scenario)
+        print(f"{n} link(s) drawn into {args.file}. Each annotator fills in their column with c (correct) or i (incorrect).")
     else:
-        r = anotacao.kappa(args.arquivo)
-        if not r["anotadas"]:
-            sys.exit("Nenhuma linha com as duas colunas de anotação preenchidas.")
-        print(f"{r['anotadas']} ligações anotadas pelos dois · concordância {r['concordancia']:.0%} · kappa de Cohen {r['kappa']:.2f}")
-        print(f"precisão das ligações: anotador 1 {r['precisao_anotador_1']:.0%} · anotador 2 {r['precisao_anotador_2']:.0%}"
-              f" · consenso (os dois dizem correta) {r['precisao_consenso']:.0%}")
+        r = annotation.kappa(args.file)
+        if not r["annotated"]:
+            sys.exit("No row has both annotation columns filled in.")
+        print(f"{r['annotated']} links annotated by both · agreement {r['agreement']:.0%} · Cohen's kappa {r['kappa']:.2f}")
+        print(f"link precision: annotator 1 {r['precision_annotator_1']:.0%} · annotator 2 {r['precision_annotator_2']:.0%}"
+              f" · consensus (both say correct) {r['precision_consensus']:.0%}")
 
 
 def cmd_api(args) -> None:
     import uvicorn
-    from gigabrain.api import criar_app
+    from gigabrain.api import create_app
 
-    if not args.simulado:
-        criar_provedor("deepseek")  # falha cedo se a chave não estiver configurada
-    fabrica = ProvedorSimulado if args.simulado else (lambda: criar_provedor("deepseek"))
+    if not args.simulated:
+        create_provider("deepseek")  # fail early if the key is not set
+    factory = SimulatedProvider if args.simulated else (lambda: create_provider("deepseek"))
     token = args.token or os.environ.get("GIGABRAIN_API_TOKEN")
-    origens = [o.strip() for o in args.origens.split(",")] if args.origens else ["*"]
-    app = criar_app(args.dados, fabrica, origens=origens, token=token)
-    print(f"GigaBrain API em http://{args.host}:{args.porta}  ·  documentação: http://{args.host}:{args.porta}/docs")
-    print(f"dados: {os.path.abspath(args.dados)} · provedor: {'simulado' if args.simulado else 'deepseek'}"
-          f" · token: {'sim' if token else 'não'} · origens: {', '.join(origens)}")
-    uvicorn.run(app, host=args.host, port=args.porta, log_level="warning")
+    origins = [o.strip() for o in args.origins.split(",")] if args.origins else ["*"]
+    app = create_app(args.data, factory, origins=origins, token=token)
+    print(f"GigaBrain API at http://{args.host}:{args.port}  ·  docs: http://{args.host}:{args.port}/docs")
+    print(f"data: {os.path.abspath(args.data)} · provider: {'simulated' if args.simulated else 'deepseek'}"
+          f" · token: {'yes' if token else 'no'} · origins: {', '.join(origins)}")
+    uvicorn.run(app, host=args.host, port=args.port, log_level="warning")
 
 
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
-    parser = argparse.ArgumentParser(description="GigaBrain: conselho multiagente para requisitos")
-    parser.add_argument("--dados", default="dados", help="pasta do banco, logs e conhecimento")
-    sub = parser.add_subparsers(dest="comando", required=True)
+    parser = argparse.ArgumentParser(description="GigaBrain: multi-agent council for software requirements")
+    parser.add_argument("--data", default="data", help="folder of the databases, logs and knowledge files")
+    sub = parser.add_subparsers(dest="command", required=True)
 
-    p = sub.add_parser("conversar", help="conversa com o Gêmeo Digital")
-    p.add_argument("--simulado", action="store_true", help="não chama API; usa respostas por regras")
-    p.add_argument("--modo", choices=["pos_reuniao", "reuniao"], default="pos_reuniao")
-    p.add_argument("--silencioso", action="store_true", help="não mostra a conversa interna dos agentes")
-    p.set_defaults(func=cmd_conversar)
+    p = sub.add_parser("chat", help="talk to the Digital Twin")
+    p.add_argument("--simulated", action="store_true", help="no API call; rule-based answers")
+    p.add_argument("--mode", choices=["after_meeting", "in_meeting"], default="after_meeting")
+    p.add_argument("--quiet", action="store_true", help="hide the internal conversation of the agents")
+    p.set_defaults(func=cmd_chat)
 
-    p = sub.add_parser("demo", help="roda conversas prontas com o provedor simulado")
-    p.set_defaults(func=cmd_demo)
+    sub.add_parser("demo", help="run sample conversations with the simulated provider").set_defaults(func=cmd_demo)
 
-    p = sub.add_parser("painel", help="painel visual no navegador")
-    p.add_argument("--porta", type=int, default=8765)
-    p.add_argument("--sem-navegador", action="store_true")
-    p.set_defaults(func=cmd_painel)
+    p = sub.add_parser("dashboard", help="visual dashboard in the browser")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--no-browser", action="store_true")
+    p.set_defaults(func=cmd_dashboard)
 
-    sub.add_parser("requisitos").set_defaults(func=cmd_requisitos)
-    p = sub.add_parser("trilha")
-    p.add_argument("requisito")
-    p.set_defaults(func=cmd_trilha)
-    sub.add_parser("especialistas").set_defaults(func=cmd_especialistas)
+    sub.add_parser("requirements", help="list the requirements").set_defaults(func=cmd_requirements)
+    p = sub.add_parser("trace", help="how a requirement came to be")
+    p.add_argument("requirement")
+    p.set_defaults(func=cmd_trace)
+    sub.add_parser("experts", help="list the experts").set_defaults(func=cmd_experts)
 
-    p = sub.add_parser("alimentar", help="entrega um documento do projeto a um especialista")
-    p.add_argument("especialista")
-    p.add_argument("arquivo")
-    p.add_argument("--simulado", action="store_true")
-    p.set_defaults(func=cmd_alimentar)
+    p = sub.add_parser("feed", help="give a project document to an expert")
+    p.add_argument("expert")
+    p.add_argument("file")
+    p.add_argument("--simulated", action="store_true")
+    p.set_defaults(func=cmd_feed)
 
-    p = sub.add_parser("entradas", help="lista os projetos do dataset de teste")
-    p.add_argument("--entradas", default=entradas.PASTA_PADRAO, help="pasta do repositório EntradasGigabrain")
-    p.set_defaults(func=cmd_entradas)
+    p = sub.add_parser("dataset", help="list the projects of the test dataset")
+    p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER, help="folder of the EntradasGigabrain repository")
+    p.set_defaults(func=cmd_dataset)
 
-    p = sub.add_parser("avaliar", help="processa reuniões do dataset e compara com o gabarito")
-    p.add_argument("projeto", help="pasta do projeto (ex.: 2008-keepass) ou 'todos'")
-    p.add_argument("--modo", default="todos",
-                   help="todos (padrão) ou lista separada por vírgula: conselho,agente_unico,llm_puro")
-    p.add_argument("--repeticoes", type=int, default=1, help="quantas vezes rodar cada projeto/modo")
-    p.add_argument("--cenario", choices=["reuniao", "sessoes"], default="reuniao",
-                   help="reuniao: uma reunião por projeto; sessoes: várias reuniões com repetições e mudanças injetadas")
-    p.add_argument("--sessoes", type=int, default=3, help="em quantas reuniões dividir (cenário sessoes)")
-    p.add_argument("--sem-qualidade", action="store_true", help="não consultar o especialista de qualidade (ablação)")
-    p.add_argument("--simulado", action="store_true", help="baseline por regras, sem API")
-    p.add_argument("--ver-agentes", action="store_true")
-    p.add_argument("--paralelo", type=int, default=4, help="quantas execuções ao mesmo tempo (padrão: 4)")
-    p.add_argument("--entradas", default=entradas.PASTA_PADRAO)
-    p.set_defaults(func=cmd_avaliar)
+    p = sub.add_parser("evaluate", help="process dataset meetings and compare with the gold standard")
+    p.add_argument("project", help="project folder (e.g. 2008-keepass) or 'all'")
+    p.add_argument("--mode", default="all", help="all (default) or a comma-separated list: council,single_agent,plain_llm")
+    p.add_argument("--repetitions", type=int, default=1, help="how many times to run each project/mode")
+    p.add_argument("--scenario", choices=["meeting", "sessions"], default="meeting",
+                   help="meeting: one meeting per project; sessions: several meetings with injected repetitions and changes")
+    p.add_argument("--sessions", type=int, default=3, help="how many meetings to split into (sessions scenario)")
+    p.add_argument("--no-quality", action="store_true", help="do not consult the quality expert (ablation)")
+    p.add_argument("--simulated", action="store_true", help="rule-based baseline, no API")
+    p.add_argument("--show-agents", action="store_true")
+    p.add_argument("--parallel", type=int, default=4, help="how many runs at the same time (default: 4)")
+    p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER)
+    p.set_defaults(func=cmd_evaluate)
 
-    p = sub.add_parser("anotacao", help="anotação manual das ligações (exportar amostra / calcular kappa)")
-    p.add_argument("acao", choices=["exportar", "kappa"])
-    p.add_argument("arquivo", help="CSV de saída (exportar) ou o CSV anotado (kappa)")
-    p.add_argument("--amostra", type=int, default=60)
-    p.add_argument("--provedor", default="deepseek-chat")
-    p.add_argument("--cenario", default="*")
-    p.set_defaults(func=cmd_anotacao)
+    p = sub.add_parser("annotation", help="manual annotation of the links (export a sample / compute kappa)")
+    p.add_argument("action", choices=["export", "kappa"])
+    p.add_argument("file", help="output CSV (export) or the annotated CSV (kappa)")
+    p.add_argument("--sample", type=int, default=60)
+    p.add_argument("--provider", default="deepseek-chat")
+    p.add_argument("--scenario", default="*")
+    p.set_defaults(func=cmd_annotation)
 
-    p = sub.add_parser("api", help="API REST para a aplicação web (conversa do PO e histórico)")
-    p.add_argument("--porta", type=int, default=8000)
-    p.add_argument("--host", default="127.0.0.1", help="0.0.0.0 para aceitar conexões de outras máquinas da rede")
-    p.add_argument("--simulado", action="store_true", help="não chama API; respostas por regras (para desenvolver o front)")
-    p.add_argument("--origens", default="", help="origens liberadas no CORS, separadas por vírgula (padrão: todas)")
-    p.add_argument("--token", default="", help="exige Authorization: Bearer <token> (ou defina GIGABRAIN_API_TOKEN)")
+    p = sub.add_parser("api", help="REST API for the web application (PO conversation and history)")
+    p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--host", default="127.0.0.1", help="0.0.0.0 to accept connections from other machines")
+    p.add_argument("--simulated", action="store_true", help="no API call; rule-based answers (to build the front end)")
+    p.add_argument("--origins", default="", help="CORS origins, comma-separated (default: all)")
+    p.add_argument("--token", default="", help="require Authorization: Bearer <token> (or set GIGABRAIN_API_TOKEN)")
     p.set_defaults(func=cmd_api)
 
     args = parser.parse_args()
     try:
         args.func(args)
-    except ErroProvedor as exc:
-        sys.exit(f"Erro: {exc}")
+    except ProviderError as exc:
+        sys.exit(f"Error: {exc}")
 
 
 if __name__ == "__main__":

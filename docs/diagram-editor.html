@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GigaBrain — Editor de Diagrama</title>
+<title>GigaBrain — Diagram Editor</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Arimo:ital,wght@0,400;0,600;0,700;1,400&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
@@ -121,13 +121,13 @@
 
 <header>
   <div>
-    <h1>GigaBrain — Editor de Diagrama</h1>
-    <p>Arraste os ícones e cards. As flechas e os quadros tracejados se ajustam sozinhos.</p>
+    <h1>GigaBrain — Diagram Editor</h1>
+    <p>Drag the icons and cards. The arrows and the dashed frames adjust by themselves.</p>
   </div>
   <div class="spacer"></div>
-  <label class="toggle"><input type="checkbox" id="toggleBoxes"> mostrar áreas de colisão</label>
-  <label class="toggle"><input type="checkbox" id="toggleSnap" checked> ímã de 5px</label>
-  <button id="btnReset">Restaurar posições</button>
+  <label class="toggle"><input type="checkbox" id="toggleBoxes"> show collision areas</label>
+  <label class="toggle"><input type="checkbox" id="toggleSnap" checked> snap to 5px</label>
+  <button id="btnReset">Reset positions</button>
 </header>
 
 <main>
@@ -173,39 +173,39 @@
 
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal" id="modalBox">
-      <h2 id="modalTitle">Editar nó</h2>
+      <h2 id="modalTitle">Edit node</h2>
       <p class="modal-id" id="modalId">id</p>
 
       <div class="field">
-        <label for="fTitle">Texto principal (uma linha por linha do título)</label>
+        <label for="fTitle">Main text (one line per title line)</label>
         <textarea id="fTitle" rows="2"></textarea>
       </div>
 
       <div class="field">
-        <label for="fSub">Subtítulo (opcional)</label>
+        <label for="fSub">Subtitle (optional)</label>
         <input type="text" id="fSub">
       </div>
 
       <div class="field-row">
         <div class="field">
-          <label for="fColor">Categoria (cor)</label>
+          <label for="fColor">Category (color)</label>
           <select id="fColor">
-            <option value="human">humano</option>
-            <option value="agent">agente</option>
-            <option value="data">base de conhecimento</option>
-            <option value="output">artefato de saída</option>
-            <option value="neutral">neutro / externo</option>
+            <option value="human">human</option>
+            <option value="agent">agent</option>
+            <option value="data">knowledge base</option>
+            <option value="output">output artifact</option>
+            <option value="neutral">neutral / external</option>
           </select>
         </div>
         <div class="field" id="fIconWrap">
-          <label for="fIcon">Ícone</label>
+          <label for="fIcon">Icon</label>
           <select id="fIcon">
-            <option value="person">pessoa</option>
-            <option value="agent">agente (robô)</option>
-            <option value="db">banco de dados</option>
-            <option value="doc">documento</option>
-            <option value="code">código</option>
-            <option value="globe">globo</option>
+            <option value="person">person</option>
+            <option value="agent">agent (robot)</option>
+            <option value="db">database</option>
+            <option value="doc">document</option>
+            <option value="code">code</option>
+            <option value="globe">globe</option>
           </select>
         </div>
       </div>
@@ -215,16 +215,16 @@
         <div class="field"><label for="fY">Y</label><input type="number" id="fY"></div>
       </div>
       <div class="field-row" id="fSizeWrap">
-        <div class="field"><label for="fW">Largura</label><input type="number" id="fW"></div>
-        <div class="field"><label for="fH">Altura</label><input type="number" id="fH"></div>
+        <div class="field"><label for="fW">Width</label><input type="number" id="fW"></div>
+        <div class="field"><label for="fH">Height</label><input type="number" id="fH"></div>
       </div>
-      <p class="field-hint">Ícones usam X/Y como o centro do ícone. Cards (tracejados) usam X/Y como o canto superior esquerdo.</p>
+      <p class="field-hint">Icons use X/Y as the center of the icon. Cards (dashed) use X/Y as the top-left corner.</p>
 
       <div class="modal-actions">
-        <button id="btnDelete" style="border-color:#e0392f; color:#e0392f;">Excluir nó</button>
+        <button id="btnDelete" style="border-color:#e0392f; color:#e0392f;">Delete node</button>
         <div style="display:flex; gap:10px;">
-          <button id="btnCancel">Cancelar</button>
-          <button id="btnSave" class="primary">Salvar</button>
+          <button id="btnCancel">Cancel</button>
+          <button id="btnSave" class="primary">Save</button>
         </div>
       </div>
     </div>
@@ -232,21 +232,21 @@
 
   <aside>
     <div>
-      <h2>Selecionado</h2>
-      <div class="selected-box" id="selBox">nenhum — clique e arraste um nó</div>
+      <h2>Selected</h2>
+      <div class="selected-box" id="selBox">none — click and drag a node</div>
     </div>
 
     <div class="legend-row">
-      <span><i style="background:var(--human)"></i>humano</span>
-      <span><i style="background:var(--agent)"></i>agente</span>
+      <span><i style="background:var(--human)"></i>human</span>
+      <span><i style="background:var(--agent)"></i>agent</span>
       <span><i style="background:var(--data)"></i>RAG</span>
-      <span><i style="background:var(--output)"></i>saída</span>
+      <span><i style="background:var(--output)"></i>output</span>
     </div>
 
     <div style="display:flex; flex-direction:column; flex:1; min-height:0;">
-      <h2>Posições atuais (JSON)</h2>
+      <h2>Current positions (JSON)</h2>
       <textarea id="jsonOut" readonly></textarea>
-      <p class="hint">Copie tudo (clique dentro, Ctrl+A, Ctrl+C) e cole na conversa — eu aplico essas posições de volta no <code>arquitetura.html</code>.</p>
+      <p class="hint">Copy everything (click inside, Ctrl+A, Ctrl+C) and paste it in the conversation — the positions are then applied back to <code>architecture.html</code>.</p>
     </div>
   </aside>
 </main>
@@ -265,45 +265,45 @@ const toggleSnap = document.getElementById('toggleSnap');
 // ---- data model -----------------------------------------------------
 // icon nodes: x,y = center. card nodes: x,y = top-left, w,h = size.
 const INITIAL_NODES = [
-  {id:'po',     type:'icon', icon:'person', color:'human',  x:205, y:125, group:'delib',   lines:['PO Real'], sub:'humano · dono do produto'},
-  {id:'gemeo',  type:'icon', icon:'agent',  color:'agent',  x:585, y:125, group:'delib',   lines:['Gêmeo Digital'], sub:'agente principal do PO'},
-  {id:'output', type:'icon', icon:'doc',    color:'output', x:980, y:125, group:'delib',   lines:['Requisito Definido'], sub:'alinhado ao mercado'},
+  {id:'po',     type:'icon', icon:'person', color:'human',  x:205, y:125, group:'delib',   lines:['Real PO'], sub:'human · product owner'},
+  {id:'twin',  type:'icon', icon:'agent',  color:'agent',  x:585, y:125, group:'delib',   lines:['Digital Twin'], sub:"the PO's main agent"},
+  {id:'output', type:'icon', icon:'doc',    color:'output', x:980, y:125, group:'delib',   lines:['Defined Requirement'], sub:'aligned with the market'},
 
-  {id:'lider',  type:'icon', icon:'agent',  color:'agent',  x:585, y:340, group:'consult', lines:['Líder do Conselho','Consultivo'], sub:'gerente · sempre existe'},
-  {id:'maindb', type:'icon', icon:'db',     color:'data',   x:950, y:340, group:'consult', lines:['Banco de Dados Principal'], sub:'RAG · estrutura & registro'},
+  {id:'leader',  type:'icon', icon:'agent',  color:'agent',  x:585, y:340, group:'consult', lines:['Leader of the','Consultative Council'], sub:'manager · always exists'},
+  {id:'maindb', type:'icon', icon:'db',     color:'data',   x:950, y:340, group:'consult', lines:['Main Database'], sub:'RAG · structure & registry'},
 
-  {id:'esp1',   type:'icon', icon:'agent',  color:'agent',  x:245, y:500, group:'consult', lines:['Especialista · Pagamentos'], sub:'conhecimento do domínio'},
-  {id:'esp2',   type:'icon', icon:'agent',  color:'agent',  x:585, y:500, group:'consult', lines:['Especialista · Notificações'], sub:'conhecimento do domínio'},
-  {id:'esp3',   type:'card', color:'agent', x:780, y:480, w:280, h:86, group:'consult', lines:['+ Novo Especialista'], sub:'criado sob demanda'},
+  {id:'exp1',   type:'icon', icon:'agent',  color:'agent',  x:245, y:500, group:'consult', lines:['Expert · Payments'], sub:'domain knowledge'},
+  {id:'exp2',   type:'icon', icon:'agent',  color:'agent',  x:585, y:500, group:'consult', lines:['Expert · Notifications'], sub:'domain knowledge'},
+  {id:'exp3',   type:'card', color:'agent', x:780, y:480, w:280, h:86, group:'consult', lines:['+ New Expert'], sub:'created on demand'},
 
-  {id:'rag1',   type:'icon', icon:'db', color:'data', x:245, y:650, group:'consult', lines:['RAG · Pagamentos']},
-  {id:'rag2',   type:'icon', icon:'db', color:'data', x:585, y:650, group:'consult', lines:['RAG · Notificações']},
-  {id:'rag3',   type:'card', color:'data', x:780, y:630, w:280, h:70, group:'consult', lines:['RAG do especialista']},
+  {id:'rag1',   type:'icon', icon:'db', color:'data', x:245, y:650, group:'consult', lines:['RAG · Payments']},
+  {id:'rag2',   type:'icon', icon:'db', color:'data', x:585, y:650, group:'consult', lines:['RAG · Notifications']},
+  {id:'rag3',   type:'card', color:'data', x:780, y:630, w:280, h:70, group:'consult', lines:["Expert's RAG"]},
 
-  {id:'code',   type:'icon', icon:'code',  color:'neutral', x:785,  y:830, group:'ext', lines:['Código-fonte'], sub:'estudo do sistema atual'},
-  {id:'web',    type:'icon', icon:'globe', color:'neutral', x:1050, y:830, group:'ext', lines:['Pesquisa na Web'], sub:'quando o domínio é novo'},
+  {id:'code',   type:'icon', icon:'code',  color:'neutral', x:785,  y:830, group:'ext', lines:['Source code'], sub:'study of the current system'},
+  {id:'web',    type:'icon', icon:'globe', color:'neutral', x:1050, y:830, group:'ext', lines:['Web research'], sub:'when the domain is new'},
 ];
 
 let EDGES = [
-  {from:'po', to:'gemeo', bidir:true, label:'perguntas & sugestões'},
-  {from:'gemeo', to:'output', label:'quando aprovam'},
-  {from:'gemeo', to:'lider', offsetPerp:-11, label:'consulta conhecimento', labelSide:-1},
-  {from:'lider', to:'gemeo', offsetPerp:-11, label:'resposta consolidada', labelSide:1},
-  {from:'lider', to:'maindb', bidir:true, label:'consulta & registro'},
-  {from:'lider', to:'esp1', bidir:true},
-  {from:'lider', to:'esp2', bidir:true},
-  {from:'lider', to:'esp3', muted:true, label:'cria se não existir no registro'},
-  {from:'esp1', to:'rag1'},
-  {from:'esp2', to:'rag2'},
-  {from:'esp3', to:'rag3', muted:true},
+  {from:'po', to:'twin', bidir:true, label:'questions & suggestions'},
+  {from:'twin', to:'output', label:'when they approve'},
+  {from:'twin', to:'leader', offsetPerp:-11, label:'queries knowledge', labelSide:-1},
+  {from:'leader', to:'twin', offsetPerp:-11, label:'consolidated answer', labelSide:1},
+  {from:'leader', to:'maindb', bidir:true, label:'query & registry'},
+  {from:'leader', to:'exp1', bidir:true},
+  {from:'leader', to:'exp2', bidir:true},
+  {from:'leader', to:'exp3', muted:true, label:'creates it if not in the registry'},
+  {from:'exp1', to:'rag1'},
+  {from:'exp2', to:'rag2'},
+  {from:'exp3', to:'rag3', muted:true},
   {from:'code', to:'rag3', muted:true},
   {from:'web', to:'rag3', muted:true},
 ];
 const INITIAL_EDGES = JSON.parse(JSON.stringify(EDGES));
 
 const GROUPS = {
-  delib:   {label:'CONSELHO DELIBERATIVO', sub:'decidem juntos quando o requisito está pronto'},
-  consult: {label:'CONSELHO CONSULTIVO', sub:'cresce ao longo do tempo · trabalho assíncrono'},
+  delib:   {label:'DELIBERATIVE COUNCIL', sub:'decide together when the requirement is ready'},
+  consult: {label:'CONSULTATIVE COUNCIL', sub:'grows over time · asynchronous work'},
 };
 
 let nodes = JSON.parse(JSON.stringify(INITIAL_NODES));
@@ -492,13 +492,13 @@ document.getElementById('btnReset').addEventListener('click', () => {
   nodes = JSON.parse(JSON.stringify(INITIAL_NODES));
   EDGES = JSON.parse(JSON.stringify(INITIAL_EDGES));
   renderAll();
-  selBox.textContent = 'nenhum — clique e arraste um nó';
+  selBox.textContent = 'none — click and drag a node';
 });
 toggleBoxes.addEventListener('change', () => {
   stage.classList.toggle('show-boxes', toggleBoxes.checked);
 });
 
-// ---- edit modal (botão direito num nó) --------------------------------
+// ---- edit modal (right click on a node) --------------------------------
 const modalOverlay = document.getElementById('modalOverlay');
 const modalTitle = document.getElementById('modalTitle');
 const modalId = document.getElementById('modalId');
@@ -516,7 +516,7 @@ let editingNode = null;
 
 function openModal(node){
   editingNode = node;
-  modalTitle.textContent = node.type === 'card' ? 'Editar card' : 'Editar ícone';
+  modalTitle.textContent = node.type === 'card' ? 'Edit card' : 'Edit icon';
   modalId.textContent = node.id;
   fTitle.value = node.lines.join('\n');
   fSub.value = node.sub || '';
@@ -541,7 +541,7 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && modalOverl
 document.getElementById('btnSave').addEventListener('click', () => {
   if (!editingNode) return;
   const lines = fTitle.value.split('\n').map(s => s.trim()).filter(Boolean);
-  editingNode.lines = lines.length ? lines : ['(sem título)'];
+  editingNode.lines = lines.length ? lines : ['(untitled)'];
   editingNode.sub = fSub.value.trim();
   editingNode.color = fColor.value;
   if (editingNode.type === 'icon') editingNode.icon = fIcon.value;
@@ -557,7 +557,7 @@ document.getElementById('btnSave').addEventListener('click', () => {
 
 document.getElementById('btnDelete').addEventListener('click', () => {
   if (!editingNode) return;
-  if (!confirm(`Excluir "${editingNode.lines[0]}"? As flechas ligadas a ele também somem.`)) return;
+  if (!confirm(`Delete "${editingNode.lines[0]}"? The arrows connected to it are removed too.`)) return;
   const id = editingNode.id;
   nodes = nodes.filter(n => n.id !== id);
   EDGES = EDGES.filter(e => e.from !== id && e.to !== id);

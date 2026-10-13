@@ -1,0 +1,1200 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GigaBrain · Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #f4f5f8; --surface: #ffffff; --surface-2: #f8f9fb; --ink: #151a24; --ink-2: #3b4352; --muted: #6b7385;
+  --line: #e3e6ec; --line-2: #d3d8e1; --focus: #3b82f6;
+  --po: #475569; --twin: #0e9fb8; --leader: #7c3aed; --expert: #d97706; --system: #64748b; --llm: #94a3b8;
+  --ok: #15803d; --ok-bg: #dcfce7; --warn: #b45309; --warn-bg: #fef3c7; --bad: #b91c1c; --bad-bg: #fee2e2;
+  --info: #2563eb; --info-bg: #dbeafe; --neutral-bg: #eef0f4;
+  --add: #dcfce7; --del: #fee2e2;
+  --radius: 12px; --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 1px 3px rgba(16, 24, 40, .06);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0c0f15; --surface: #141922; --surface-2: #10141c; --ink: #eef1f6; --ink-2: #c3c9d4; --muted: #8890a0;
+    --line: #232a36; --line-2: #2f3846; --focus: #60a5fa;
+    --po: #cbd5e1; --twin: #22d3ee; --leader: #a78bfa; --expert: #fbbf24; --system: #94a3b8; --llm: #64748b;
+    --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #36290b; --bad: #f87171; --bad-bg: #3a1717;
+    --info: #60a5fa; --info-bg: #142a4a; --neutral-bg: #1c222d;
+    --add: #12301f; --del: #3a1717; --shadow: none;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0c0f15; --surface: #141922; --surface-2: #10141c; --ink: #eef1f6; --ink-2: #c3c9d4; --muted: #8890a0;
+  --line: #232a36; --line-2: #2f3846; --focus: #60a5fa;
+  --po: #cbd5e1; --twin: #22d3ee; --leader: #a78bfa; --expert: #fbbf24; --system: #94a3b8; --llm: #64748b;
+  --ok: #4ade80; --ok-bg: #12301f; --warn: #fbbf24; --warn-bg: #36290b; --bad: #f87171; --bad-bg: #3a1717;
+  --info: #60a5fa; --info-bg: #142a4a; --neutral-bg: #1c222d;
+  --add: #12301f; --del: #3a1717; --shadow: none;
+}
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.55 Inter, system-ui, -apple-system, "Segoe UI", sans-serif; -webkit-font-smoothing: antialiased; }
+code, pre, .mono { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; }
+button, select, input { font: inherit; color: inherit; }
+a { color: var(--info); }
+
+/* ------------------------------------------------ layout */
+.app { display: grid; grid-template-columns: 264px 1fr; min-height: 100vh; }
+aside { background: var(--surface); border-right: 1px solid var(--line); padding: 20px 16px; display: flex; flex-direction: column; gap: 22px; position: sticky; top: 0; height: 100vh; overflow: auto; }
+.brand { display: flex; align-items: center; gap: 10px; padding: 0 6px; }
+.brand .logo { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--leader), var(--twin)); display: grid; place-items: center; color: #fff; font-weight: 700; }
+.brand b { font-size: 17px; display: block; line-height: 1.2; }
+.brand small { color: var(--muted); font-size: 12px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); padding: 0 6px; margin-bottom: 6px; }
+.menu { display: flex; flex-direction: column; gap: 2px; }
+.menu button { display: flex; align-items: center; gap: 10px; width: 100%; border: 0; background: none; padding: 9px 10px; border-radius: 8px; cursor: pointer; color: var(--ink-2); text-align: left; font-weight: 500; }
+.menu button svg { width: 18px; height: 18px; flex: none; opacity: .75; }
+.menu button:hover { background: var(--surface-2); color: var(--ink); }
+.menu button.active { background: var(--info-bg); color: var(--info); }
+.menu button.active svg { opacity: 1; }
+.menu button[hidden] { display: none; }
+.side-footer { margin-top: auto; font-size: 12px; color: var(--muted); padding: 0 6px; }
+.side-footer div { display: flex; justify-content: space-between; padding: 3px 0; }
+.side-footer b { color: var(--ink-2); font-weight: 600; }
+main { padding: 28px 32px 48px; min-width: 0; }
+.page { display: none; max-width: 1360px; margin: 0 auto; }
+.page.active { display: block; }
+.head { margin-bottom: 20px; }
+.head h1 { font-size: 24px; margin: 0 0 4px; letter-spacing: -.01em; }
+.head p { margin: 0; color: var(--muted); max-width: 820px; }
+
+@media (max-width: 900px) {
+  .app { grid-template-columns: 1fr; }
+  aside { position: static; height: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 14px 16px; gap: 12px; }
+  .menu { flex-direction: row; flex-wrap: wrap; }
+  .menu button { width: auto; }
+  .side-footer { display: none; }
+  main { padding: 20px 16px 40px; }
+}
+
+/* ------------------------------------------------ components */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); }
+.card-pad { padding: 18px 20px; }
+.card h2 { font-size: 15px; margin: 0; font-weight: 600; }
+.card-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.card-head .hint, .hint { color: var(--muted); font-size: 13px; }
+.stack { display: flex; flex-direction: column; gap: 18px; }
+.two { display: grid; grid-template-columns: minmax(280px, 360px) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1100px) { .two { grid-template-columns: 1fr; } }
+.field { height: 36px; padding: 0 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); }
+.field:focus { outline: 2px solid var(--focus); outline-offset: -1px; }
+.button { height: 36px; padding: 0 14px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface); cursor: pointer; display: inline-flex; align-items: center; gap: 6px; font-weight: 500; }
+.button:hover { background: var(--surface-2); }
+.button.primary { background: var(--info); border-color: var(--info); color: #fff; }
+.button.primary:hover { filter: brightness(1.08); }
+.segments { display: inline-flex; border: 1px solid var(--line-2); border-radius: 8px; padding: 2px; background: var(--surface-2); flex-wrap: wrap; }
+.segments button { border: 0; background: none; padding: 5px 12px; border-radius: 6px; cursor: pointer; color: var(--muted); font-size: 13px; font-weight: 500; }
+.segments button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+.toggle { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-2); cursor: pointer; user-select: none; }
+.toggle input { width: 16px; height: 16px; accent-color: var(--info); }
+.badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 99px; font-size: 12px; font-weight: 600; white-space: nowrap; background: var(--neutral-bg); color: var(--ink-2); }
+.badge.ok { background: var(--ok-bg); color: var(--ok); } .badge.warn { background: var(--warn-bg); color: var(--warn); }
+.badge.bad { background: var(--bad-bg); color: var(--bad); } .badge.info { background: var(--info-bg); color: var(--info); }
+.tag { display: inline-block; padding: 1px 8px; border-radius: 6px; font-size: 12px; background: var(--neutral-bg); color: var(--ink-2); margin: 2px 4px 2px 0; }
+.muted { color: var(--muted); }
+.empty { padding: 48px 24px; text-align: center; color: var(--muted); }
+.empty b { display: block; color: var(--ink-2); font-size: 15px; margin-bottom: 4px; }
+
+/* master/detail lists */
+.list { display: flex; flex-direction: column; max-height: calc(100vh - 230px); overflow: auto; }
+.list .item { padding: 12px 18px; border-bottom: 1px solid var(--line); cursor: pointer; display: block; }
+.list .item:last-child { border-bottom: 0; }
+.list .item:hover { background: var(--surface-2); }
+.list .item.sel { background: var(--info-bg); box-shadow: inset 3px 0 0 var(--info); }
+.item-top { display: flex; align-items: center; gap: 8px; justify-content: space-between; }
+.item-title { font-weight: 600; }
+.item-text { color: var(--ink-2); font-size: 14px; margin-top: 2px; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.item-meta { color: var(--muted); font-size: 12px; margin-top: 4px; }
+.search { padding: 12px 18px; border-bottom: 1px solid var(--line); display: flex; gap: 8px; flex-wrap: wrap; }
+.search .field { flex: 1; min-width: 140px; }
+
+/* detail */
+.detail { padding: 22px 24px; }
+.detail h3 { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 24px 0 8px; }
+.big-title { font-size: 20px; font-weight: 700; letter-spacing: -.01em; margin: 6px 0; }
+.block { background: var(--surface-2); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+ul.plain { list-style: none; padding: 0; margin: 0; }
+ul.plain li { padding: 8px 0; border-bottom: 1px solid var(--line); }
+ul.plain li:last-child { border-bottom: 0; }
+.req-link { color: var(--info); cursor: pointer; font-weight: 600; text-decoration: none; }
+.req-link:hover { text-decoration: underline; }
+.gherkin td { padding: 8px 10px; font-size: 14px; }
+.gherkin .kw { font-weight: 700; color: var(--leader); white-space: nowrap; }
+.checks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+
+/* timeline */
+.trace { position: relative; padding-left: 26px; }
+.trace::before { content: ""; position: absolute; left: 7px; top: 6px; bottom: 6px; width: 2px; background: var(--line-2); }
+.trace .step { position: relative; padding: 4px 0 14px; }
+.trace .step::before { content: ""; position: absolute; left: -24px; top: 8px; width: 12px; height: 12px; border-radius: 50%; background: var(--surface); border: 3px solid var(--info); }
+.trace .step.link::before { border-color: var(--leader); }
+.trace .step small { color: var(--muted); display: block; }
+
+/* metrics */
+.metrics { display: grid; grid-template-columns: repeat(auto-fill, minmax(168px, 1fr)); gap: 12px; }
+.metric { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; }
+.metric .name { font-size: 13px; color: var(--muted); font-weight: 500; }
+.metric .value { font-size: 28px; font-weight: 700; letter-spacing: -.02em; font-variant-numeric: tabular-nums; line-height: 1.2; margin-top: 4px; }
+.metric .hint { font-size: 12px; margin-top: 6px; line-height: 1.4; }
+.bar { height: 6px; border-radius: 3px; background: var(--neutral-bg); margin-top: 10px; overflow: hidden; }
+.bar i { display: block; height: 100%; border-radius: 3px; background: var(--info); }
+.mode-values { display: flex; gap: 14px; margin-top: 6px; flex-wrap: wrap; }
+.mode-values div { display: flex; flex-direction: column; }
+.mode-values span { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.2; }
+.mode-values small { font-size: 11px; color: var(--muted); }
+.rep-chip { display: inline-grid; place-items: center; min-width: 24px; height: 24px; padding: 0 6px; margin: 1px 3px 1px 0; border-radius: 6px; border: 1px solid var(--line-2); font-size: 12px; font-weight: 600; cursor: pointer; color: var(--ink-2); text-decoration: none; }
+.rep-chip:hover, .rep-chip.sel { background: var(--info-bg); border-color: var(--info); color: var(--info); }
+.nav { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; margin-bottom: 14px; }
+.nav .group { display: flex; gap: 6px; align-items: center; }
+.nav .group > span { font-size: 12px; color: var(--muted); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.section-title { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin: 6px 0 -4px; }
+
+/* tables */
+.table-scroll { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; }
+th { text-align: left; font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; padding: 10px 14px; border-bottom: 1px solid var(--line); background: var(--surface-2); white-space: nowrap; }
+td { padding: 12px 14px; border-bottom: 1px solid var(--line); vertical-align: top; }
+td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+.ok-txt { color: var(--ok); font-weight: 600; } .bad-txt { color: var(--bad); font-weight: 600; }
+
+/* architecture */
+.stage { padding: 8px 12px 4px; }
+.stage svg { width: 100%; height: auto; display: block; }
+svg text { fill: var(--ink); font-family: Inter, system-ui, sans-serif; }
+.controls { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.controls .grow { flex: 1; min-width: 160px; }
+input[type=range] { accent-color: var(--info); width: 100%; }
+.arch-bottom { display: grid; grid-template-columns: minmax(0, 1fr) 380px; gap: 18px; margin-top: 18px; align-items: start; }
+@media (max-width: 1100px) { .arch-bottom { grid-template-columns: 1fr; } }
+.steps { max-height: 460px; overflow: auto; }
+.steps .s { display: grid; grid-template-columns: 34px 1fr; gap: 8px; padding: 8px 14px; border-bottom: 1px solid var(--line); cursor: pointer; font-size: 13px; }
+.steps .s:hover { background: var(--surface-2); }
+.steps .s.current { background: var(--info-bg); }
+.steps .s .n { color: var(--muted); font-variant-numeric: tabular-nums; text-align: right; }
+.legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 13px; color: var(--muted); padding: 10px 20px 16px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 6px; }
+
+/* messages */
+.msg { display: grid; grid-template-columns: 40px 1fr; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.msg:last-child { border-bottom: 0; }
+.avatar { width: 36px; height: 36px; border-radius: 10px; display: inline-grid; place-items: center; font-weight: 700; font-size: 12px; color: #fff; flex: none; }
+.msg-top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+.msg-top .arrow { color: var(--muted); }
+.msg-top .time { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+.msg-body { margin-top: 4px; color: var(--ink-2); white-space: pre-wrap; word-break: break-word; }
+details.json { margin-top: 8px; }
+details.json summary { cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 500; }
+details.json pre { background: var(--surface-2); border: 1px solid var(--line); padding: 12px; border-radius: 8px; overflow: auto; font-size: 12px; margin: 8px 0 0; max-height: 360px; white-space: pre-wrap; }
+.msg-current { padding: 18px 20px; }
+.msg-current .msg-body { font-size: 15px; color: var(--ink); }
+
+/* knowledge */
+.md { font-size: 15px; line-height: 1.65; }
+.md h1 { font-size: 20px; margin: 0 0 6px; }
+.md blockquote { margin: 0 0 8px; color: var(--muted); border-left: 3px solid var(--line-2); padding-left: 12px; }
+.md h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); margin: 22px 0 8px; padding-top: 16px; border-top: 1px solid var(--line); }
+.md ul { margin: 0; padding-left: 20px; }
+.md li { margin: 4px 0; }
+.md li.empty-md { list-style: none; margin-left: -20px; color: var(--muted); font-style: italic; }
+.md p { margin: 6px 0; }
+.diff { font-family: "JetBrains Mono", ui-monospace, Consolas, monospace; font-size: 13px; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
+.diff div { padding: 2px 12px; white-space: pre-wrap; word-break: break-word; }
+.diff .add { background: var(--add); } .diff .del { background: var(--del); text-decoration: line-through; opacity: .85; }
+.diff .same { color: var(--muted); }
+.versions { display: flex; gap: 6px; flex-wrap: wrap; }
+.versions button { border: 1px solid var(--line-2); background: var(--surface); border-radius: 8px; padding: 6px 10px; cursor: pointer; text-align: left; font-size: 12px; min-width: 64px; }
+.versions button b { display: block; font-size: 14px; }
+.versions button span { color: var(--muted); }
+.versions button.sel { border-color: var(--info); background: var(--info-bg); }
+.expert-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; }
+.expert-card { border: 1px solid var(--line); background: var(--surface); border-radius: 10px; padding: 14px 16px; cursor: pointer; border-top: 3px solid var(--expert); }
+.expert-card:hover { border-color: var(--line-2); border-top-color: var(--expert); box-shadow: var(--shadow); }
+.expert-card.sel { outline: 2px solid var(--info); }
+.expert-card b { display: block; font-size: 15px; }
+.expert-card .num { display: flex; gap: 14px; margin-top: 8px; font-size: 12px; color: var(--muted); }
+.expert-card .num strong { color: var(--ink); font-size: 14px; }
+
+/* link map */
+.map { overflow-x: auto; padding: 8px 0; }
+.map svg { display: block; }
+.req-node { cursor: pointer; }
+.req-node:hover rect { stroke-width: 3; }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <div class="brand"><div class="logo">G</div><div><b>GigaBrain</b><small>council dashboard</small></div></div>
+    <div>
+      <div class="label">Data folder</div>
+      <select id="source" class="field" style="width:100%"></select>
+    </div>
+    <div>
+      <div class="label">Views</div>
+      <nav class="menu" id="menu">
+        <button data-tab="benchmark" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Benchmark</button>
+        <button data-tab="architecture"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="2.5"/><circle cx="12" cy="5" r="2.5"/><circle cx="19" cy="12" r="2.5"/><circle cx="12" cy="19" r="2.5"/><path d="M7 11l3-4M14 7l3 3M17 14l-3 3M10 17l-3-3"/></svg>Architecture</button>
+        <button data-tab="conversations"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.4A8 8 0 1 1 21 12z"/></svg>Conversations</button>
+        <button data-tab="requirements"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg>Requirements</button>
+        <button data-tab="experts"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2 20c0-3.5 3-6 7-6s7 2.5 7 6"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M22 20c0-3-2-5.2-5-5.8"/></svg>Experts</button>
+        <button data-tab="evaluation" hidden><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>Evaluation</button>
+      </nav>
+    </div>
+    <div class="side-footer" id="footer"></div>
+  </aside>
+
+  <main>
+    <!-- BENCHMARK -->
+    <section class="page" id="pg-benchmark">
+      <div class="head"><h1>Benchmark</h1><p>Every meeting of the dataset evaluated against the gold standard, in three modes: full GigaBrain (<b style="color:var(--leader)">council</b>), the Twin alone (<b style="color:var(--twin)">single agent</b>) and a minimal request to the model (<b style="color:var(--expert)">plain LLM</b>). With repetitions, each run is a clickable dot.</p></div>
+      <div class="stack">
+        <div class="card">
+          <div class="card-head">
+            <h2>Means</h2>
+            <select id="bm-provider" class="field"></select>
+            <select id="bm-scenario" class="field"></select>
+            <button class="button" id="bm-refresh">↻ Refresh</button>
+            <span class="hint" id="bm-status"></span>
+          </div>
+          <div class="card-pad"><div class="metrics" id="bm-means"></div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Statistical comparison</h2><span class="hint">is the difference between modes larger than chance?</span></div>
+          <div class="table-scroll" id="bm-tests"></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>Per project</h2><div class="segments" id="bm-metric"></div></div>
+          <div class="legend" id="bm-legend" style="padding-top:12px"></div>
+          <div class="card-pad" style="padding-top:0"><svg id="bm-chart" style="width:100%;height:auto"></svg>
+            <div class="hint">Bar = mean · line = from the worst to the best repetition · dot = one repetition (click to open)</div></div>
+        </div>
+        <div class="card">
+          <div class="card-head"><h2>All runs</h2><span class="hint">mean ± deviation between repetitions · click a repetition number to open it</span></div>
+          <div class="table-scroll" id="bm-table"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ARCHITECTURE -->
+    <section class="page" id="pg-architecture">
+      <div class="head"><h1>Architecture in action</h1><p>Pick a conversation and replay, step by step, who talks to whom. Each step is a JSON message recorded in the log.</p></div>
+      <div class="card">
+        <div class="card-head controls">
+          <select id="arch-conversation" class="field" style="max-width:340px"></select>
+          <button class="button" id="arch-back" title="previous step">◀</button>
+          <button class="button primary" id="arch-play">▶ Play</button>
+          <button class="button" id="arch-next" title="next step">▶</button>
+          <select id="arch-speed" class="field" title="speed"><option value="2000">0.5×</option><option value="1100" selected>1×</option><option value="550">2×</option><option value="250">4×</option></select>
+          <div class="grow"><input type="range" id="arch-pos" min="0" max="0" value="0"></div>
+          <span class="muted mono" id="arch-counter" style="font-size:13px"></span>
+          <label class="toggle"><input type="checkbox" id="arch-llm">LLM calls</label>
+        </div>
+        <div class="stage"><svg id="arch-svg"></svg></div>
+        <div class="legend">
+          <span><i style="background:var(--po)"></i>Real PO or meeting</span>
+          <span><i style="background:var(--twin)"></i>Digital Twin · final vote</span>
+          <span><i style="background:var(--leader)"></i>Leader</span>
+          <span><i style="background:var(--expert)"></i>Experts per topic · only recommend</span>
+          <span><i style="background:var(--system)"></i>Databases</span>
+        </div>
+      </div>
+      <div class="arch-bottom">
+        <div class="card" id="arch-msg"></div>
+        <div class="card"><div class="card-head"><h2>Steps</h2><span class="hint" id="arch-nsteps"></span></div><div class="steps" id="arch-steps"></div></div>
+      </div>
+    </section>
+
+    <!-- CONVERSATIONS -->
+    <section class="page" id="pg-conversations">
+      <div class="head"><h1>Conversations</h1><p>Every message exchanged between the PO and the agents, in the order it happened.</p></div>
+      <div class="two">
+        <div class="card"><div class="card-head"><h2>Sessions</h2></div><div class="list" id="conv-list"></div></div>
+        <div class="card">
+          <div class="card-head">
+            <h2 id="conv-title">Messages</h2>
+            <span style="margin-left:auto"></span>
+            <label class="toggle"><input type="checkbox" id="conv-llm">LLM calls</label>
+          </div>
+          <div id="conv-events"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- REQUIREMENTS -->
+    <section class="page" id="pg-requirements">
+      <div class="head"><h1>Requirements Repository</h1><p>Approved requirements with their EARS statement, user story, Given/When/Then acceptance criteria, versions, links and the source of every piece of information.</p></div>
+      <div class="stack">
+        <div class="card">
+          <div class="card-head"><h2>Link map</h2><span class="hint" id="map-hint"></span></div>
+          <div class="map" id="map"></div>
+          <div class="legend" id="map-legend"></div>
+        </div>
+        <div class="two">
+          <div class="card">
+            <div class="search">
+              <input id="req-search" class="field" placeholder="Search by id, text or topic">
+              <select id="req-status" class="field"></select>
+            </div>
+            <div class="list" id="req-list"></div>
+          </div>
+          <div class="card" id="req-detail"></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- EXPERTS -->
+    <section class="page" id="pg-experts">
+      <div class="head"><h1>Experts</h1><p>One agent per business topic. What each one knows lives in a versioned Markdown file: every change keeps its reason.</p></div>
+      <div class="stack">
+        <div class="expert-cards" id="exp-cards"></div>
+        <div class="card" id="exp-detail"></div>
+      </div>
+    </section>
+
+    <!-- EVALUATION -->
+    <section class="page" id="pg-evaluation">
+      <div class="head"><h1>Evaluation against the gold standard</h1><p id="ev-sub"></p></div>
+      <div class="nav" id="ev-nav"></div>
+      <div class="stack">
+        <div class="metrics" id="ev-metrics"></div>
+        <div class="card">
+          <div class="card-head">
+            <div class="segments" id="ev-filter">
+              <button data-f="all" class="active">All</button>
+              <button data-f="missed">Not found</button>
+              <button data-f="class">Wrong class</button>
+              <button data-f="extras">Extras (no match)</button>
+              <button data-f="injections" id="ev-btn-injections" hidden>Injections (several meetings)</button>
+            </div>
+            <span class="hint" id="ev-count"></span>
+          </div>
+          <div class="table-scroll" id="ev-table"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<script>
+// ============================================================ helpers
+const $ = (s) => document.querySelector(s);
+const $$ = (s) => [...document.querySelectorAll(s)];
+const esc = (t) => String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const pct = (v) => v == null ? "–" : Math.round(v * 100) + "%";
+const clock = (m) => (m || "").slice(11, 19);
+const when = (m) => (m || "").replace("T", " ").slice(0, 16);
+const cut = (t, n) => { t = String(t ?? ""); return t.length > n ? t.slice(0, n - 1) + "…" : t; };
+const empty = (title, text = "") => `<div class="empty"><b>${title}</b>${text}</div>`;
+function save(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+function recall(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+
+const PARTICIPANT = {
+  po: { name: "PO", color: "var(--po)", initials: "PO" },
+  twin: { name: "Digital Twin", short: "Twin", color: "var(--twin)", initials: "DT" },
+  leader: { name: "Leader", color: "var(--leader)", initials: "L" },
+  system: { name: "System", color: "var(--system)", initials: "S" },
+  llm: { name: "LLM", color: "var(--llm)", initials: "AI" },
+  repository: { name: "Requirements Repository", short: "Repository", color: "var(--system)", initials: "RR" },
+  registry: { name: "Expert Registry", short: "Registry", color: "var(--system)", initials: "ER" },
+};
+function who(p) {
+  if (PARTICIPANT[p]) return PARTICIPANT[p];
+  if (p.startsWith("expert:")) { const n = p.slice(7); return { name: "Expert · " + n, short: n, color: "var(--expert)", initials: n.slice(0, 2).toUpperCase() }; }
+  return { name: p, color: "var(--muted)", initials: "?" };
+}
+const KIND_NAME = {
+  po_request: "PO request", question_to_po: "question to the PO", proposal: "proposal", approval: "approval",
+  confirmation: "confirmation to the PO", query: "query", decomposition: "decomposition", expert_answer: "expert answer",
+  consolidated_answer: "consolidated answer", expert_created: "expert created", pending: "pending",
+  requirement_saved: "requirement saved", requirement_under_review: "requirement under review",
+  knowledge_updated: "knowledge updated", llm_call: "LLM call", error: "error", transcript: "transcript",
+  utterance: "meeting utterance", drafts: "drafts", decision: "decision (final vote)",
+};
+const LINK_KIND = {
+  refines: { color: "#2563eb", txt: "refines" }, splits: { color: "#7c3aed", txt: "splits" }, merges: { color: "#0891b2", txt: "merges" },
+  supersedes: { color: "#dc2626", txt: "supersedes" }, depends_on: { color: "#d97706", txt: "depends on" }, conflicts_with: { color: "#db2777", txt: "conflicts with" },
+};
+const EVOLUTION = ["refines", "splits", "merges", "supersedes"];
+const STATUS = {
+  active: { txt: "active", cls: "ok" }, under_review: { txt: "under review", cls: "warn" },
+  superseded: { txt: "superseded", cls: "" }, split: { txt: "split", cls: "" }, merged: { txt: "merged", cls: "" },
+};
+const statusBadge = (status) => { const s = STATUS[status] || { txt: status, cls: "" }; return `<span class="badge ${s.cls}">${s.txt}</span>`; };
+const classTxt = (x) => (x.class || "") + (x.subtype ? " · " + x.subtype : "");
+
+function summary(ev) {
+  const c = ev.content || {};
+  switch (ev.kind) {
+    case "decomposition": return "Topics: " + (c.subqueries || []).map((s) => s.topic).join(", ");
+    case "llm_call": return `${c.role} · ${c.duration_ms} ms` + (c.tokens_in ? ` · ${c.tokens_in} + ${c.tokens_out} tokens` : "");
+    case "requirement_saved": return `${c.requirement_id} v${c.version}` + (c.links?.length ? " · " + c.links.map((l) => `${l.kind.replace("_", " ")} ${l.target}`).join(", ") : "") + (c.decided_by ? ` · decided by ${c.decided_by}` : "");
+    case "knowledge_updated": return `${c.expert_id} → v${c.version} · ${c.motive}`;
+    case "expert_created": return `New expert "${c.expert_id}": ${c.description || ""}`;
+    case "requirement_under_review": return `${c.requirement_id} went under review because of ${c.because_of}`;
+    case "proposal": return (c.text ? c.text + "\n" : "") + (c.requirements || []).map((r) => "• " + (r.statement || r.title)).join("\n");
+    case "drafts": return `${(c.requirements || []).length} draft(s)${c.turn ? " from " + c.turn : ""}:\n` + (c.requirements || []).map((r) => "• " + r.statement).join("\n");
+    case "utterance": return `[${c.turn}] ${c.speaker}: ${c.text}`;
+    case "transcript": return `${c.title} · ${c.turns} turns`;
+    case "decision": return (c.save ? "✓ " : "✗ ") + (c.text || "") + (c.recommendation ? ` (expert recommended: ${c.recommendation})` : "");
+    case "expert_answer": if (c.action) return `recommends ${c.action}${c.duplicate_of ? " (repeats " + c.duplicate_of + ")" : ""}: ${c.motive || ""}`; break;
+    case "pending": return `${c.motive} (${c.topic})`;
+  }
+  for (const k of ["text", "question", "summary", "answer", "motive", "error"]) if (c[k]) return c[k];
+  return "";
+}
+
+// ============================================================ state and API
+const S = { source: "", sources: [], tab: "architecture" };
+const api = (url) => fetch(url + (url.includes("?") ? "&" : "?") + "source=" + encodeURIComponent(S.source)).then((r) => r.ok ? r.json() : null);
+const apiGlobal = (url) => fetch(url).then((r) => r.json());
+
+function openTab(name) {
+  S.tab = name;
+  save("gigabrain-tab", name);
+  $$("#menu button").forEach((b) => b.classList.toggle("active", b.dataset.tab === name));
+  $$(".page").forEach((p) => p.classList.toggle("active", p.id === "pg-" + name));
+  ({ benchmark: loadBenchmark, architecture: loadArchitecture, conversations: loadConversations,
+     requirements: loadRequirements, experts: loadExperts, evaluation: loadEvaluation }[name])();
+}
+$$("#menu button").forEach((b) => b.addEventListener("click", () => openTab(b.dataset.tab)));
+
+async function loadFooter() {
+  const r = await api("/api/summary");
+  if (!r) return;
+  const st = Object.entries(r.by_status).map(([s, n]) => `<div><span>${(STATUS[s] || { txt: s }).txt}</span><b>${n}</b></div>`).join("");
+  $("#footer").innerHTML = `<div class="label" style="padding:0;margin-bottom:6px">In this folder</div>
+    <div><span>conversations</span><b>${r.conversations.length}</b></div><div><span>requirements</span><b>${r.requirements}</b></div>${st}
+    <div><span>links</span><b>${r.links}</b></div><div><span>experts</span><b>${r.experts}</b></div>`;
+}
+
+// ============================================================ data folders
+async function loadSources() {
+  S.sources = await apiGlobal("/api/sources");
+  const groups = {};
+  S.sources.forEach((f) => (groups[f.group] ||= []).push(f));
+  $("#source").innerHTML = Object.entries(groups).map(([g, fs]) => `<optgroup label="${esc(g)}">${fs.map((f) =>
+    `<option value="${esc(f.id)}">${esc(f.label.replace("single_agent", "single agent").replace("plain_llm", "plain LLM").replace("rep-", "repetition "))}${f.evaluation ? "  ✓" : ""}</option>`).join("")}</optgroup>`).join("");
+  $('[data-tab="benchmark"]').hidden = !S.sources.some((f) => f.id.startsWith("data-eval/"));
+}
+
+async function setSource(id, tab) {
+  S.source = id;
+  $("#source").value = id;
+  save("gigabrain-source", id);
+  REQ.sel = EXP.sel = CONV.sel = null;
+  const hasEvaluation = S.sources.find((f) => f.id === id)?.evaluation;
+  $('[data-tab="evaluation"]').hidden = !hasEvaluation;
+  loadFooter();
+  let target = tab || S.tab;
+  if (target === "evaluation" && !hasEvaluation) target = "architecture";
+  openTab(target);
+}
+$("#source").addEventListener("change", () => setSource($("#source").value));
+function openSource(id) { setSource(id, "evaluation"); }
+
+// ============================================================ benchmark
+// Gathers every run (project x mode x repetition) of one provider and scenario.
+// Each repetition is a dot; the bar is the mean and the line goes from min to max.
+const BM = { data: null, metric: "f1" };
+const METRICS = [
+  ["f1", "F1", "balance between precision and recall"],
+  ["precision", "Precision", "of what was extracted, how much exists in the gold standard"],
+  ["recall", "Recall", "of the gold standard, how much was found"],
+  ["class", "FR/NFR class", "accuracy among the matched pairs"],
+  ["subtype", "NFR subtype", "accuracy among the matched NFRs"],
+  ["trace", "Trace", "cited the turn where the requirement was said"],
+  ["unsupported", "Unsupported", "extracted without support in the utterances · lower is better"],
+];
+const METRICS_STRUCTURE = [
+  ["ears", "EARS statement", "statement follows an EARS pattern"],
+  ["story", "Full story", "role, goal and benefit filled in"],
+  ["gherkin", "Gherkin criteria", "every criterion has Given, When and Then"],
+  ["not_vague", "No vague terms", "no 'fast', 'easy', 'user-friendly'… without a number"],
+];
+const METRICS_SESSIONS = [
+  ["repetitions_avoided", "Repetitions avoided", "requirement repeated in a later meeting that was NOT saved again"],
+  ["changes_captured", "Changes captured", "change of an earlier requirement that became a requirement"],
+  ["changes_linked", "Changes linked", "change linked to the original requirement (supersedes, conflicts, refines)"],
+];
+const MODES = ["council", "single_agent", "plain_llm"];
+const MODE_COLOR = { council: "var(--leader)", single_agent: "var(--twin)", plain_llm: "var(--expert)" };
+const MODE_NAME = { council: "council", single_agent: "single agent", plain_llm: "plain LLM" };
+const SCENARIO_NAME = { meeting: "one meeting per project", sessions: "several meetings (repetitions and changes)" };
+const metricsFor = (scenario) => [...METRICS, ...METRICS_STRUCTURE, ...(scenario === "sessions" ? METRICS_SESSIONS : [])];
+const lowerIsBetter = (k) => k === "unsupported";
+const fmtP = (p) => p < 0.0001 ? "<0.0001" : p.toFixed(4);
+const metricName = (k) => (metricsFor("sessions").find(([m]) => m === k) || [, k])[1];
+
+async function loadBenchmark() {
+  BM.data = await apiGlobal("/api/benchmark");
+  const keys = Object.keys(BM.data.statistics);
+  const providers = [...new Set(keys.map((c) => c.split("/")[0]))].sort((a, b) => (a === "simulated") - (b === "simulated"));
+  const current = $("#bm-provider").value;
+  $("#bm-provider").innerHTML = providers.map((p) => `<option value="${esc(p)}">${esc(p)}</option>`).join("");
+  if (providers.includes(current)) $("#bm-provider").value = current;
+  fillScenarios();
+}
+function fillScenarios() {
+  const prov = $("#bm-provider").value;
+  const scenarios = Object.keys(BM.data.statistics).filter((c) => c.startsWith(prov + "/")).map((c) => c.split("/")[1]);
+  const current = $("#bm-scenario").value;
+  $("#bm-scenario").innerHTML = scenarios.map((c) => `<option value="${c}">${SCENARIO_NAME[c] || c}</option>`).join("");
+  if (scenarios.includes(current)) $("#bm-scenario").value = current;
+  drawBenchmark();
+}
+$("#bm-provider").addEventListener("change", fillScenarios);
+$("#bm-scenario").addEventListener("change", () => { BM.metric = "f1"; drawBenchmark(); });
+$("#bm-refresh").addEventListener("click", loadBenchmark);
+
+function drawBenchmark() {
+  const prov = $("#bm-provider").value, scen = $("#bm-scenario").value;
+  const st = BM.data.statistics[`${prov}/${scen}`];
+  const runs = BM.data.runs.filter((e) => e.provider === prov && e.scenario === scen);
+  if (!st) { $("#bm-means").innerHTML = empty("No evaluation yet", "Run: python main.py evaluate all"); return; }
+  const modes = MODES.filter((m) => st.modes.includes(m));
+  const reps = Math.max(...runs.map((e) => e.rep));
+  const pending = BM.data.in_progress.filter((f) => f.includes(`/${prov}/${scen}/`)).length;
+  $("#bm-status").textContent = `${st.projects.length} project(s) · ${reps} repetition(s) · ${runs.length} runs` + (pending ? ` · ${pending} in progress` : "");
+  $("#bm-legend").innerHTML = modes.map((m) => `<span><i style="background:${MODE_COLOR[m]}"></i>${MODE_NAME[m]}</span>`).join("");
+
+  // Cards: mean of each mode (mean of the per-project means) and the deviation between repetitions.
+  $("#bm-means").innerHTML = metricsFor(scen).map(([k, name, hint]) => `<div class="metric"><div class="name">${name}</div>
+      <div class="mode-values">${modes.map((m) => { const v = st.per_mode[m]?.[k]; return `<div><span style="color:${MODE_COLOR[m]}">${pct(v?.mean)}</span>
+        <small>${MODE_NAME[m]}${v && reps > 1 ? ` · ±${Math.round(v.stdev_between_repetitions * 100)}` : ""}</small></div>`; }).join("")}</div>
+      <div class="hint">${hint}</div></div>`).join("");
+
+  // Paired comparisons (Wilcoxon) of the chosen metric and the main ones.
+  const main = new Set([BM.metric, "f1", "precision", "class", "subtype", "ears", "gherkin", ...(scen === "sessions" ? METRICS_SESSIONS.map(([k]) => k) : [])]);
+  const comps = st.comparisons.filter((c) => main.has(c.metric));
+  $("#bm-tests").innerHTML = comps.length ? `<table><tr><th>metric</th><th>comparison</th><th class="num">mean</th><th class="num">mean</th><th class="num">p (Wilcoxon)</th><th class="num">effect</th><th>reading</th></tr>` +
+    comps.map((c) => {
+      const sig = c.p < 0.05, favors = (lowerIsBetter(c.metric) ? -c.effect : c.effect) > 0 ? c.a : c.b;
+      return `<tr><td>${esc(metricName(c.metric))}</td>
+        <td><b style="color:${MODE_COLOR[c.a]}">${MODE_NAME[c.a]}</b> × <b style="color:${MODE_COLOR[c.b]}">${MODE_NAME[c.b]}</b></td>
+        <td class="num">${pct(c.mean_a)}</td><td class="num">${pct(c.mean_b)}</td><td class="num">${fmtP(c.p)}</td><td class="num">${c.effect > 0 ? "+" : ""}${c.effect.toFixed(2)}</td>
+        <td>${sig ? `<span class="badge ok">significant · ${MODE_NAME[favors]}</span>` : '<span class="badge">not significant</span>'}</td></tr>`;
+    }).join("") + `</table><div class="hint" style="padding:10px 14px">Paired test by project over the means of the repetitions (${st.projects.length} projects). Effect: rank-biserial correlation, from −1 to +1; positive favors the first mode. With fewer than ~6 projects the test cannot reach p < 0.05.</div>`
+    : empty("No comparisons", "At least 2 projects run in 2 modes are needed.");
+
+  // Chart per project: for each mode, bar = mean, line = min to max, dots = repetitions.
+  $("#bm-metric").innerHTML = metricsFor(scen).map(([k, n]) => `<button data-m="${k}" class="${k === BM.metric ? "active" : ""}">${n}</button>`).join("");
+  $$("#bm-metric button").forEach((b) => b.addEventListener("click", () => { BM.metric = b.dataset.m; drawBenchmark(); }));
+  const k = BM.metric, projects = st.projects;
+  const L = 1000, left = 190, right = 50, band = 14, rowH = modes.length * band + 16, top = 8, w = L - left - right;
+  let g = "";
+  [0, .25, .5, .75, 1].forEach((t) => {
+    const x = left + t * w;
+    g += `<line x1="${x}" y1="${top}" x2="${x}" y2="${top + projects.length * rowH}" stroke="var(--line)"/>
+      <text x="${x}" y="${top + projects.length * rowH + 18}" text-anchor="middle" font-size="12" fill="var(--muted)">${t * 100}%</text>`;
+  });
+  projects.forEach((project, i) => {
+    const y = top + i * rowH;
+    g += `<text x="${left - 12}" y="${y + rowH / 2 + 4}" text-anchor="end" font-size="14" font-weight="500">${esc(project)}</text>`;
+    modes.forEach((m, j) => {
+      const rs = runs.filter((e) => e.project === project && e.mode === m && e[k] != null).sort((a, b) => a.rep - b.rep);
+      if (!rs.length) return;
+      const vs = rs.map((e) => e[k]), mean = vs.reduce((a, b) => a + b, 0) / vs.length;
+      const yy = y + 8 + j * band;
+      g += `<rect x="${left}" y="${yy}" width="${Math.max(2, mean * w)}" height="${band - 4}" rx="3" fill="${MODE_COLOR[m]}" opacity=".35"><title>${esc(project)} · ${MODE_NAME[m]} · mean ${pct(mean)}</title></rect>`;
+      if (vs.length > 1) g += `<line x1="${left + Math.min(...vs) * w}" y1="${yy + (band - 4) / 2}" x2="${left + Math.max(...vs) * w}" y2="${yy + (band - 4) / 2}" stroke="${MODE_COLOR[m]}" stroke-width="2"/>`;
+      rs.forEach((e) => {
+        g += `<circle cx="${left + e[k] * w}" cy="${yy + (band - 4) / 2}" r="5" fill="${MODE_COLOR[m]}" stroke="var(--surface)" stroke-width="1.5" style="cursor:pointer" onclick="openSource('${e.source}')"><title>${esc(project)} · ${MODE_NAME[m]} · repetition ${e.rep} · ${pct(e[k])} (click to open)</title></circle>`;
+      });
+      g += `<text x="${left + mean * w + 10}" y="${yy + 9}" font-size="11" fill="var(--muted)">${pct(mean)}</text>`;
+    });
+  });
+  $("#bm-chart").setAttribute("viewBox", `0 0 ${L} ${top + projects.length * rowH + 26}`);
+  $("#bm-chart").innerHTML = g;
+
+  // Table: mean ± deviation per project and mode, with clickable repetitions.
+  const cols = metricsFor(scen).filter(([k]) => k !== "trace");
+  $("#bm-table").innerHTML = `<table><tr><th>project</th><th>mode</th><th>repetitions</th>${cols.map(([, n]) => `<th class="num">${n}</th>`).join("")}</tr>` +
+    projects.flatMap((project) => modes.map((m) => {
+      const rs = runs.filter((e) => e.project === project && e.mode === m).sort((a, b) => a.rep - b.rep);
+      if (!rs.length) return "";
+      const cell = (k) => { const vs = rs.map((e) => e[k]).filter((v) => v != null); if (!vs.length) return "–";
+        const md = vs.reduce((a, b) => a + b, 0) / vs.length, sd = vs.length > 1 ? Math.sqrt(vs.reduce((a, v) => a + (v - md) ** 2, 0) / (vs.length - 1)) : null;
+        return pct(md) + (sd != null ? `<small class="muted"> ±${Math.round(sd * 100)}</small>` : ""); };
+      return `<tr><td><b>${esc(project)}</b></td><td><span class="badge" style="color:${MODE_COLOR[m]}">${MODE_NAME[m]}</span></td>
+        <td>${rs.map((e) => `<a class="rep-chip" onclick="openSource('${e.source}')" title="open repetition ${e.rep}">${e.rep}</a>`).join("")}</td>
+        ${cols.map(([k]) => `<td class="num">${cell(k)}</td>`).join("")}</tr>`;
+    })).join("") + "</table>";
+}
+
+// ============================================================ architecture
+// Replays a conversation step by step. Drawing rules:
+// - the Consultative Council only appears when the conversation used the council;
+// - an expert only appears once it exists at that moment of the conversation;
+// - the three databases (Repository, Registry, Log) are drawn separately;
+// - 5 or more identical messages in a row become one step.
+const ARCH = { all: [], steps: [], pos: -1, timer: null, experts: [], conversations: [], conv: null, relevant: [], firstStep: {} };
+
+function layoutArchitecture(withCouncil, experts) {
+  const n = experts.length;
+  const cols = n <= 6 ? 1 : n <= 14 ? 2 : 3;
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const expW = 190, expH = 52, gapX = 16, gapY = 12;
+  const expHeight = n ? rows * expH + (rows - 1) * gapY : 56;
+  const frameH = Math.max(170, expHeight + 70);
+  const top = 20, cy = top + 14 + frameH / 2;
+
+  // Deliberative Council: PO (or the transcript) and Twin centered in the frame.
+  const D = { x: 20, w: 420, y: cy - 85, h: 170 };
+  const P = { input: { x: D.x + 30 + 70, y: cy, w: 140 }, twin: { x: D.x + D.w - 30 - 90, y: cy, w: 180 } };
+  let C = null, L = 900;
+  if (withCouncil) {
+    const x0 = 480, busX = x0 + 30 + 150 + 34, xE0 = busX + 26;
+    const gridW = n ? cols * expW + (cols - 1) * gapX : 190;
+    C = { x: x0, y: top, w: xE0 + gridW + 30 - x0, h: frameH + 28, busX, xE0 };
+    P.leader = { x: x0 + 30 + 75, y: cy, w: 150 };
+    const y0 = cy - expHeight / 2;
+    experts.forEach((e, i) => {
+      const c = Math.floor(i / rows), r = i % rows;
+      P["expert:" + e.id] = { x: xE0 + c * (expW + gapX) + expW / 2, y: y0 + r * (expH + gapY) + expH / 2, w: expW, h: expH, exp: e };
+    });
+    L = C.x + C.w + 20;
+  }
+  // Local databases at the bottom, centered in the "Databases" frame.
+  const yB = top + frameH + 28 + 46;
+  const bases = withCouncil ? ["repository", "registry", "log"] : ["repository", "log"];
+  const B = { x: 240, y: yB, w: L - 260, h: 118 };
+  const step = B.w / bases.length;
+  bases.forEach((b, i) => { P[b] = { x: B.x + step * (i + 0.5), y: yB + 68, w: 200, h: 64, base: true }; });
+  P.llm = { x: P.input.x, y: yB + 68, w: 140 };
+  return { P, D, C, B, L, H: yB + B.h + 20 };
+}
+
+const nodeOf = (p) => (p === "po" || p === "system") ? "input" : p;
+
+const MIN_GROUP = 5;
+function group(events) {
+  const runs = [];
+  for (const ev of events) {
+    const last = runs[runs.length - 1];
+    if (last && last[0].sender === ev.sender && last[0].recipient === ev.recipient && last[0].kind === ev.kind) last.push(ev);
+    else runs.push([ev]);
+  }
+  // Short runs stay step by step; only long ones become a single "×n" step.
+  return runs.flatMap((r) => r.length >= MIN_GROUP ? [{ ev: r[0], list: r }] : r.map((ev) => ({ ev, list: [ev] })));
+}
+
+function prepareConversation() {
+  const withLlm = $("#arch-llm").checked;
+  ARCH.steps = group(ARCH.all.filter((e) => withLlm || e.kind !== "llm_call"));
+  // In which step each expert appears for the first time in this conversation.
+  ARCH.firstStep = {};
+  ARCH.steps.forEach((p, i) => p.list.forEach((ev) => {
+    for (const ref of [ev.sender, ev.recipient, ev.content?.expert_id && "expert:" + ev.content.expert_id]) {
+      if (ref && ref.startsWith("expert:") && !(ref in ARCH.firstStep)) ARCH.firstStep[ref] = i;
+    }
+  }));
+  const start = ARCH.conv?.started_at || "";
+  // Only experts that already existed or appear in this conversation are drawn.
+  ARCH.relevant = ARCH.experts.filter((e) => (e.versions_at?.[0] || e.created_at) < start || ("expert:" + e.id) in ARCH.firstStep);
+}
+
+function stepTime(i) {
+  if (i < 0) return ARCH.conv?.started_at || "";
+  const list = ARCH.steps[i].list;
+  return list[list.length - 1].timestamp;
+}
+
+function cylinder(n, color, on, title, sub) {
+  const x = n.x - n.w / 2, y = n.y - n.h / 2, rx = n.w / 2, ry = 9;
+  return `<path d="M${x},${y + ry} v${n.h - 2 * ry} a${rx},${ry} 0 0 0 ${n.w},0 v-${n.h - 2 * ry}" fill="var(--surface)" stroke="${color}" stroke-width="${on ? 3.5 : 1.5}"/>
+    <ellipse cx="${n.x}" cy="${y + ry}" rx="${rx}" ry="${ry}" fill="var(--surface-2)" stroke="${color}" stroke-width="${on ? 3.5 : 1.5}"/>
+    <text x="${n.x}" y="${n.y + 6}" text-anchor="middle" font-size="14" font-weight="600">${esc(title)}</text>
+    <text x="${n.x}" y="${n.y + 23}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${esc(sub)}</text>`;
+}
+
+function visible(e) {
+  const ref = "expert:" + e.id, start = ARCH.conv?.started_at || "";
+  if ((e.versions_at?.[0] || e.created_at) < start) return true;
+  return ref in ARCH.firstStep && ARCH.firstStep[ref] <= ARCH.pos;
+}
+
+function drawArchitecture() {
+  const step = ARCH.steps[ARCH.pos], ev = step?.ev;
+  const withCouncil = !/single_agent|plain_llm/.test(String(ARCH.conv?.mode || ""));
+  const batch = String(ARCH.conv?.mode || "").startsWith("meeting");
+  const { P, D, C, B, L, H } = layoutArchitecture(withCouncil, ARCH.relevant);
+  const now = stepTime(ARCH.pos);
+  const actives = ev ? [nodeOf(ev.sender), nodeOf(ev.recipient)] : [];
+
+  // Counters "up to this step".
+  let msgs = 0, saved = 0;
+  ARCH.steps.slice(0, ARCH.pos + 1).forEach((p) => { msgs += p.list.length; if (p.ev.kind === "requirement_saved") saved += p.list.length; });
+
+  const edge = (p, target) => {
+    const dx = target.x - p.x, dy = target.y - p.y, hw = (p.w || 150) / 2, hh = (p.h || 56) / 2;
+    const t = Math.min(Math.abs(dx) ? hw / Math.abs(dx) : Infinity, Math.abs(dy) ? hh / Math.abs(dy) : Infinity);
+    return { x: p.x + dx * t, y: p.y + dy * t };
+  };
+  const wire = (a, b, extra = "") => { if (!P[a] || !P[b]) return ""; const p1 = edge(P[a], P[b]), p2 = edge(P[b], P[a]); return `<line x1="${p1.x}" y1="${p1.y}" x2="${p2.x}" y2="${p2.y}" stroke="var(--line-2)" stroke-width="2" ${extra}/>`; };
+  const pill = (x, y, txt) => { const w = txt.length * 7.3 + 22; return `<rect x="${x - w / 2}" y="${y - 12}" width="${w}" height="24" rx="12" fill="var(--info)"/><text x="${x}" y="${y + 4.5}" text-anchor="middle" font-size="12.5" font-weight="600" fill="#fff">${esc(txt)}</text>`; };
+
+  let s = `<defs><marker id="tip" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--info)"/></marker></defs>`;
+  s += `<rect x="${D.x}" y="${D.y}" width="${D.w}" height="${D.h}" rx="18" fill="var(--twin)" fill-opacity=".05" stroke="var(--twin)" stroke-opacity=".4" stroke-dasharray="6 6"/>
+    <text x="${D.x + D.w / 2}" y="${D.y + 26}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--twin)">Deliberative Council · decides</text>`;
+  if (C) s += `<rect x="${C.x}" y="${C.y}" width="${C.w}" height="${C.h}" rx="18" fill="var(--leader)" fill-opacity=".04" stroke="var(--leader)" stroke-opacity=".4" stroke-dasharray="6 6"/>
+    <text x="${C.x + C.w / 2}" y="${C.y + 26}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--leader)">Consultative Council · recommends</text>`;
+  s += `<rect x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" rx="18" fill="var(--system)" fill-opacity=".05" stroke="var(--system)" stroke-opacity=".4" stroke-dasharray="6 6"/>
+    <text x="${B.x + B.w / 2}" y="${B.y + 20}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--system)">Local databases · one file each</text>`;
+
+  s += wire("input", "twin") + wire("twin", "repository") + wire("twin", "llm", 'stroke-dasharray="4 5"');
+  if (C) {
+    s += wire("twin", "leader") + wire("leader", "registry");
+    const shown = ARCH.relevant.filter(visible);
+    if (shown.length) {
+      const ys = shown.map((e) => P["expert:" + e.id].y);
+      s += `<line x1="${P.leader.x + P.leader.w / 2}" y1="${P.leader.y}" x2="${C.busX}" y2="${P.leader.y}" stroke="var(--line-2)" stroke-width="2"/>
+        <line x1="${C.busX}" y1="${Math.min(...ys, P.leader.y)}" x2="${C.busX}" y2="${Math.max(...ys, P.leader.y)}" stroke="var(--line-2)" stroke-width="2"/>`;
+      shown.forEach((e) => { const p = P["expert:" + e.id]; s += `<line x1="${C.busX}" y1="${p.y}" x2="${p.x - p.w / 2}" y2="${p.y}" stroke="var(--line-2)" stroke-width="2"/>`; });
+    }
+  }
+
+  const box = (id, title, sub, color) => {
+    const n = P[id]; if (!n) return "";
+    const on = actives.includes(id), w = n.w, h = n.h || 56, maxCh = Math.floor(w / 8.2);
+    return `<g opacity="${ev && !on ? 0.42 : 1}"><title>${esc(title)} · ${esc(sub)}</title>
+      <rect x="${n.x - w / 2}" y="${n.y - h / 2}" width="${w}" height="${h}" rx="12" fill="var(--surface)" stroke="${color}" stroke-width="${on ? 3.5 : 1.5}"/>
+      <rect x="${n.x - w / 2}" y="${n.y - h / 2 + 9}" width="4" height="${h - 18}" rx="2" fill="${color}"/>
+      <text x="${n.x + 2}" y="${n.y - 3}" text-anchor="middle" font-size="${n.exp ? 14 : 15}" font-weight="600">${esc(cut(title, maxCh))}</text>
+      <text x="${n.x + 2}" y="${n.y + 15}" text-anchor="middle" font-size="11.5" fill="var(--muted)">${esc(cut(sub, maxCh + 4))}</text></g>`;
+  };
+  s += box("input", batch ? "Meeting" : "Real PO", batch ? "input transcript" : "talks and approves", "var(--po)");
+  s += box("twin", "Digital Twin", batch ? "drafts and gives the final vote" : "talks, proposes and saves", "var(--twin)");
+  s += box("llm", "LLM", "called by the agents", "var(--llm)");
+  if (C) {
+    s += box("leader", "Leader", "routes and consolidates", "var(--leader)");
+    ARCH.relevant.forEach((e) => {
+      if (!visible(e)) {
+        const n = P["expert:" + e.id];
+        s += `<rect x="${n.x - n.w / 2}" y="${n.y - n.h / 2}" width="${n.w}" height="${n.h}" rx="12" fill="none" stroke="var(--line-2)" stroke-dasharray="4 5"/>`;
+        return;
+      }
+      const v = e.versions_at ? e.versions_at.filter((d) => d <= now).length : e.knowledge_version;
+      s += box("expert:" + e.id, e.topic, v ? `knowledge v${v}` : "being created…", "var(--expert)");
+    });
+    const missing = ARCH.relevant.length - ARCH.relevant.filter(visible).length;
+    if (!ARCH.relevant.length) s += `<text x="${C.xE0 + 95}" y="${P.leader.y + 5}" text-anchor="middle" font-size="13" fill="var(--muted)">no experts</text>`;
+    if (missing) s += `<text x="${C.x + C.w - 24}" y="${C.y + C.h - 12}" text-anchor="end" font-size="12" fill="var(--muted)">dashed slots: ${missing} expert(s) will still be created in this conversation</text>`;
+  }
+  const base = (id, title, sub) => { const n = P[id]; if (!n) return ""; const on = actives.includes(id); return `<g opacity="${ev && !on && id !== "log" ? 0.42 : 1}">${cylinder(n, "var(--system)", on, title, sub)}</g>`; };
+  s += base("repository", "Requirements Repository", `requirements.db · +${saved} in this conversation`);
+  s += base("registry", "Expert Registry", "experts.db + .md files");
+  s += base("log", "Log", `log.db · ${msgs} message(s) so far`);
+
+  // Message of the current step: drawn last so it stays on top of the cards.
+  if (ev) {
+    const label = (KIND_NAME[ev.kind] || ev.kind) + (step.list.length > 1 ? ` ×${step.list.length}` : "");
+    const from = P[nodeOf(ev.sender)], to = P[nodeOf(ev.recipient)];
+    if (from && to && from !== to) {
+      const a = edge(from, to), b = edge(to, from);
+      // Short arrow: the label goes above the cards so it does not cover their names.
+      const short = Math.hypot(b.x - a.x, b.y - a.y) < 260;
+      const yLabel = short ? Math.min(from.y - (from.h || 56) / 2, to.y - (to.h || 56) / 2) - 18 : (a.y + b.y) / 2 - 14;
+      s += `<line x1="${a.x}" y1="${a.y}" x2="${b.x}" y2="${b.y}" stroke="var(--info)" stroke-width="4" marker-end="url(#tip)"/>` + pill((a.x + b.x) / 2, yLabel, label);
+    } else if (from) {
+      s += `<rect x="${from.x - from.w / 2 - 8}" y="${from.y - (from.h || 56) / 2 - 8}" width="${from.w + 16}" height="${(from.h || 56) + 16}" rx="16" fill="none" stroke="var(--info)" stroke-width="3" stroke-dasharray="5 4"/>` +
+        pill(from.x, from.y + (from.h || 56) / 2 + 24, label);
+    }
+  }
+  $("#arch-svg").setAttribute("viewBox", `0 0 ${L} ${H}`);
+  $("#arch-svg").innerHTML = s;
+}
+
+function messageCard(step) {
+  const ev = step.ev, from = who(ev.sender), to = who(ev.recipient), n = step.list.length;
+  const body = n > 1
+    ? `<div class="muted" style="margin-bottom:6px">${n} identical messages in a row:</div><ul style="margin:0;padding-left:18px">${step.list.slice(0, 40).map((e) => `<li>${esc(cut(summary(e), 160))}</li>`).join("")}${n > 40 ? `<li class="muted">… and ${n - 40} more</li>` : ""}</ul>`
+    : esc(summary(ev)) || '<span class="muted">(no text)</span>';
+  return `<div class="msg-current"><div class="msg-top">
+      <span class="avatar" style="background:${from.color}">${from.initials}</span>
+      <b style="color:${from.color}">${esc(from.name)}</b><span class="arrow">→</span><b style="color:${to.color}">${esc(to.name)}</b>
+      <span class="badge info">${esc(KIND_NAME[ev.kind] || ev.kind)}${n > 1 ? " ×" + n : ""}</span><span class="time">${clock(ev.timestamp)}</span></div>
+    <div class="msg-body" style="margin-top:12px">${body}</div>
+    <details class="json"><summary>show message JSON${n > 1 ? " (the first one)" : ""}</summary><pre>${esc(JSON.stringify(ev, null, 2))}</pre></details></div>`;
+}
+
+function showStep() {
+  drawArchitecture();
+  const step = ARCH.steps[ARCH.pos];
+  $("#arch-pos").max = Math.max(0, ARCH.steps.length - 1);
+  $("#arch-pos").value = Math.max(0, ARCH.pos);
+  $("#arch-counter").textContent = ARCH.steps.length ? `${Math.max(0, ARCH.pos + 1)} / ${ARCH.steps.length}` : "";
+  $("#arch-msg").innerHTML = step ? messageCard(step) : empty("No step selected", "Press Play or pick a step in the list.");
+  $$("#arch-steps .s").forEach((el, i) => el.classList.toggle("current", i === ARCH.pos));
+  // Scroll only the step list (scrollIntoView would drag the whole page).
+  const current = $$("#arch-steps .s")[ARCH.pos], list = $("#arch-steps");
+  if (current) {
+    const top = current.offsetTop - list.offsetTop;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (top + current.offsetHeight > list.scrollTop + list.clientHeight) list.scrollTop = top + current.offsetHeight - list.clientHeight;
+  }
+}
+
+function listSteps() {
+  const total = ARCH.steps.reduce((n, p) => n + p.list.length, 0);
+  $("#arch-nsteps").textContent = `${ARCH.steps.length} steps · ${total} messages`;
+  $("#arch-steps").innerHTML = ARCH.steps.map((p, i) => {
+    const from = who(p.ev.sender), to = who(p.ev.recipient);
+    return `<div class="s" data-i="${i}"><span class="n">${i + 1}</span><span><b style="color:${from.color}">${esc(from.short || from.name)}</b> → <span style="color:${to.color}">${esc(to.short || to.name)}</span>
+      <br><span class="muted">${esc(KIND_NAME[p.ev.kind] || p.ev.kind)}</span>${p.list.length > 1 ? ` <span class="badge">×${p.list.length}</span>` : ""}</span></div>`;
+  }).join("") || empty("No messages");
+  $$("#arch-steps .s").forEach((el) => el.addEventListener("click", () => { stop(); ARCH.pos = +el.dataset.i; showStep(); }));
+}
+
+async function loadArchitecture() {
+  const [experts, sum] = await Promise.all([api("/api/experts"), api("/api/summary")]);
+  ARCH.experts = experts || [];
+  ARCH.conversations = sum?.conversations || [];
+  const current = $("#arch-conversation").value;
+  $("#arch-conversation").innerHTML = ARCH.conversations.map((c) => `<option value="${c.id}">${c.id} · ${c.mode.replaceAll("_", " ")} · ${c.events} msgs</option>`).join("") || "<option value=''>no conversations</option>";
+  if (ARCH.conversations.some((c) => c.id === current)) $("#arch-conversation").value = current;
+  await pickConversation();
+}
+async function pickConversation() {
+  stop();
+  const id = $("#arch-conversation").value;
+  ARCH.conv = ARCH.conversations.find((c) => c.id === id) || null;
+  ARCH.all = id ? (await api("/api/events?conversation=" + encodeURIComponent(id))) || [] : [];
+  restartSteps();
+}
+function restartSteps() { prepareConversation(); ARCH.pos = -1; listSteps(); showStep(); }
+function stop() { clearInterval(ARCH.timer); ARCH.timer = null; $("#arch-play").textContent = "▶ Play"; }
+function advance() { if (ARCH.pos < ARCH.steps.length - 1) { ARCH.pos++; showStep(); } else stop(); }
+function play() {
+  if (ARCH.pos >= ARCH.steps.length - 1) ARCH.pos = -1;
+  $("#arch-play").textContent = "❚❚ Pause";
+  advance();
+  ARCH.timer = setInterval(advance, +$("#arch-speed").value);
+}
+$("#arch-conversation").addEventListener("change", pickConversation);
+$("#arch-llm").addEventListener("change", restartSteps);
+$("#arch-next").addEventListener("click", () => { stop(); advance(); });
+$("#arch-back").addEventListener("click", () => { stop(); if (ARCH.pos > 0) { ARCH.pos--; showStep(); } });
+$("#arch-play").addEventListener("click", () => ARCH.timer ? stop() : play());
+$("#arch-speed").addEventListener("change", () => { if (ARCH.timer) { stop(); play(); } });
+$("#arch-pos").addEventListener("input", () => { stop(); ARCH.pos = +$("#arch-pos").value; showStep(); });
+
+const filterLlm = (list, keep) => list.filter((e) => keep || e.kind !== "llm_call");
+
+// ============================================================ conversations
+const CONV = { sel: null, conversations: [] };
+async function loadConversations() {
+  const r = await api("/api/summary");
+  CONV.conversations = r?.conversations || [];
+  if (!CONV.sel && CONV.conversations.length) CONV.sel = CONV.conversations[0].id;
+  $("#conv-list").innerHTML = CONV.conversations.map((c) => `<div class="item ${c.id === CONV.sel ? "sel" : ""}" data-id="${c.id}">
+      <div class="item-top"><span class="item-title mono" style="font-size:13px">${c.id}</span>${c.status === "approved" ? '<span class="badge ok">approved</span>' : `<span class="badge">${esc(c.status)}</span>`}</div>
+      <div class="item-meta">${esc(c.mode.replaceAll("_", " "))} · ${c.events} messages · ${when(c.started_at)}</div></div>`).join("") || empty("No conversations");
+  $$("#conv-list .item").forEach((el) => el.addEventListener("click", () => { CONV.sel = el.dataset.id; loadConversations(); }));
+  showConversation();
+}
+async function showConversation() {
+  if (!CONV.sel) { $("#conv-events").innerHTML = empty("Pick a session", "Its messages appear here."); return; }
+  const events = filterLlm((await api("/api/events?conversation=" + encodeURIComponent(CONV.sel))) || [], $("#conv-llm").checked);
+  $("#conv-title").textContent = `Messages · ${events.length}`;
+  $("#conv-events").innerHTML = events.map((ev) => {
+    const from = who(ev.sender), to = who(ev.recipient);
+    return `<div class="msg"><span class="avatar" style="background:${from.color}">${from.initials}</span><div>
+      <div class="msg-top"><b style="color:${from.color}">${esc(from.name)}</b><span class="arrow">→</span><span style="color:${to.color}">${esc(to.name)}</span>
+        <span class="badge">${esc(KIND_NAME[ev.kind] || ev.kind)}</span><span class="time">${clock(ev.timestamp)}</span></div>
+      <div class="msg-body">${esc(cut(summary(ev), 900))}</div>
+      <details class="json"><summary>JSON</summary><pre>${esc(JSON.stringify(ev.content, null, 2))}</pre></details></div></div>`;
+  }).join("") || empty("No messages");
+}
+$("#conv-llm").addEventListener("change", showConversation);
+
+// ============================================================ requirements
+const REQ = { sel: null, list: [], links: [] };
+async function loadRequirements() {
+  const r = await api("/api/requirements");
+  REQ.list = r?.requirements || [];
+  REQ.links = r?.links || [];
+  const statuses = [...new Set(REQ.list.map((x) => x.status))];
+  const current = $("#req-status").value;
+  $("#req-status").innerHTML = `<option value="">every status (${REQ.list.length})</option>` +
+    statuses.map((s) => `<option value="${s}">${(STATUS[s] || { txt: s }).txt} (${REQ.list.filter((x) => x.status === s).length})</option>`).join("");
+  if (statuses.includes(current)) $("#req-status").value = current;
+  listRequirements();
+  drawMap();
+  if (REQ.sel) showRequirement(); else $("#req-detail").innerHTML = empty("Pick a requirement", "In the list or on the map.");
+}
+const reqText = (r) => r.content.statement || r.title;
+function listRequirements() {
+  const q = $("#req-search").value.trim().toLowerCase(), st = $("#req-status").value;
+  const filtered = REQ.list.filter((r) => (!st || r.status === st) && (!q || [r.id, r.title, reqText(r), ...r.topics].join(" ").toLowerCase().includes(q)));
+  $("#req-list").innerHTML = filtered.map((r) => `<div class="item ${r.id === REQ.sel ? "sel" : ""}" data-id="${r.id}">
+      <div class="item-top"><span class="item-title">${r.id} <span class="muted" style="font-weight:500">v${r.current_version}</span></span>${statusBadge(r.status)}</div>
+      <div class="item-text">${esc(reqText(r))}</div>
+      <div class="item-meta">${r.topics.map((t) => esc(t)).join(" · ")}${r.content.class ? " · " + classTxt(r.content) : ""}</div></div>`).join("")
+    || empty("Nothing found");
+  $$("#req-list .item").forEach((el) => el.addEventListener("click", () => selectReq(el.dataset.id)));
+}
+$("#req-search").addEventListener("input", listRequirements);
+$("#req-status").addEventListener("change", listRequirements);
+
+function selectReq(id) { REQ.sel = id; listRequirements(); drawMap(); showRequirement(); }
+
+function drawMap() {
+  // Only requirements with links, at a fixed size; if they do not fit, the map scrolls sideways.
+  const linked = new Set(REQ.links.flatMap((l) => [l.source_id, l.target_id]));
+  const nodes = REQ.list.filter((r) => linked.has(r.id)).sort((a, b) => +a.id.slice(1) - +b.id.slice(1));
+  $("#map-legend").innerHTML = `<span>Above the line: <b>evolution</b> (where the requirement came from)</span><span>Below: <b>relations</b> between requirements that coexist</span>` +
+    Object.values(LINK_KIND).map((t) => `<span><i style="background:${t.color}"></i>${t.txt}</span>`).join("");
+  if (!nodes.length) {
+    $("#map-hint").textContent = "";
+    $("#map").innerHTML = empty("No links between requirements", REQ.list.length ? `The ${REQ.list.length} requirements of this folder have no links.` : "");
+    return;
+  }
+  $("#map-hint").textContent = `${nodes.length} linked requirement(s) · ${REQ.links.length} link(s) · click a requirement`;
+  const step = 150, nw = 116, nh = 56, margin = 80;
+  const X = {}; nodes.forEach((r, i) => { X[r.id] = margin + i * step; });
+  // The arc grows with the distance: links to the same requirement do not overlap their labels.
+  const arc = (d) => Math.min(230, 30 + d * 0.25);
+  const hasEvo = REQ.links.some((l) => EVOLUTION.includes(l.kind)), hasRel = REQ.links.some((l) => !EVOLUTION.includes(l.kind));
+  const mid = hasEvo ? 270 : 50, H = mid + (hasRel ? 270 : 50);
+  const L = Math.max(margin * 2 + (nodes.length - 1) * step, 600);
+  let s = `<defs>${Object.entries(LINK_KIND).map(([k, t]) => `<marker id="m-${k}" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="${t.color}"/></marker>`).join("")}</defs>`;
+  s += `<line x1="20" y1="${mid}" x2="${L - 20}" y2="${mid}" stroke="var(--line)" stroke-dasharray="3 5"/>`;
+  REQ.links.forEach((l) => {
+    const a = X[l.source_id], b = X[l.target_id]; if (a == null || b == null) return;
+    const evo = EVOLUTION.includes(l.kind), sign = evo ? -1 : 1, t = LINK_KIND[l.kind] || { color: "gray", txt: l.kind };
+    const h = arc(Math.abs(a - b)) * sign, y0 = mid + sign * nh / 2;
+    const focus = REQ.sel && (l.source_id === REQ.sel || l.target_id === REQ.sel), op = REQ.sel && !focus ? 0.22 : 1;
+    const tx = (a + b) / 2, ty = y0 + h * 0.75, txt = `${l.source_id} ${t.txt} ${l.target_id}`, lw = txt.length * 6.8 + 18;
+    s += `<g opacity="${op}"><path d="M${a},${y0} C${a},${y0 + h} ${b},${y0 + h} ${b},${y0}" fill="none" stroke="${t.color}" stroke-width="${focus ? 3.5 : 2.2}" marker-end="url(#m-${l.kind})"/>
+      <rect x="${tx - lw / 2}" y="${ty - 11}" width="${lw}" height="22" rx="11" fill="var(--surface)" stroke="${t.color}"/>
+      <text x="${tx}" y="${ty + 4}" text-anchor="middle" font-size="12" font-weight="600" fill="${t.color}">${txt}</text></g>`;
+  });
+  nodes.forEach((r) => {
+    const out = !["active", "under_review"].includes(r.status), sel = r.id === REQ.sel;
+    const color = r.status === "under_review" ? "var(--warn)" : out ? "var(--muted)" : "var(--ok)";
+    s += `<g class="req-node" onclick="selectReq('${r.id}')"><title>${esc(r.id)} · ${esc(r.title)}</title>
+      <rect x="${X[r.id] - nw / 2}" y="${mid - nh / 2}" width="${nw}" height="${nh}" rx="12" fill="${sel ? "var(--info-bg)" : "var(--surface)"}" stroke="${sel ? "var(--info)" : color}" stroke-width="${sel ? 3 : 2}" ${out ? 'stroke-dasharray="5 4"' : ""}/>
+      <text x="${X[r.id]}" y="${mid - 3}" text-anchor="middle" font-size="16" font-weight="700" opacity="${out ? 0.65 : 1}">${r.id}<tspan font-size="12" font-weight="500" fill="var(--muted)"> v${r.current_version}</tspan></text>
+      <text x="${X[r.id]}" y="${mid + 15}" text-anchor="middle" font-size="11.5" fill="${color}" font-weight="600">${(STATUS[r.status] || { txt: r.status }).txt}</text></g>`;
+  });
+  $("#map").innerHTML = `<svg width="${L}" height="${H}" viewBox="0 0 ${L} ${H}">${s}</svg>`;
+}
+
+function qualityChecks(q) {
+  if (!q) return "";
+  const check = (ok, txt) => `<span class="badge ${ok ? "ok" : "warn"}">${ok ? "✓" : "✗"} ${txt}</span>`;
+  return `<div class="checks">${check(q.ears, "EARS" + (q.ears_pattern ? " · " + q.ears_pattern : ""))}${check(q.story_complete, "full story")}
+    ${check(q.criteria_gherkin, `Given/When/Then (${q.criteria_count})`)}${check(!q.vague_terms.length, q.vague_terms.length ? "vague: " + q.vague_terms.join(", ") : "no vague terms")}</div>`;
+}
+
+function storyBlock(story) {
+  if (!story || !(story.role || story.goal)) return "";
+  return `<h3>User story</h3><div class="block"><b>As a</b> ${esc(story.role)}, <b>I want</b> ${esc(story.goal)}, <b>so that</b> ${esc(story.benefit)}.</div>`;
+}
+
+function criteriaBlock(criteria) {
+  if (!criteria?.length) return "";
+  return `<h3>Acceptance criteria</h3>` + criteria.map((c) => `<div class="block" style="margin-bottom:8px">
+    ${c.scenario ? `<div style="font-weight:600;margin-bottom:4px">Scenario: ${esc(c.scenario)}</div>` : ""}
+    <table class="gherkin"><tr><td class="kw">Given</td><td>${esc(c.given)}</td></tr><tr><td class="kw">When</td><td>${esc(c.when)}</td></tr><tr><td class="kw">Then</td><td>${esc(c.then)}</td></tr></table></div>`).join("");
+}
+
+async function showRequirement() {
+  const r = await api("/api/requirement/" + encodeURIComponent(REQ.sel));
+  if (!r) return;
+  const c = r.content;
+  const links = r.links.map((l) => {
+    const t = LINK_KIND[l.kind] || { color: "gray", txt: l.kind };
+    return `<li><a class="req-link" onclick="selectReq('${l.source_id}')">${l.source_id}</a> <b style="color:${t.color}">${t.txt}</b> <a class="req-link" onclick="selectReq('${l.target_id}')">${l.target_id}</a>
+      ${l.reason ? `<div class="muted" style="font-size:13px">${esc(l.reason)}</div>` : ""}</li>`;
+  }).join("");
+  const sources = r.sources.map((f) => `<span class="tag">${esc(f.kind)}: <b>${esc(f.ref)}</b>${f.version ? ` (v${f.version})` : ""}</span>`).join("");
+  const trace = r.trace.map((p) => p.event === "version"
+    ? `<div class="step"><b><a class="req-link" onclick="selectReq('${p.requirement_id}')">${p.requirement_id}</a> v${p.version}</b> · ${esc(p.title)}<small>${when(p.timestamp)} · ${esc(p.reason || "")}</small></div>`
+    : `<div class="step link"><b>${p.requirement_id} <span style="color:${LINK_KIND[p.kind]?.color}">${LINK_KIND[p.kind]?.txt || p.kind}</span> ${p.target_id}</b><small>${when(p.timestamp)} · ${esc(p.reason || "")}</small></div>`).join("");
+  const versions = r.versions.slice().reverse().map((v) => `<details class="json"><summary>v${v.version} · ${when(v.approved_at)} · ${esc(v.reason || "")}</summary><pre>${esc(JSON.stringify(v.content, null, 2))}</pre></details>`).join("");
+  $("#req-detail").innerHTML = `<div class="detail">
+    <div class="item-top"><span class="muted mono">${r.id} · version ${r.current_version}</span>${statusBadge(r.status)}</div>
+    <div class="big-title">${esc(c.title)}</div>
+    <div>${r.topics.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}<span class="tag">${classTxt(c)}</span><span class="tag">${c.kind === "enabler" ? "technical enabler" : "business"}</span></div>
+    ${qualityChecks(r.quality)}
+    <h3>Statement${c.ears_pattern ? ` · EARS ${esc(c.ears_pattern)}` : ""}</h3><div class="block" style="font-size:16px">${esc(c.statement)}</div>
+    ${storyBlock(c.story)}
+    ${criteriaBlock(c.acceptance_criteria)}
+    ${c.turns?.length ? `<h3>Where it was said</h3><div>${c.turns.map((t) => `<span class="tag mono">${esc(t)}</span>`).join("")}</div>` : ""}
+    <h3>Links</h3>${links ? `<ul class="plain">${links}</ul>` : '<div class="muted">none</div>'}
+    <h3>Sources (traceability)</h3><div>${sources || '<span class="muted">none</span>'}</div>
+    <h3>How we got here</h3><div class="trace">${trace}</div>
+    <h3>Versions</h3>${versions}</div>`;
+}
+
+// ============================================================ experts
+const EXP = { sel: null, ver: null, view: "content" };
+async function loadExperts() {
+  const list = (await api("/api/experts")) || [];
+  if (!EXP.sel && list.length) EXP.sel = list[0].id;
+  $("#exp-cards").innerHTML = list.map((e) => `<div class="expert-card ${e.id === EXP.sel ? "sel" : ""}" data-id="${e.id}">
+      <b>${esc(e.topic)}</b><div class="muted" style="font-size:13px">${esc(cut(e.description, 90))}</div>
+      <div class="num"><span><strong>v${e.knowledge_version}</strong> knowledge</span><span><strong>${e.consultations}</strong> consultations</span></div></div>`).join("")
+    || `<div class="card" style="grid-column:1/-1">${empty("No experts in this folder", "The Leader creates them when a new topic appears.")}</div>`;
+  $$("#exp-cards .expert-card").forEach((el) => el.addEventListener("click", () => { EXP.sel = el.dataset.id; EXP.ver = null; loadExperts(); }));
+  if (EXP.sel) showExpert(); else $("#exp-detail").innerHTML = "";
+  $("#exp-detail").hidden = !EXP.sel;
+}
+
+function markdown(md) {
+  let html = "", inList = false;
+  for (const line of md.split("\n")) {
+    if (inList && !line.startsWith("- ")) { html += "</ul>"; inList = false; }
+    if (line.startsWith("# ")) html += `<h1>${esc(line.slice(2))}</h1>`;
+    else if (line.startsWith("## ")) html += `<h2>${esc(line.slice(3))}</h2>`;
+    else if (line.startsWith("> ")) html += `<blockquote>${esc(line.slice(2))}</blockquote>`;
+    else if (line.startsWith("- ")) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      const t = line.slice(2);
+      html += t === "(empty)" ? `<li class="empty-md">empty</li>` : `<li>${esc(t).replace(/\b(R\d+)\b/g, "<b>$1</b>")}</li>`;
+    } else if (line.trim()) html += `<p>${esc(line)}</p>`;
+  }
+  return html + (inList ? "</ul>" : "");
+}
+
+function diff(before, after) {
+  const a = before.split("\n"), b = after.split("\n");
+  const L = Array.from({ length: a.length + 1 }, () => new Array(b.length + 1).fill(0));
+  for (let i = a.length - 1; i >= 0; i--) for (let j = b.length - 1; j >= 0; j--)
+    L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  let i = 0, j = 0, out = "", add = 0, del = 0;
+  while (i < a.length || j < b.length) {
+    if (i < a.length && j < b.length && a[i] === b[j]) { out += `<div class="same">${esc(a[i]) || "&nbsp;"}</div>`; i++; j++; }
+    else if (j < b.length && (i >= a.length || L[i][j + 1] >= L[i + 1][j])) { out += `<div class="add">+ ${esc(b[j])}</div>`; j++; add++; }
+    else { out += `<div class="del">− ${esc(a[i])}</div>`; i++; del++; }
+  }
+  return { html: out, add, del };
+}
+
+async function showExpert() {
+  const e = await api("/api/expert/" + encodeURIComponent(EXP.sel));
+  if (!e) return;
+  const v = EXP.ver ?? e.versions.length;
+  const current = e.versions[v - 1], previous = e.versions[v - 2];
+  const d = previous && current ? diff(previous.content, current.content) : null;
+  const changes = (current?.origin?.changes || []).map((m) => `<li>${esc(m)}</li>`).join("");
+  $("#exp-detail").innerHTML = `<div class="card-head" style="align-items:flex-start">
+      <div style="flex:1;min-width:220px"><div class="big-title" style="margin:0">${esc(e.topic)}</div>
+        <div class="muted">${esc(e.description)}</div><div class="muted mono" style="font-size:12px;margin-top:4px">${esc(e.file)}</div></div>
+      <div class="segments" id="exp-view">
+        <button data-v="content" class="${EXP.view === "content" ? "active" : ""}">Content</button>
+        <button data-v="diff" class="${EXP.view === "diff" ? "active" : ""}">What changed${d ? ` <span style="color:var(--ok)">+${d.add}</span> <span style="color:var(--bad)">−${d.del}</span>` : ""}</button>
+      </div></div>
+    <div class="detail" style="padding-top:16px">
+      <h3 style="margin-top:0">Knowledge history</h3>
+      <div class="versions">${e.versions.map((x) => `<button data-v="${x.version}" class="${x.version === v ? "sel" : ""}" title="${esc(x.reason)}"><b>v${x.version}</b><span>${esc(cut(x.reason, 26))}</span></button>`).join("")}</div>
+      ${current ? `<div class="block" style="margin-top:12px"><b>v${current.version}</b> · ${when(current.created_at)} · reason: <b>${esc(current.reason)}</b>
+        <span class="muted mono" style="font-size:12px"> · hash ${current.hash}</span>${changes ? `<ul style="margin:8px 0 0">${changes}</ul>` : ""}</div>` : ""}
+      <div style="margin-top:18px">${EXP.view === "diff"
+        ? (d ? `<div class="diff">${d.html}</div>` : '<div class="muted">This is the first version; there is nothing to compare.</div>')
+        : `<div class="md">${markdown(current?.content || e.content)}</div>`}</div></div>`;
+  $$("#exp-detail .versions button").forEach((b) => b.addEventListener("click", () => { EXP.ver = +b.dataset.v; showExpert(); }));
+  $$("#exp-view button").forEach((b) => b.addEventListener("click", () => { EXP.view = b.dataset.v; showExpert(); }));
+}
+
+// ============================================================ evaluation
+const EV = { data: null, filter: "all" };
+async function loadEvaluation() {
+  EV.data = await api("/api/evaluation");
+  const a = EV.data;
+  if (!a?.metrics) { $("#ev-metrics").innerHTML = ""; $("#ev-table").innerHTML = empty("This folder has no evaluation"); return; }
+  const m = a.metrics;
+  drawEvaluationNav();
+  $("#ev-btn-injections").hidden = a.scenario !== "sessions";
+  if (a.scenario !== "sessions" && EV.filter === "injections") { EV.filter = "all"; $$("#ev-filter button").forEach((x) => x.classList.toggle("active", x.dataset.f === "all")); }
+  $("#ev-sub").innerHTML = `<b>${esc(a.title)}</b><br><span style="color:${MODE_COLOR[a.mode]}">${MODE_NAME[a.mode] || a.mode}</span>
+    · provider ${esc(a.provider)} · ${m.predicted} extracted · ${m.gold} in the gold standard · ${m.hits} pairs (similarity ≥ ${a.parameters.similarity_threshold})`;
+  const group = (title, items) => `<div class="section-title" style="grid-column:1/-1">${title}</div>` + items.map(([k, name, hint]) => `<div class="metric"><div class="name">${name}</div><div class="value">${pct(m[k])}</div>
+    <div class="bar"><i style="width:${(m[k] ?? 0) * 100}%;${k === "unsupported" ? "background:var(--bad)" : ""}"></i></div><div class="hint muted">${hint}</div></div>`).join("");
+  $("#ev-metrics").innerHTML = group("Extraction", METRICS) + group("Requirement structure", METRICS_STRUCTURE) + (a.scenario === "sessions" ? group("Several meetings", METRICS_SESSIONS) : "");
+  showEvaluationTable();
+}
+// Switch mode and repetition without going back to the folder selector.
+function drawEvaluationNav() {
+  const parts = S.source.split("/");
+  if (parts.length !== 6) { $("#ev-nav").innerHTML = ""; return; }
+  const [base, prov, scen, proj, mode, rep] = parts;
+  const prefix = [base, prov, scen, proj].join("/") + "/";
+  const siblings = S.sources.filter((f) => f.id.startsWith(prefix) && f.evaluation).map((f) => f.id.slice(prefix.length).split("/"));
+  const modes = MODES.filter((m) => siblings.some(([m2]) => m2 === m));
+  const reps = siblings.filter(([m2]) => m2 === mode).map(([, r]) => r).sort((a, b) => +a.slice(4) - +b.slice(4));
+  $("#ev-nav").innerHTML = `<div class="group"><span>mode</span><div class="segments">${modes.map((m) =>
+      `<button class="${m === mode ? "active" : ""}" onclick="openSource('${prefix}${m}/${siblings.some(([m2, r]) => m2 === m && r === rep) ? rep : siblings.find(([m2]) => m2 === m)[1]}')"><span style="color:${MODE_COLOR[m]}">●</span> ${MODE_NAME[m]}</button>`).join("")}</div></div>
+    <div class="group"><span>repetition</span>${reps.map((r) => `<a class="rep-chip ${r === rep ? "sel" : ""}" onclick="openSource('${prefix}${mode}/${r}')">${r.slice(4)}</a>`).join("")}</div>
+    <div class="group"><span>scenario</span><span class="badge">${esc(SCENARIO_NAME[scen] || scen)}</span></div>`;
+}
+
+$$("#ev-filter button").forEach((b) => b.addEventListener("click", () => {
+  EV.filter = b.dataset.f; $$("#ev-filter button").forEach((x) => x.classList.toggle("active", x === b)); showEvaluationTable();
+}));
+function showEvaluationTable() {
+  const a = EV.data; if (!a?.metrics) return;
+  const pred = Object.fromEntries(a.predicted.map((p) => [p.id, p]));
+  const pairOfGold = Object.fromEntries(a.pairs.map((x) => [x.gold, x]));
+  if (EV.filter === "injections") {
+    const inj = a.injections || [];
+    $("#ev-count").textContent = `${inj.length} utterances injected in later meetings · ${inj.filter((i) => i.ok).length} handled correctly`;
+    const right = { repetition: "do not save again", change: "save and link to the original" };
+    $("#ev-table").innerHTML = inj.length ? `<table><tr><th>kind</th><th>session</th><th>injected utterance</th><th>original requirement</th><th>what GigaBrain did</th><th>result</th></tr>${inj.map((i) =>
+      `<tr><td><span class="badge ${i.kind === "change" ? "warn" : "info"}">${i.kind}</span><div class="muted" style="font-size:12px;margin-top:4px">right: ${right[i.kind]}</div></td>
+        <td class="num">${i.session}</td><td><span class="mono" style="font-size:12px">${i.turn}</span> ${esc(i.injected_text)}</td>
+        <td><span class="mono" style="font-size:12px">${esc(i.original.split(":")[1] || i.original)}${i.original_requirement ? " → " + i.original_requirement : ""}</span> ${esc(i.original_text)}</td>
+        <td>${i.saved.length ? "saved " + i.saved.join(", ") : '<span class="muted">saved nothing</span>'}${i.kind === "change" && !i.original_extracted ? '<div class="muted" style="font-size:12px">the original had not been extracted</div>' : ""}</td>
+        <td>${i.ok ? '<span class="ok-txt">✓ right</span>' : '<span class="bad-txt">✗ wrong</span>'}</td></tr>`).join("")}</table>` : empty("No injections");
+    return;
+  }
+  if (EV.filter === "extras") {
+    const extras = a.false_positives.map((id) => pred[id]);
+    $("#ev-count").textContent = `${extras.length} extracted requirement(s) with no match in the gold standard`;
+    $("#ev-table").innerHTML = extras.length ? `<table><tr><th>id</th><th>extracted by GigaBrain</th><th>class</th><th>turns</th><th>topic</th></tr>${extras.map((p) =>
+      `<tr><td><b>${p.id}</b></td><td>${esc(p.text)}</td><td><span class="tag">${classTxt(p)}</span></td><td class="mono" style="font-size:13px">${p.turns.join(", ")}</td><td>${esc(p.topic)}</td></tr>`).join("")}</table>` : empty("No extras");
+    return;
+  }
+  const list = a.gold.filter((g) => {
+    const pair = pairOfGold[g.id];
+    return EV.filter === "all" || (EV.filter === "missed" && !pair) || (EV.filter === "class" && pair && !pair.class_ok);
+  });
+  $("#ev-count").textContent = `${list.length} of ${a.gold.length} gold requirements`;
+  const mark = (ok, label) => ok == null ? "" : `<div class="${ok ? "ok-txt" : "bad-txt"}">${ok ? "✓" : "✗"} ${label}</div>`;
+  $("#ev-table").innerHTML = list.length ? `<table><tr><th style="width:120px">gold</th><th>expected text</th><th>what GigaBrain extracted</th><th style="width:110px">result</th></tr>` + list.map((g) => {
+    const pair = pairOfGold[g.id], p = pair && pred[pair.predicted];
+    return `<tr><td><b>${g.id.split(":")[1]}</b><div class="muted" style="font-size:12px">${classTxt(g)}<br>${g.turns.join(", ")}</div></td>
+      <td>${esc(g.text)}</td>
+      <td>${p ? `<b>${p.id}</b> · ${esc(p.text)}<div class="muted" style="font-size:12px;margin-top:4px">${classTxt(p)} · ${p.turns.join(", ")} · similarity ${Math.round(pair.similarity * 100)}%</div>` : '<span class="badge bad">not found</span>'}</td>
+      <td>${pair ? mark(pair.class_ok, "class") + mark(pair.subtype_ok, "subtype") + mark(pair.trace_ok, "turn") : ""}</td></tr>`;
+  }).join("") + "</table>" : empty("Nothing in this filter");
+}
+
+// ============================================================ start
+(async () => {
+  await loadSources();
+  if (!S.sources.length) {
+    $("main").innerHTML = empty("No data folder found", "Run <code>python main.py demo</code> or <code>python main.py evaluate ...</code> and reload the page.");
+    return;
+  }
+  const remembered = recall("gigabrain-source");
+  const fallback = S.sources.find((f) => f.id === remembered) || S.sources.find((f) => f.id === "data") || S.sources.find((f) => f.id === "data-demo") || S.sources[0];
+  S.tab = recall("gigabrain-tab") || "architecture";
+  if (S.tab === "benchmark" && $('[data-tab="benchmark"]').hidden) S.tab = "architecture";
+  if (!["benchmark", "architecture", "conversations", "requirements", "experts", "evaluation"].includes(S.tab)) S.tab = "architecture";
+  await setSource(fallback.id);
+})();
+</script>
+</body>
+</html>

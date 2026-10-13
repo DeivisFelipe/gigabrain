@@ -1,13 +1,18 @@
-"""GigaBrain: conselho multiagente para definição de requisitos.
+"""GigaBrain: multi-agent council for software requirements.
 
-Visão geral dos módulos (na ordem em que vale a pena ler):
+Modules, in a good reading order:
 
-- mensagens.py   — o formato JSON que todos os agentes usam para conversar
-- banco.py       — banco SQLite local: requisitos, especialistas e eventos
-- log.py         — registra cada mensagem trocada (banco + arquivo .jsonl)
-- provedores.py  — acesso ao LLM (DeepSeek) ou um simulador offline
-- conhecimento.py— arquivo de conhecimento de cada especialista
-- agentes/       — Gêmeo Digital, Líder e Especialistas
-- conselho.py    — orquestra uma conversa inteira com o PO
-- painel/        — painel web para ver tudo de forma visual
+- messages.py            the JSON envelope every agent uses
+- database.py            local SQLite databases: requirements, experts and log
+- requirement_format.py  requirement structure (EARS + user story + Gherkin) and quality checks
+- knowledge.py           knowledge file of each expert
+- approval.py            when a PO message counts as an approval
+- providers.py           access to the LLM (DeepSeek) or an offline simulator
+- log.py                 records every message
+- agents/                Digital Twin, Leader and Experts
+- council.py             a whole conversation with the PO
+- meeting.py             a meeting processed one utterance at a time
+- api.py                 REST API for the web application
+- dashboard/             visual dashboard
+- dataset.py, evaluation.py, scenarios.py, stats.py, annotation.py   evaluation with the test dataset
 """
