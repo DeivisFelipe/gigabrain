@@ -129,9 +129,11 @@ class Conselho:
             salvos.append(resultado)
 
         self.proposta_pendente = None
-        self.encerrar("aprovada")
         ids = ", ".join(f"{s['requisito_id']} v{s['versao']}" for s in salvos)
-        return {"acao": "aprovado", "mensagem_ao_po": f"Requisito(s) salvo(s): {ids}.", "salvos": salvos, "requisitos": []}
+        texto = f"Requisito(s) salvo(s): {ids}."
+        _registrar(self.ctx, GEMEO, PO, "confirmacao", {"texto": texto, "salvos": [s["requisito_id"] for s in salvos]})
+        self.encerrar("aprovada")
+        return {"acao": "aprovado", "mensagem_ao_po": texto, "salvos": salvos, "requisitos": []}
 
     def _atualizar_especialistas(self, resultado: dict) -> None:
         """Avisa os especialistas de todos os temas tocados pelo requisito salvo."""

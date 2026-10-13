@@ -5,6 +5,7 @@ Comandos:
     python main.py conversar --simulado   idem, sem chamar API (respostas por regras)
     python main.py demo                   roda conversas prontas e popula dados-demo/
     python main.py painel                 painel visual com todas as pastas de dados (seletor no topo)
+    python main.py api                    API REST para a aplicação web (documentação em /docs)
     python main.py requisitos             lista os requisitos
     python main.py trilha R3              mostra como se chegou no R3
     python main.py especialistas          lista os especialistas
@@ -236,6 +237,22 @@ def cmd_anotacao(args) -> None:
               f" · consenso (os dois dizem correta) {r['precisao_consenso']:.0%}")
 
 
+def cmd_api(args) -> None:
+    import uvicorn
+    from gigabrain.api import criar_app
+
+    if not args.simulado:
+        criar_provedor("deepseek")  # falha cedo se a chave não estiver configurada
+    fabrica = ProvedorSimulado if args.simulado else (lambda: criar_provedor("deepseek"))
+    token = args.token or os.environ.get("GIGABRAIN_API_TOKEN")
+    origens = [o.strip() for o in args.origens.split(",")] if args.origens else ["*"]
+    app = criar_app(args.dados, fabrica, origens=origens, token=token)
+    print(f"GigaBrain API em http://{args.host}:{args.porta}  ·  documentação: http://{args.host}:{args.porta}/docs")
+    print(f"dados: {os.path.abspath(args.dados)} · provedor: {'simulado' if args.simulado else 'deepseek'}"
+          f" · token: {'sim' if token else 'não'} · origens: {', '.join(origens)}")
+    uvicorn.run(app, host=args.host, port=args.porta, log_level="warning")
+
+
 def main() -> None:
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8")
@@ -295,6 +312,14 @@ def main() -> None:
     p.add_argument("--provedor", default="deepseek-chat")
     p.add_argument("--cenario", default="*")
     p.set_defaults(func=cmd_anotacao)
+
+    p = sub.add_parser("api", help="API REST para a aplicação web (conversa do PO e histórico)")
+    p.add_argument("--porta", type=int, default=8000)
+    p.add_argument("--host", default="127.0.0.1", help="0.0.0.0 para aceitar conexões de outras máquinas da rede")
+    p.add_argument("--simulado", action="store_true", help="não chama API; respostas por regras (para desenvolver o front)")
+    p.add_argument("--origens", default="", help="origens liberadas no CORS, separadas por vírgula (padrão: todas)")
+    p.add_argument("--token", default="", help="exige Authorization: Bearer <token> (ou defina GIGABRAIN_API_TOKEN)")
+    p.set_defaults(func=cmd_api)
 
     args = parser.parse_args()
     try:

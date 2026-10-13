@@ -159,7 +159,8 @@ class Banco:
         antigo = os.path.join(pasta, ARQUIVO_ANTIGO)
         migrar = os.path.exists(antigo) and not os.path.exists(os.path.join(pasta, BASES["main"][0]))
 
-        self.con = sqlite3.connect(os.path.join(pasta, BASES["main"][0]), check_same_thread=False)
+        # timeout: com várias conversas ao mesmo tempo (API), espera o outro terminar de gravar.
+        self.con = sqlite3.connect(os.path.join(pasta, BASES["main"][0]), check_same_thread=False, timeout=30)
         self.con.row_factory = sqlite3.Row
         for apelido, (arquivo, _) in BASES.items():
             if apelido != "main":
