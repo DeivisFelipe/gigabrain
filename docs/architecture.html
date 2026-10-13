@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GigaBrain — Arquitetura</title>
+<title>GigaBrain — Architecture</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=STIX+Two+Text:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Arimo:ital,wght@0,400;0,500;0,600;0,700;1,400&display=swap" rel="stylesheet">
@@ -218,15 +218,15 @@
 </head>
 <body>
 <div class="page">
-  <p class="runhead">GigaBrain — Nota de Arquitetura · Pesquisa de Mestrado</p>
-  <h1>Um Modelo Multiagente para Definição de Requisitos de Software</h1>
-  <p class="subtitle">Rascunho de arquitetura — versão 1</p>
+  <p class="runhead">GigaBrain — Architecture Note · Master's Research</p>
+  <h1>A Multi-Agent Model for Defining Software Requirements</h1>
+  <p class="subtitle">Architecture draft — version 1</p>
 
-  <p class="abstract"><span class="abstract-label">Resumo. </span>Este documento descreve a arquitetura preliminar do GigaBrain, um modelo de agentes baseado em LLMs para apoiar a definição de requisitos de software. A arquitetura organiza os agentes em dois conselhos: um <i>conselho deliberativo</i>, no qual o Product Owner (PO) real negocia diretamente com um gêmeo digital até convergirem para um requisito definido; e um <i>conselho consultivo</i>, responsável por investigar o conhecimento técnico da plataforma e mobilizar especialistas de domínio sob demanda. O conselho consultivo é liderado por um agente gerente, que consulta uma base de conhecimento estrutural da plataforma e decide, a cada mudança solicitada, se um especialista já existe ou precisa ser criado — caso em que o novo agente constrói seu próprio repositório de conhecimento a partir do código existente ou de pesquisa externa. A Figura 1 ilustra essa arquitetura em detalhe.</p>
+  <p class="abstract"><span class="abstract-label">Abstract. </span>This document describes the preliminary architecture of GigaBrain, an LLM-based agent model to support the definition of software requirements. The architecture organizes the agents into two councils: a <i>deliberative council</i>, in which the real Product Owner (PO) negotiates directly with a digital twin until they converge on a defined requirement; and a <i>consultative council</i>, responsible for investigating the technical knowledge of the platform and mobilizing domain experts on demand. The consultative council is led by a manager agent, which queries a structural knowledge base of the platform and decides, for each requested change, whether an expert already exists or must be created — in which case the new agent builds its own knowledge repository from the existing code or from external research. Figure 1 shows this architecture in detail.</p>
 
   <figure>
     <div class="diagram-wrap">
-      <svg viewBox="0 0 1200 940" role="img" aria-label="Diagrama da arquitetura do GigaBrain: no topo, o PO real e o gêmeo digital formam o conselho deliberativo e produzem o requisito definido quando concordam; o gêmeo digital consulta o conselho consultivo abaixo, liderado por um agente gerente que consulta o banco de dados principal, verifica se já existe um especialista para o domínio e, caso não exista, cria um novo especialista que constrói seu próprio RAG a partir do código existente ou de pesquisa na web.">
+      <svg viewBox="0 0 1200 940" role="img" aria-label="GigaBrain architecture diagram: at the top, the real PO and the digital twin form the deliberative council and produce the defined requirement when they agree; the digital twin consults the consultative council below, led by a manager agent that queries the main database, checks whether an expert for the domain already exists and, if not, creates a new expert that builds its own RAG from the existing code or from web research.">
 
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.4" markerHeight="6.4" orient="auto-start-reverse">
@@ -302,106 +302,106 @@
           .tag{ font-family:'Arimo',Arial,sans-serif; font-style:italic; font-size:9.5px; fill:var(--ink-muted); }
         </style>
 
-        <!-- ===== Container 1: Conselho Deliberativo ===== -->
+        <!-- ===== Container 1: Deliberative Council ===== -->
         <rect class="container-box" x="50" y="40" width="1100" height="160"/>
-        <text class="container-label" x="74" y="64">CONSELHO DELIBERATIVO</text>
-        <text class="container-sub" x="74" y="80">decidem juntos quando o requisito está pronto</text>
+        <text class="container-label" x="74" y="64">DELIBERATIVE COUNCIL</text>
+        <text class="container-sub" x="74" y="80">decide together when the requirement is ready</text>
 
         <!-- PO Real -->
         <use class="icon-human" href="#ic-person" transform="translate(179,99) scale(2.2)"/>
-        <text class="title" x="205" y="165">PO Real</text>
-        <text class="sub" x="205" y="181">humano · dono do produto</text>
+        <text class="title" x="205" y="165">Real PO</text>
+        <text class="sub" x="205" y="181">human · product owner</text>
 
-        <!-- Gêmeo Digital -->
+        <!-- Digital Twin -->
         <use class="icon-agent" href="#ic-agent" transform="translate(559,99) scale(2.2)"/>
-        <text class="title" x="585" y="165">Gêmeo Digital</text>
-        <text class="sub" x="585" y="181">agente principal do PO</text>
+        <text class="title" x="585" y="165">Digital Twin</text>
+        <text class="sub" x="585" y="181">the PO's main agent</text>
 
-        <!-- Requisito Definido -->
+        <!-- Defined Requirement -->
         <use class="icon-output" href="#ic-doc" transform="translate(954,99) scale(2.2)"/>
-        <text class="title" x="980" y="165">Requisito Definido</text>
-        <text class="sub" x="980" y="181">alinhado ao mercado</text>
+        <text class="title" x="980" y="165">Defined Requirement</text>
+        <text class="sub" x="980" y="181">aligned with the market</text>
 
-        <!-- PO <-> Gêmeo -->
+        <!-- PO <-> Twin -->
         <line class="flow" x1="232" y1="125" x2="560" y2="125" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
-        <text class="edge-label" x="396" y="111" text-anchor="middle">perguntas &amp; sugestões</text>
+        <text class="edge-label" x="396" y="111" text-anchor="middle">questions &amp; suggestions</text>
 
-        <!-- Gêmeo -> Requisito -->
+        <!-- Twin -> Requirement -->
         <line class="flow" x1="610" y1="125" x2="954" y2="125" marker-end="url(#arrow)"/>
-        <text class="edge-label" x="782" y="111" text-anchor="middle">quando aprovam</text>
+        <text class="edge-label" x="782" y="111" text-anchor="middle">when they approve</text>
 
-        <!-- ===== Spine: Gêmeo <-> Líder (começa depois do texto do Gêmeo, para antes do ícone do Líder) ===== -->
+        <!-- ===== Spine: Twin <-> Leader (starts after the Twin's text, stops before the Leader's icon) ===== -->
         <line class="flow" x1="573" y1="198" x2="573" y2="308" marker-end="url(#arrow)"/>
         <line class="flow" x1="597" y1="308" x2="597" y2="198" marker-end="url(#arrow)"/>
-        <text class="edge-label" x="556" y="290" text-anchor="end">consulta conhecimento</text>
-        <text class="edge-label" x="614" y="290" text-anchor="start">resposta consolidada</text>
+        <text class="edge-label" x="556" y="290" text-anchor="end">queries knowledge</text>
+        <text class="edge-label" x="614" y="290" text-anchor="start">consolidated answer</text>
 
-        <!-- ===== Container 2: Conselho Consultivo ===== -->
+        <!-- ===== Container 2: Consultative Council ===== -->
         <rect class="container-box" x="50" y="230" width="1100" height="490"/>
-        <text class="container-label" x="74" y="254">CONSELHO CONSULTIVO</text>
-        <text class="container-sub" x="74" y="270">cresce ao longo do tempo · trabalho assíncrono</text>
+        <text class="container-label" x="74" y="254">CONSULTATIVE COUNCIL</text>
+        <text class="container-sub" x="74" y="270">grows over time · asynchronous work</text>
 
-        <!-- Líder -->
+        <!-- Leader -->
         <use class="icon-agent" href="#ic-agent" transform="translate(559,314) scale(2.2)"/>
-        <text class="title-sm" x="585" y="380">Líder do Conselho</text>
-        <text class="title-sm" x="585" y="396">Consultivo</text>
-        <text class="sub" x="585" y="412">gerente · sempre existe</text>
+        <text class="title-sm" x="585" y="380">Leader of the</text>
+        <text class="title-sm" x="585" y="396">Consultative Council</text>
+        <text class="sub" x="585" y="412">manager · always exists</text>
 
-        <!-- Banco de Dados Principal -->
+        <!-- Main Database -->
         <use class="icon-data" href="#ic-db" transform="translate(924,314) scale(2.2)"/>
-        <text class="title" x="950" y="380">Banco de Dados Principal</text>
-        <text class="sub" x="950" y="396">RAG · estrutura &amp; registro</text>
+        <text class="title" x="950" y="380">Main Database</text>
+        <text class="sub" x="950" y="396">RAG · structure &amp; registry</text>
 
-        <!-- Líder <-> MainDB -->
+        <!-- Leader <-> MainDB -->
         <line class="flow" x1="610" y1="340" x2="923" y2="340" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
-        <text class="edge-label" x="766" y="326" text-anchor="middle">consulta &amp; registro</text>
+        <text class="edge-label" x="766" y="326" text-anchor="middle">query &amp; registry</text>
 
-        <!-- Fan lines: Líder -> Especialistas (começam depois do texto do Líder, param antes dos ícones/card) -->
+        <!-- Fan lines: Leader -> Experts (start after the Leader's text, stop before the icons/card) -->
         <line class="flow" x1="585" y1="428" x2="245" y2="468" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
         <line class="flow" x1="585" y1="428" x2="585" y2="468" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
         <line class="flow-muted" x1="585" y1="428" x2="920" y2="480" marker-end="url(#arrow-muted)"/>
-        <text class="tag" x="710" y="445" text-anchor="start">cria se não existir no registro</text>
+        <text class="tag" x="710" y="445" text-anchor="start">creates it if not in the registry</text>
 
-        <!-- Especialista Pagamentos -->
+        <!-- Payments Expert -->
         <use class="icon-agent" href="#ic-agent" transform="translate(219,474) scale(2.2)"/>
-        <text class="title-sm" x="245" y="540">Especialista · Pagamentos</text>
-        <text class="sub" x="245" y="556">conhecimento do domínio</text>
+        <text class="title-sm" x="245" y="540">Expert · Payments</text>
+        <text class="sub" x="245" y="556">domain knowledge</text>
 
-        <!-- Especialista Notificações -->
+        <!-- Notifications Expert -->
         <use class="icon-agent" href="#ic-agent" transform="translate(559,474) scale(2.2)"/>
-        <text class="title-sm" x="585" y="540">Especialista · Notificações</text>
-        <text class="sub" x="585" y="556">conhecimento do domínio</text>
+        <text class="title-sm" x="585" y="540">Expert · Notifications</text>
+        <text class="sub" x="585" y="556">domain knowledge</text>
 
-        <!-- + Novo Especialista (ainda não existe: fica como card, sem ícone) — alinhado com o topo dos ícones ao lado -->
+        <!-- + New Expert (does not exist yet: a card, no icon) — aligned with the top of the icons beside it -->
         <rect class="card-agent" x="780" y="480" width="280" height="86" rx="4"/>
-        <text class="title-sm" x="920" y="540">+ Novo Especialista</text>
-        <text class="sub" x="920" y="556">criado sob demanda</text>
+        <text class="title-sm" x="920" y="540">+ New Expert</text>
+        <text class="sub" x="920" y="556">created on demand</text>
 
-        <!-- Especialista -> próprio RAG (a linha começa depois do texto, para antes do ícone) -->
+        <!-- Expert -> own RAG (the line starts after the text, stops before the icon) -->
         <line class="flow" x1="245" y1="572" x2="245" y2="618" marker-end="url(#arrow)"/>
         <line class="flow" x1="585" y1="572" x2="585" y2="618" marker-end="url(#arrow)"/>
         <line class="flow-muted" x1="920" y1="566" x2="920" y2="630" marker-end="url(#arrow-muted)"/>
 
-        <!-- RAG Pagamentos -->
+        <!-- Payments RAG -->
         <use class="icon-data" href="#ic-db" transform="translate(219,624) scale(2.2)"/>
-        <text class="title-sm" x="245" y="690">RAG · Pagamentos</text>
+        <text class="title-sm" x="245" y="690">RAG · Payments</text>
 
-        <!-- RAG Notificações -->
+        <!-- Notifications RAG -->
         <use class="icon-data" href="#ic-db" transform="translate(559,624) scale(2.2)"/>
-        <text class="title-sm" x="585" y="690">RAG · Notificações</text>
+        <text class="title-sm" x="585" y="690">RAG · Notifications</text>
 
-        <!-- RAG do especialista (ainda não existe: card, sem ícone) — alinhado com o topo dos ícones RAG ao lado -->
+        <!-- Expert's RAG (does not exist yet: card, no icon) — aligned with the top of the RAG icons beside it -->
         <rect class="card-data" x="780" y="630" width="280" height="70" rx="4"/>
-        <text class="title-sm" x="920" y="671">RAG do especialista</text>
+        <text class="title-sm" x="920" y="671">Expert's RAG</text>
 
-        <!-- ===== Fontes externas (fora do conselho) ===== -->
+        <!-- ===== External sources (outside the council) ===== -->
         <use class="icon-neutral" href="#ic-code" transform="translate(759,804) scale(2.2)"/>
-        <text class="title-sm" x="785" y="870">Código-fonte</text>
-        <text class="sub" x="785" y="886">estudo do sistema atual</text>
+        <text class="title-sm" x="785" y="870">Source code</text>
+        <text class="sub" x="785" y="886">study of the current system</text>
 
         <use class="icon-neutral" href="#ic-globe" transform="translate(1024,804) scale(2.2)"/>
-        <text class="title-sm" x="1050" y="870">Pesquisa na Web</text>
-        <text class="sub" x="1050" y="886">quando o domínio é novo</text>
+        <text class="title-sm" x="1050" y="870">Web research</text>
+        <text class="sub" x="1050" y="886">when the domain is new</text>
 
         <line class="flow-muted" x1="785" y1="798" x2="905" y2="700" marker-end="url(#arrow-muted)"/>
         <line class="flow-muted" x1="1050" y1="798" x2="935" y2="700" marker-end="url(#arrow-muted)"/>
@@ -410,47 +410,47 @@
     </div>
 
     <figcaption>
-      <b>Figura 1.</b> Arquitetura multiagente do GigaBrain. O PO real e o gêmeo digital debatem no conselho deliberativo até aprovarem juntos um requisito. Para chegar lá, o gêmeo consulta o conselho consultivo — cujo líder verifica no banco de dados principal se já existe um especialista para o domínio em questão, reaproveitando-o ou criando um novo (tracejado, ainda não existe), que forma seu próprio RAG estudando o código existente ou pesquisando na web.
+      <b>Figure 1.</b> Multi-agent architecture of GigaBrain. The real PO and the digital twin debate in the deliberative council until they approve a requirement together. To get there, the twin consults the consultative council — whose leader checks in the main database whether an expert for the domain already exists, reusing it or creating a new one (dashed, does not exist yet), which builds its own RAG by studying the existing code or searching the web.
     </figcaption>
 
     <div class="legend">
-      <span><i style="background:var(--human)"></i>Humano</span>
-      <span><i style="background:var(--agent)"></i>Agente (LLM)</span>
-      <span><i style="background:var(--data)"></i>Base de conhecimento (RAG)</span>
-      <span><i style="background:var(--output)"></i>Artefato de saída</span>
-      <span><i class="dashed"></i>Ainda não existe / sob demanda</span>
+      <span><i style="background:var(--human)"></i>Human</span>
+      <span><i style="background:var(--agent)"></i>Agent (LLM)</span>
+      <span><i style="background:var(--data)"></i>Knowledge base (RAG)</span>
+      <span><i style="background:var(--output)"></i>Output artifact</span>
+      <span><i class="dashed"></i>Does not exist yet / on demand</span>
     </div>
   </figure>
 
   <section class="text-col">
-    <h2>1. Papéis dos Agentes</h2>
+    <h2>1. Agent Roles</h2>
     <table>
-      <caption><b>Tabela 1.</b> Papéis e responsabilidades no modelo.</caption>
+      <caption><b>Table 1.</b> Roles and responsibilities in the model.</caption>
       <thead>
-        <tr><th>Agente / recurso</th><th>Papel</th></tr>
+        <tr><th>Agent / resource</th><th>Role</th></tr>
       </thead>
       <tbody>
-        <tr><td>PO Real</td><td>Pessoa que efetivamente decide; faz perguntas, propõe ajustes e aprova a versão final do requisito.</td></tr>
-        <tr><td>Gêmeo Digital</td><td>Réplica do PO real dentro do sistema; debate com o humano, formula a pergunta certa para o conselho consultivo e traduz o retorno em linguagem de produto.</td></tr>
-        <tr><td>Líder do Conselho Consultivo</td><td>Único agente presente desde o início; consulta o banco de dados principal, decide se um especialista já existe e cria um novo quando o domínio é inédito.</td></tr>
-        <tr><td>Especialistas de Domínio</td><td>Agentes criados sob demanda, um por área do sistema (pagamentos, notificações etc.); cada um mantém seu próprio RAG e responde ao líder.</td></tr>
-        <tr><td>Bases RAG</td><td>Uma base compartilhada com a estrutura da plataforma e uma base própria por especialista, alimentada pelo código existente ou por pesquisa quando o tema é novo.</td></tr>
+        <tr><td>Real PO</td><td>The person who actually decides; asks questions, proposes changes and approves the final version of the requirement.</td></tr>
+        <tr><td>Digital Twin</td><td>Replica of the real PO inside the system; debates with the human, asks the consultative council the right question and translates the answer into product language.</td></tr>
+        <tr><td>Leader of the Consultative Council</td><td>The only agent present from the start; queries the main database, decides whether an expert already exists and creates a new one when the domain is new.</td></tr>
+        <tr><td>Domain Experts</td><td>Agents created on demand, one per area of the system (payments, notifications, etc.); each keeps its own RAG and answers the leader.</td></tr>
+        <tr><td>RAG bases</td><td>A shared base with the structure of the platform and one base per expert, fed by the existing code or by research when the topic is new.</td></tr>
       </tbody>
     </table>
   </section>
 
   <section class="text-col">
-    <h2>2. Exemplo de Fluxo: Notificação de Pagamento</h2>
+    <h2>2. Example Flow: Payment Notification</h2>
     <ol class="steps">
-      <li><b>PO real</b> pede: "quero adicionar notificação ao pagamento".</li>
-      <li><b>Gêmeo digital</b> repassa a pergunta ao líder do conselho consultivo.</li>
-      <li><b>Líder</b> consulta o banco de dados principal: já existe um especialista em pagamentos?</li>
-      <li>Se existir, o líder pergunta direto a ele; se não, <b>cria um novo especialista</b>, que estuda o código do sistema de pagamentos — e pesquisa na web, se o conceito for novo.</li>
-      <li><b>Especialista</b> responde ao líder, que consolida o conhecimento e devolve ao gêmeo digital — que retoma a conversa com o PO real até os dois aprovarem a história final.</li>
+      <li>The <b>real PO</b> asks: "I want to add a notification to the payment".</li>
+      <li>The <b>digital twin</b> passes the question to the leader of the consultative council.</li>
+      <li>The <b>leader</b> queries the main database: is there already a payments expert?</li>
+      <li>If there is, the leader asks it directly; if not, it <b>creates a new expert</b>, which studies the code of the payment system — and searches the web if the concept is new.</li>
+      <li>The <b>expert</b> answers the leader, which consolidates the knowledge and returns it to the digital twin — which resumes the conversation with the real PO until both approve the final story.</li>
     </ol>
   </section>
 
-  <footer>Rascunho de arquitetura — GigaBrain, Mestrado · sujeito a revisão conforme a pesquisa avança</footer>
+  <footer>Architecture draft — GigaBrain, Master's · subject to revision as the research progresses</footer>
 </div>
 </body>
 </html>

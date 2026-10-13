@@ -1,12 +1,14 @@
 # GigaBrain
 
-Sistema multiagente para definir requisitos de software. O PO conversa com um agente (o
-Gêmeo Digital), que consulta especialistas antes de propor requisitos. O que o PO aprova
-vai para um banco local, com versões e ligações entre requisitos.
+A multi-agent system for defining software requirements. The Product Owner (PO) talks to
+one agent, the Digital Twin, which consults topic experts before proposing requirements.
+What the PO approves goes into a local database, with versions and links between
+requirements.
 
-O sistema não lê código. Ele trabalha só com requisitos, documentos do projeto e o que o PO diz.
+GigaBrain does not read source code. It only works with requirements, project documents and
+what the PO says.
 
-## Instalação
+## Install
 
 ```bash
 git clone https://github.com/DeivisFelipe/gigabrain
@@ -14,315 +16,377 @@ cd gigabrain
 pip install -r requirements.txt
 ```
 
-Para usar o modelo de verdade, defina a chave da DeepSeek:
+To use the real model, set the DeepSeek key:
 
 ```bash
-$env:DEEPSEEK_API_KEY="sua-chave"      # PowerShell
-export DEEPSEEK_API_KEY="sua-chave"    # Linux/Mac
+$env:DEEPSEEK_API_KEY="your-key"      # PowerShell
+export DEEPSEEK_API_KEY="your-key"    # Linux/Mac
 ```
 
-Sem chave, quase todos os comandos aceitam `--simulado`, que responde por regras fixas.
-Serve para testar o fluxo, não para medir qualidade.
+Without a key, almost every command accepts `--simulated`, which answers with fixed rules.
+It is for testing the flow, not for measuring quality.
 
-## Comandos
+## Commands
 
-| Comando | O que faz |
+| Command | What it does |
 |---|---|
-| `python main.py conversar` | conversa com o Gêmeo no terminal |
-| `python main.py api` | sobe a API REST para a aplicação web |
-| `python main.py painel` | abre o painel visual no navegador |
-| `python main.py demo` | roda 5 conversas de exemplo (simulado) |
-| `python main.py requisitos` | lista os requisitos salvos |
-| `python main.py trilha R3` | mostra como se chegou no R3 |
-| `python main.py especialistas` | lista os especialistas |
-| `python main.py alimentar pagamentos ata.md` | entrega um documento a um especialista |
-| `python main.py avaliar ...` | avaliação com o dataset (ver abaixo) |
-| `python main.py anotacao ...` | anotação manual das ligações (ver abaixo) |
-| `python -m unittest discover tests` | testes (offline) |
+| `python main.py chat` | talk to the Twin in the terminal |
+| `python main.py api` | start the REST API for the web application |
+| `python main.py dashboard` | open the visual dashboard in the browser |
+| `python main.py demo` | run 5 sample conversations (simulated) into `data-demo/` |
+| `python main.py requirements` | list the saved requirements |
+| `python main.py trace R3` | show how R3 came to be |
+| `python main.py experts` | list the experts |
+| `python main.py feed payments minutes.md` | give a document to an expert |
+| `python main.py evaluate ...` | evaluation with the dataset (see below) |
+| `python main.py annotation ...` | manual annotation of the links (see below) |
+| `python -m unittest discover tests` | tests (offline) |
 
-A opção `--dados <pasta>` (antes do comando) escolhe onde ficam os bancos. Padrão: `dados/`.
+`--data <folder>` (before the command) chooses where the databases go. Default: `data/`.
 
-## Como funciona
+## How it works
 
 ```
-PO ──▶ Gêmeo Digital ──▶ Líder ──▶ Especialistas (um por tema: pagamentos, busca...)
+PO ──▶ Digital Twin ──▶ Leader ──▶ Experts (one per topic: payments, search...)
         ▲                  │
-        └── recomendações ─┘
+        └─ recommendations ┘
         │
-        └─▶ PO aprova ──▶ Repositório de Requisitos
+        └─▶ PO approves ──▶ Requirements Repository
 ```
 
-- **Gêmeo Digital** (Conselho Deliberativo): conversa com o PO, pergunta, propõe requisitos.
-- **Líder** (Conselho Consultivo): leva a pergunta ao especialista certo. Cria especialistas
-  novos quando aparece um tema novo.
-- **Especialistas**: cada um cuida de um tema e guarda o que sabe num arquivo Markdown.
-  Eles só recomendam.
-- **Quem decide:** o PO, na conversa. Nas reuniões processadas em lote (sem PO), quem decide
-  é o Gêmeo.
-- **Especialista de qualidade:** fixo, confere se o requisito é funcional (FR) ou não
-  funcional (NFR) e o subtipo (desempenho, segurança...).
+- **Digital Twin** (Deliberative Council): talks to the PO, asks questions, proposes requirements.
+- **Leader** (Consultative Council): sends each question to the right expert. Creates a new
+  expert when a new topic shows up.
+- **Experts**: each one owns a topic and keeps what it knows in a Markdown file. They only
+  recommend.
+- **Who decides:** the PO, in the conversation. In meetings processed in batch (no PO), the
+  Twin decides.
+- **Quality expert:** always present; checks whether the requirement is functional (FR) or
+  non-functional (NFR), its subtype (performance, security...) and its format.
 
-Nada é salvo sem aprovação explícita. "Aprovado, mas troca o prazo" não aprova.
+Nothing is saved without an explicit approval. "Approved, but change the deadline" does not approve.
 
-### Requisitos
+## Requirement format
 
-Cada requisito tem um id (R1, R2...), versões (nenhuma é apagada) e ligações com outros:
+There is no single standard for writing requirements, so GigaBrain combines the most used ones.
+Each one answers a different question:
 
-| Ligação | Significado | Efeito no outro requisito |
+| Field | Format | Answers | Source |
+|---|---|---|---|
+| `statement` | "shall" sentence in an EARS pattern | what the system must do, without ambiguity | ISO/IEC/IEEE 29148, EARS |
+| `story` | As a *role*, I want *goal*, so that *benefit* | who wants it and why | agile user stories |
+| `acceptance_criteria` | Given / When / Then | how to test it | BDD (Gherkin) |
+| `class`, `subtype` | FR or NFR; NFR subtype from ISO/IEC 25010 | what kind of requirement it is | PROMISE/PURE |
+
+### EARS patterns
+
+EARS (Easy Approach to Requirements Syntax, Mavin et al., 2009) uses five sentence shapes:
+
+| Pattern | Shape | Example |
 |---|---|---|
-| `refina` | detalha | nenhum |
-| `divide` | é uma parte | fica `dividido` |
-| `junta` | juntou com outros | fica `unido` |
-| `substitui` | toma o lugar | fica `substituido` |
-| `depende_de` | precisa dele | se ele mudar, este fica `em_revisao` |
-| `conflita_com` | contradiz | o PO decide |
+| ubiquitous | The *system* shall *response*. | The system shall export reports to PDF. |
+| event | When *trigger*, the *system* shall *response*. | When the payment is confirmed, the system shall email the customer within 1 minute. |
+| state | While *state*, the *system* shall *response*. | While the user is offline, the app shall queue the orders. |
+| unwanted | If *problem*, then the *system* shall *response*. | If the card is declined, then the system shall show the reason. |
+| optional | Where *feature*, the *system* shall *response*. | Where a printer is available, the system shall print the receipt. |
 
-Lê-se "origem *ligação* destino": "R3 substitui R1".
+A mix of them (e.g. "While ..., when ...") is `complex`.
 
-### Especialistas
-
-O conhecimento de cada especialista fica em `dados/conhecimento/<tema>.md`, com seções fixas:
-regras de negócio, glossário, decisões, requisitos aprovados e pontos em aberto. Toda
-mudança vira uma versão nova no banco, com o motivo. O arquivo muda quando:
-
-- um requisito do tema é aprovado;
-- alguém entrega um documento (`python main.py alimentar <especialista> <arquivo>`);
-- alguém edita o arquivo à mão.
-
-### Bancos
-
-Três arquivos SQLite na pasta de dados:
-
-| Arquivo | Conteúdo |
-|---|---|
-| `requisitos.db` | requisitos, versões e ligações |
-| `especialistas.db` | especialistas e todas as versões do conhecimento |
-| `log.db` | conversas e todas as mensagens trocadas entre os agentes (JSON) |
-
-As mensagens também vão para `logs/<conversa>.jsonl`. Pastas antigas com um único
-`gigabrain.db` são convertidas sozinhas.
-
-## API para a aplicação web
-
-```bash
-python main.py api --simulado    # sem chave, para desenvolver a tela
-python main.py api               # com a DeepSeek
-```
-
-Abre em `http://127.0.0.1:8000`. A documentação interativa fica em `/docs`.
-
-| Opção | Padrão | Uso |
-|---|---|---|
-| `--porta` | 8000 | |
-| `--host` | 127.0.0.1 | `0.0.0.0` para acessar de outra máquina |
-| `--origens` | todas | CORS, ex.: `http://localhost:5173` |
-| `--token` | nenhum | exige `Authorization: Bearer <token>` |
-
-### Rotas
-
-Base: `/api/v1`
-
-| Método | Rota | O que faz |
-|---|---|---|
-| POST | `/conversas` | abre uma conversa. Corpo opcional: `{"modo": "pos_reuniao"}` |
-| POST | `/conversas/{id}/mensagens` | o PO fala. Corpo: `{"texto": "..."}` |
-| POST | `/conversas/{id}/aprovar` | aprova a proposta pendente |
-| POST | `/conversas/{id}/encerrar` | encerra sem aprovar |
-| GET | `/conversas` | lista as conversas |
-| GET | `/conversas/{id}` | mensagens da conversa (PO e Gêmeo) |
-| GET | `/conversas/{id}/eventos` | tudo o que os agentes trocaram |
-| GET | `/requisitos?status=&tema=&busca=` | lista os requisitos |
-| GET | `/requisitos/{id}` | requisito com versões, ligações, fontes e trilha |
-| GET | `/ligacoes` | todas as ligações |
-| GET | `/especialistas` e `/especialistas/{id}` | especialistas e conhecimento |
-| GET | `/saude` | status (não pede token) |
-
-### Resposta de uma mensagem
+### Example of a saved requirement
 
 ```json
 {
-  "acao": "propor",
-  "mensagem": "texto para mostrar ao PO",
-  "requisitos_propostos": [{"titulo": "...", "historia": "...", "criterios_aceite": ["..."], "temas": ["..."]}],
-  "salvos": [],
-  "proposta_pendente": true,
-  "conversa_ativa": true,
-  "bastidores": [{"de": "gemeo", "para": "lider", "tipo": "consulta", "resumo": "..."}]
+  "title": "Payment confirmation email",
+  "statement": "When the payment is confirmed, the system shall email the customer within 1 minute.",
+  "ears_pattern": "event",
+  "story": {"role": "customer", "goal": "to be told my payment went through", "benefit": "I know the order is done"},
+  "acceptance_criteria": [
+    {"scenario": "Confirmed payment", "given": "an order waiting for payment",
+     "when": "the payment is confirmed", "then": "the customer receives an email within 1 minute"}
+  ],
+  "class": "NFR",
+  "subtype": "PE",
+  "kind": "business",
+  "topics": ["payments", "notifications"]
 }
 ```
 
-- `acao = perguntar`: mostre a mensagem e espere o PO.
-- `acao = propor`: mostre os requisitos e o botão Aprovar.
-- `acao = aprovado`: a conversa acabou. `salvos` tem os ids gravados.
-- `bastidores`: o que os agentes fizeram para responder. Opcional na tela.
+### Automatic checks
 
-### Observações
+Every requirement gets checks without an LLM (`gigabrain/requirement_format.py`). The API and the
+dashboard show them next to the requirement:
 
-- Uma mensagem pode levar até ~1 minuto. Use timeout de 120 s.
-- As conversas abertas ficam na memória da API. Se ela reiniciar, essas conversas
-  respondem 409 e o PO abre outra. O histórico não se perde.
-- Erros: 401 token, 404 não existe, 409 conversa inativa, 422 corpo inválido, 502 falha do
-  modelo. O corpo traz `{"detail": "..."}`.
+| Check | OK when |
+|---|---|
+| `ears` | the statement has "shall"/"must" and fits a pattern |
+| `story_complete` | role, goal and benefit are filled in |
+| `criteria_gherkin` | every criterion has given, when and then |
+| `vague_terms` | empty: no "fast", "easy", "user-friendly"... without a number |
 
-### Exemplo em JavaScript
+NFR subtypes: `PE` performance, `SE` security, `US` usability, `LF` look and feel, `A`
+availability, `SA` safety, `PO` portability, `MN` maintainability, `SC` scalability, `L`
+legal, `FT` fault tolerance, `OT` other.
+
+## Requirements
+
+Each requirement has an id (R1, R2...), versions (none is ever deleted) and links to others:
+
+| Link | Meaning | Effect on the other requirement |
+|---|---|---|
+| `refines` | adds detail | none |
+| `splits` | is one part of it | becomes `split` |
+| `merges` | was merged with others | becomes `merged` |
+| `supersedes` | takes its place | becomes `superseded` |
+| `depends_on` | needs it | if it changes, this one becomes `under_review` |
+| `conflicts_with` | contradicts it | the PO decides |
+
+Read it as "source *link* target": "R3 supersedes R1".
+
+## Experts
+
+The knowledge of each expert is in `data/knowledge/<topic>.md`, with fixed sections: business
+rules, glossary, decisions, approved requirements and open points. Every change becomes a new
+version in the database, with its reason. The file changes when:
+
+- a requirement of the topic is approved;
+- someone gives it a document (`python main.py feed <expert> <file>`);
+- someone edits the file by hand.
+
+## Databases
+
+Three SQLite files in the data folder:
+
+| File | Content |
+|---|---|
+| `requirements.db` | requirements, versions and links |
+| `experts.db` | experts and every version of their knowledge |
+| `log.db` | conversations and every message exchanged by the agents (JSON) |
+
+The messages also go to `logs/<conversation>.jsonl`.
+
+## API for the web application
+
+```bash
+python main.py api --simulated    # no key, to build the screens
+python main.py api                # with DeepSeek
+```
+
+It runs on `http://127.0.0.1:8000`. Interactive docs at `/docs`.
+
+| Option | Default | Use |
+|---|---|---|
+| `--port` | 8000 | |
+| `--host` | 127.0.0.1 | `0.0.0.0` to accept other machines |
+| `--origins` | all | CORS, e.g. `http://localhost:5173` |
+| `--token` | none | requires `Authorization: Bearer <token>` |
+
+### Routes
+
+Base: `/api/v1`
+
+| Method | Route | What it does |
+|---|---|---|
+| POST | `/conversations` | open a conversation. Optional body: `{"mode": "after_meeting"}` |
+| POST | `/conversations/{id}/messages` | the PO talks. Body: `{"text": "..."}` |
+| POST | `/conversations/{id}/approve` | approve the pending proposal |
+| POST | `/conversations/{id}/close` | close without approving |
+| GET | `/conversations` | list the conversations |
+| GET | `/conversations/{id}` | messages of the conversation (PO and Twin) |
+| GET | `/conversations/{id}/events` | everything the agents exchanged |
+| GET | `/requirements?status=&topic=&search=` | list the requirements |
+| GET | `/requirements/{id}` | requirement with versions, links, sources, checks and trace |
+| GET | `/links` | all links |
+| GET | `/experts` and `/experts/{id}` | experts and their knowledge |
+| GET | `/health` | status (no token needed) |
+
+### Answer to a message
+
+```json
+{
+  "action": "propose",
+  "message": "text to show the PO",
+  "proposed_requirements": [{"title": "...", "statement": "...", "story": {}, "acceptance_criteria": [], "quality": {}}],
+  "saved": [],
+  "pending_proposal": true,
+  "conversation_active": true,
+  "behind_the_scenes": [{"sender": "twin", "recipient": "leader", "kind": "query", "summary": "..."}]
+}
+```
+
+- `action = ask`: show the message and wait for the PO.
+- `action = propose`: show the requirements and the Approve button.
+- `action = approved`: the conversation is over. `saved` has the saved ids.
+- `behind_the_scenes`: what the agents did to answer. Optional on screen.
+
+### Notes
+
+- A message may take up to ~1 minute. Use a 120 s timeout.
+- Open conversations live in the API memory. If it restarts, they answer 409 and the PO
+  opens a new one. The history is not lost.
+- Errors: 401 token, 404 not found, 409 inactive conversation, 422 invalid body, 502 model
+  failure. The body has `{"detail": "..."}`.
+
+### JavaScript example
 
 ```js
 const API = "http://127.0.0.1:8000/api/v1";
-const post = (rota, corpo) => fetch(API + rota, {
-  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(corpo ?? {}),
+const post = (route, body) => fetch(API + route, {
+  method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}),
 }).then((r) => r.json());
 
-const { id } = await post("/conversas");
-let r = await post(`/conversas/${id}/mensagens`, { texto: "Quero notificar o cliente quando o pagamento for confirmado" });
-r = await post(`/conversas/${id}/mensagens`, { texto: "Por e-mail, em até 1 minuto" });
-r = await post(`/conversas/${id}/aprovar`);          // r.salvos -> ["R1"]
-const requisitos = await fetch(API + "/requisitos").then((x) => x.json());
+const { id } = await post("/conversations");
+let r = await post(`/conversations/${id}/messages`, { text: "I want to notify the customer when the payment is confirmed" });
+r = await post(`/conversations/${id}/messages`, { text: "By email, within 1 minute" });
+r = await post(`/conversations/${id}/approve`);          // r.saved -> ["R1"]
+const requirements = await fetch(API + "/requirements").then((x) => x.json());
 ```
 
-## Painel
+## Dashboard
 
 ```bash
-python main.py painel
+python main.py dashboard
 ```
 
-Abre em `http://127.0.0.1:8765`. Mostra todas as pastas de dados do projeto (seletor na lateral).
+It runs on `http://127.0.0.1:8765` and shows every data folder of the project (selector on the side).
 
-| Aba | Mostra |
+| Tab | Shows |
 |---|---|
-| Benchmark | resultados da avaliação, médias e testes estatísticos |
-| Arquitetura | uma conversa reproduzida passo a passo |
-| Conversas | as mensagens de cada conversa |
-| Requisitos | lista, mapa de ligações, versões e trilha |
-| Especialistas | conhecimento de cada um e o que mudou entre as versões |
-| Avaliação | comparação com o gabarito de um projeto |
+| Benchmark | evaluation results, means and statistical tests |
+| Architecture | a conversation replayed step by step |
+| Conversations | the messages of each conversation |
+| Requirements | list, link map, versions, trace and format checks |
+| Experts | knowledge of each one and what changed between versions |
+| Evaluation | comparison with the gold standard of a project |
 
-## Avaliação com o dataset
+## Evaluation with the dataset
 
-O dataset fica em outro repositório. Clone ao lado deste:
+The dataset lives in another repository. Clone it next to this one:
 
 ```bash
 git clone https://github.com/schaumann-byte/EntradasGigabrain
 ```
 
 ```
-Projetos/
+Projects/
 ├── gigabrain/
 └── EntradasGigabrain/
 ```
 
-São 18 reuniões simuladas, geradas por script a partir do dataset PURE, cada uma com o
-gabarito dos requisitos. O projeto `2005-microcare` tem gabarito vazio e é ignorado.
+It has 18 simulated meetings, generated by a script from the PURE dataset, each with the gold
+standard requirements. Project `2005-microcare` has an empty gold standard and is skipped.
 
-### Comandos
+### Commands
 
 ```bash
-python main.py entradas                                   # lista os projetos
-python main.py avaliar 2008-keepass                       # um projeto
-python main.py avaliar todos --repeticoes 5               # todos, 5 vezes cada
-python main.py avaliar todos --cenario sessoes            # várias reuniões por projeto
-python main.py avaliar todos --modo conselho --sem-qualidade   # sem o especialista de qualidade
+python main.py dataset                                      # list the projects
+python main.py evaluate 2008-keepass                        # one project
+python main.py evaluate all --repetitions 5                 # all of them, 5 times each
+python main.py evaluate all --scenario sessions             # several meetings per project
+python main.py evaluate all --mode council --no-quality     # without the quality expert
 ```
 
-| Opção | Padrão | Uso |
+| Option | Default | Use |
 |---|---|---|
-| `--modo` | todos | `conselho`, `agente_unico`, `llm_puro` (separados por vírgula) |
-| `--repeticoes` | 1 | quantas vezes rodar cada projeto e modo |
-| `--cenario` | reuniao | `reuniao` ou `sessoes` |
-| `--paralelo` | 4 | quantas execuções ao mesmo tempo |
-| `--simulado` | | sem chave |
+| `--mode` | all | `council`, `single_agent`, `plain_llm` (comma-separated) |
+| `--repetitions` | 1 | how many times to run each project and mode |
+| `--scenario` | meeting | `meeting` or `sessions` |
+| `--parallel` | 4 | how many runs at the same time |
+| `--simulated` | | no key |
 
-### Modos comparados
+### Compared modes
 
-- **conselho**: o Gêmeo lê a reunião fala por fala. Cada requisito rascunhado passa pelos
-  especialistas e o Gêmeo decide se salva.
-- **agente_unico**: o mesmo Gêmeo, sem os especialistas.
-- **llm_puro**: a reunião inteira num pedido só, com instrução mínima.
+- **council**: the Twin reads the meeting one utterance at a time. Each draft goes to the
+  experts and the Twin decides whether to save it.
+- **single_agent**: the same Twin, without the experts.
+- **plain_llm**: the whole meeting in one request, with a minimal instruction.
 
-### Cenários
+### Scenarios
 
-- **reuniao**: uma reunião por projeto, como no dataset.
-- **sessoes**: cada reunião vira 3 reuniões seguidas. Nas reuniões 2 e 3 são inseridas falas
-  que **repetem** um requisito anterior (o certo é não salvar de novo) e falas que **mudam**
-  um requisito anterior (o certo é salvar e ligar ao original).
+- **meeting**: one meeting per project, as in the dataset.
+- **sessions**: each meeting becomes 3 meetings in a row. Meetings 2 and 3 get extra
+  utterances that **repeat** an earlier requirement (it should not be saved again) and
+  utterances that **change** an earlier requirement (it should be saved and linked to the original).
 
-### Métricas
+### Metrics
 
-| Métrica | O que mede |
+| Metric | Measures |
 |---|---|
-| precisão | do que foi extraído, quanto existe no gabarito |
-| revocação | do gabarito, quanto foi encontrado |
-| F1 | média entre precisão e revocação |
-| classe | acerto de FR/NFR |
-| subtipo | acerto do subtipo NFR |
-| rastreio | citou a fala de onde o requisito veio |
-| sem respaldo | requisito que a fala citada não sustenta |
-| repetições evitadas | só no cenário `sessoes` |
-| mudanças ligadas | só no cenário `sessoes` |
+| precision | of what was extracted, how much is in the gold standard |
+| recall | of the gold standard, how much was found |
+| F1 | mean of precision and recall |
+| class | FR/NFR correct |
+| subtype | NFR subtype correct |
+| trace | cited the utterance the requirement came from |
+| unsupported | requirement not backed by the cited utterance |
+| ears, story, gherkin, not_vague | share of requirements that pass each format check |
+| repetitions_avoided | `sessions` scenario only |
+| changes_linked | `sessions` scenario only |
 
-Um requisito extraído conta como acerto quando tem pelo menos 50% de palavras em comum com
-um do gabarito. Com repetições, a comparação entre modos usa o teste de Wilcoxon pareado
-por projeto.
+An extracted requirement is a hit when it shares at least 50% of its content words with one
+from the gold standard. With repetitions, modes are compared with the Wilcoxon signed-rank
+test paired by project.
 
-### Resultados
+### Results
 
-Ficam em `dados-avaliacao/<provedor>/<cenario>/`:
+They go to `data-eval/<provider>/<scenario>/`:
 
-- `resumo.csv`: uma linha por projeto, modo e repetição
-- `estatisticas.json`: médias e testes estatísticos
-- `<projeto>/<modo>/rep-<n>/`: bancos, logs e `avaliacao.json` de cada execução
+- `summary.csv`: one line per project, mode and repetition
+- `statistics.json`: means and statistical tests
+- `<project>/<mode>/rep-<n>/`: databases, logs and `evaluation.json` of each run
 
-Essas pastas não vão para o Git.
+These folders are not committed.
 
-### Anotação manual das ligações
+### Manual annotation of the links
 
-O gabarito não diz se as ligações entre requisitos estão certas. Para isso:
-
-```bash
-python main.py anotacao exportar ligacoes.csv --amostra 60
-```
-
-Duas pessoas abrem o CSV e preenchem as colunas `anotador_1` e `anotador_2` com `c`
-(correta) ou `i` (incorreta), sem ver a do outro. Depois:
+The gold standard does not say whether the links between requirements are right. For that:
 
 ```bash
-python main.py anotacao kappa ligacoes.csv
+python main.py annotation export links.csv --sample 60
 ```
 
-Mostra a concordância entre os dois (kappa de Cohen) e a precisão das ligações.
+Two people open the CSV and fill the columns `annotator_1` and `annotator_2` with `c`
+(correct) or `i` (incorrect), without looking at each other's. Then:
 
-### Parâmetros fixos
+```bash
+python main.py annotation kappa links.csv
+```
 
-| Parâmetro | Valor | Arquivo |
+It shows the agreement between the two (Cohen's kappa) and the precision of the links.
+
+### Fixed parameters
+
+| Parameter | Value | File |
 |---|---|---|
-| Modelo | `deepseek-chat`, JSON, até 8192 tokens de saída | `gigabrain/provedores.py` |
-| Acerto com o gabarito | 50% de palavras em comum | `gigabrain/avaliacao.py` |
-| Falas de contexto por rascunho | 6 | `gigabrain/agentes/gemeo.py` |
-| Reorganizar conhecimento | a cada 5 requisitos | `gigabrain/conhecimento.py` |
-| Cenário `sessoes` | 3 reuniões, 15% repetições, 15% mudanças, semente 42 | `gigabrain/cenarios.py` |
+| Model | `deepseek-chat`, JSON, up to 8192 output tokens | `gigabrain/providers.py` |
+| Hit with the gold standard | 50% of content words in common | `gigabrain/evaluation.py` |
+| Context utterances per draft | 6 | `gigabrain/agents/twin.py` |
+| Reorganize knowledge | every 5 requirements | `gigabrain/knowledge.py` |
+| `sessions` scenario | 3 meetings, 15% repetitions, 15% changes, seed 42 | `gigabrain/scenarios.py` |
 
-O rascunho do método de avaliação para o artigo está em `docs/metodo-avaliacao.md`.
+The draft of the evaluation method for the paper is in `docs/evaluation-method.md`.
 
-## Código
+## Code
 
-| Arquivo | Conteúdo |
+| File | Content |
 |---|---|
-| `main.py` | linha de comando |
-| `gigabrain/mensagens.py` | formato das mensagens entre agentes |
-| `gigabrain/banco.py` | bancos SQLite |
-| `gigabrain/conhecimento.py` | arquivo de conhecimento dos especialistas |
-| `gigabrain/aprovacao.py` | quando uma fala do PO conta como aprovação |
-| `gigabrain/provedores.py` | DeepSeek e o simulador |
-| `gigabrain/agentes/` | Gêmeo, Líder e Especialista |
-| `gigabrain/conselho.py` | conversa com o PO |
-| `gigabrain/reuniao.py` | reunião processada fala por fala |
-| `gigabrain/log.py` | registro das mensagens |
-| `gigabrain/api.py` | API REST |
-| `gigabrain/painel/` | painel |
-| `gigabrain/entradas.py` | leitura do dataset |
-| `gigabrain/avaliacao.py` | comparação com o gabarito |
-| `gigabrain/cenarios.py` | cenário com várias reuniões |
-| `gigabrain/estatistica.py` | média, desvio e Wilcoxon |
-| `gigabrain/anotacao.py` | anotação manual e kappa |
-| `tests/` | testes |
+| `main.py` | command line |
+| `gigabrain/messages.py` | format of the messages between agents |
+| `gigabrain/database.py` | SQLite databases |
+| `gigabrain/requirement_format.py` | requirement structure and format checks |
+| `gigabrain/knowledge.py` | knowledge file of the experts |
+| `gigabrain/approval.py` | when a PO message counts as an approval |
+| `gigabrain/providers.py` | DeepSeek and the simulator |
+| `gigabrain/agents/` | Twin, Leader and Expert |
+| `gigabrain/council.py` | conversation with the PO |
+| `gigabrain/meeting.py` | meeting processed one utterance at a time |
+| `gigabrain/log.py` | records the messages |
+| `gigabrain/api.py` | REST API |
+| `gigabrain/dashboard/` | dashboard |
+| `gigabrain/dataset.py` | reads the dataset |
+| `gigabrain/evaluation.py` | comparison with the gold standard |
+| `gigabrain/scenarios.py` | scenario with several meetings |
+| `gigabrain/stats.py` | mean, deviation and Wilcoxon |
+| `gigabrain/annotation.py` | manual annotation and kappa |
+| `tests/` | tests |
 
-`arquitetura.html` e `editor.html` são a nota e o diagrama originais da arquitetura.
+`docs/architecture.html` and `docs/diagram-editor.html` are the original architecture note and diagram.
