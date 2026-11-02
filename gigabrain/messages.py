@@ -31,6 +31,7 @@ LEADER = "leader"          # Leader (Consultative Council)
 SYSTEM = "system"          # input (meeting transcript) and errors
 REPOSITORY = "repository"  # Requirements Repository
 REGISTRY = "registry"      # Expert Registry (+ knowledge files)
+CRITIC = "critic"          # Critic (validation): scores every artefact, never writes one
 
 
 def expert(id_: str) -> str:
@@ -57,6 +58,10 @@ KINDS = {
     "transcript": "System -> Twin. {project, title, turns}",
     "utterance": "System -> Twin. {turn, speaker, text}: the next utterance of the meeting",
     "drafts": "Twin -> Twin. {turn, requirements: [drafts taken from that utterance]}",
+    "validation_report": "Critic -> Agent. {stage, verdict, passed, failed_dimensions, items, document, findings, summary, report}: "
+                         "the scores of each competency for what the agent produced",
+    "validation_return": "Critic -> Agent. {stage, round, artefacts, failed_dimensions, text}: "
+                         "an artefact that did not pass goes back to the agent that wrote it",
     "llm_call": "Agent -> LLM. {role, duration_ms, tokens?}",
     "error": "Any -> System. {error}",
 }

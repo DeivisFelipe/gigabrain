@@ -38,6 +38,7 @@ It is for testing the flow, not for measuring quality.
 | `python main.py trace R3` | show how R3 came to be |
 | `python main.py experts` | list the experts |
 | `python main.py feed payments minutes.md` | give a document to an expert |
+| `python main.py validate` | score the saved requirements with the Critic (no LLM) |
 | `python main.py evaluate ...` | evaluation with the dataset (see below) |
 | `python main.py annotation ...` | manual annotation of the links (see below) |
 | `python -m unittest discover tests` | tests (offline) |
@@ -63,6 +64,8 @@ PO ──▶ Digital Twin ──▶ Leader ──▶ Experts (one per topic: pay
   Twin decides.
 - **Quality expert:** always present; checks whether the requirement is functional (FR) or
   non-functional (NFR), its subtype (performance, security...) and its format.
+- **Critic:** scores what the other agents write, without an LLM, and sends back what does not
+  pass. It informs; it does not decide. See [Validation](#validation).
 
 Nothing is saved without an explicit approval. "Approved, but change the deadline" does not approve.
 
@@ -142,6 +145,43 @@ Each requirement has an id (R1, R2...), versions (none is ever deleted) and link
 
 Read it as "source *link* target": "R3 supersedes R1".
 
+## Validation
+
+The Critic (`gigabrain/agents/critic.py`) scores every requirement an agent writes. It is
+deterministic and calls no LLM: same input, same report.
+
+| Level | Competencies |
+|---|---|
+| one requirement | conforming, unambiguous, verifiable, correctness (grounded in its source), understandable |
+| the requirements together | internal consistency, non-redundancy, completeness, conciseness, traceability |
+
+Each competency gets a score from 0 to 1. A requirement passes only if every competency passes
+(at least 0.70 and no blocking finding).
+
+- **Each agent has a gate.** A proposal of the Twin, a draft of the Twin, what the experts add
+  to a draft: if a competency fails, it goes back to the agent that wrote it with the list of
+  what to fix, once by default.
+- **Then everything together.** What reaches the PO (or the Twin's final vote, in a meeting) is
+  assessed with the repository, and the report goes with it. The PO still decides.
+- The sources are read from the transcript and from the log, never from the agent that wrote
+  the requirement.
+
+```bash
+python main.py validate                        # the whole repository
+python main.py validate R3 --format markdown   # one requirement against the others
+python -m gigabrain.validation.cli --list-checks
+```
+
+| Option (`chat`, `evaluate`, `api`) | Default | Use |
+|---|---|---|
+| `--no-validation` | | run without the Critic |
+| `--validation-rounds N` | 1 | how many times an artefact may go back; 0 = score only |
+| `--validation-strict` | | `evaluate` only: discard what still fails after the rounds |
+| `--validation-judge` | off | tier 2: an LLM judge reports content the sources do not say; its findings are marked `llm_judgment` and count in the gate (one more call per requirement version) |
+
+The format checks above (`quality`) stay as they are; the Critic's scores (`validation`) show
+next to them in the API and in the dashboard. More in `gigabrain/validation/README.md`.
+
 ## Experts
 
 The knowledge of each expert is in `data/knowledge/<topic>.md`, with fixed sections: business
@@ -205,7 +245,8 @@ Base: `/api/v1`
 {
   "action": "propose",
   "message": "text to show the PO",
-  "proposed_requirements": [{"title": "...", "statement": "...", "story": {}, "acceptance_criteria": [], "quality": {}}],
+  "proposed_requirements": [{"title": "...", "statement": "...", "story": {}, "acceptance_criteria": [], "quality": {}, "validation": {}}],
+  "validation": {"verdict": "approved_with_remarks", "passed": true, "failed_dimensions": [], "findings": [], "rounds": 0},
   "saved": [],
   "pending_proposal": true,
   "conversation_active": true,
@@ -217,6 +258,9 @@ Base: `/api/v1`
 - `action = propose`: show the requirements and the Approve button.
 - `action = approved`: the conversation is over. `saved` has the saved ids.
 - `behind_the_scenes`: what the agents did to answer. Optional on screen.
+- `validation`: the Critic's report on the proposal (verdict, competencies that did not pass,
+  findings, how many times it went back to the Twin). `null` when it is not a proposal or the
+  API runs with `--no-validation`.
 
 ### Notes
 
@@ -254,7 +298,7 @@ It runs on `http://127.0.0.1:8765` and shows every data folder of the project (s
 | Benchmark | evaluation results, means and statistical tests |
 | Architecture | a conversation replayed step by step |
 | Conversations | the messages of each conversation |
-| Requirements | list, link map, versions, trace and format checks |
+| Requirements | list, link map, versions, trace, format checks and the Critic's scores |
 | Experts | knowledge of each one and what changed between versions |
 | Evaluation | comparison with the gold standard of a project |
 
@@ -292,6 +336,7 @@ python main.py evaluate all --mode council --no-quality     # without the qualit
 | `--scenario` | meeting | `meeting` or `sessions` |
 | `--parallel` | 4 | how many runs at the same time |
 | `--simulated` | | no key |
+| `--no-validation`, `--validation-rounds N`, `--validation-strict`, `--validation-judge` | | the Critic (see [Validation](#validation)) |
 
 ### Compared modes
 
@@ -299,6 +344,9 @@ python main.py evaluate all --mode council --no-quality     # without the qualit
   experts and the Twin decides whether to save it.
 - **single_agent**: the same Twin, without the experts.
 - **plain_llm**: the whole meeting in one request, with a minimal instruction.
+
+The Critic sends drafts back only in **council**. In the other two it scores what is saved and
+returns nothing, so they stay baselines.
 
 ### Scenarios
 
@@ -319,6 +367,7 @@ python main.py evaluate all --mode council --no-quality     # without the qualit
 | trace | cited the utterance the requirement came from |
 | unsupported | requirement not backed by the cited utterance |
 | ears, story, gherkin, not_vague | share of requirements that pass each format check |
+| valid | share of saved requirements that pass the Critic's five item competencies |
 | repetitions_avoided | `sessions` scenario only |
 | changes_linked | `sessions` scenario only |
 
@@ -376,7 +425,8 @@ The draft of the evaluation method for the paper is in `docs/evaluation-method.m
 | `gigabrain/knowledge.py` | knowledge file of the experts |
 | `gigabrain/approval.py` | when a PO message counts as an approval |
 | `gigabrain/providers.py` | DeepSeek and the simulator |
-| `gigabrain/agents/` | Twin, Leader and Expert |
+| `gigabrain/agents/` | Twin, Leader, Expert and Critic |
+| `gigabrain/validation/` | the checks, the gate and the report the Critic uses |
 | `gigabrain/council.py` | conversation with the PO |
 | `gigabrain/meeting.py` | meeting processed one utterance at a time |
 | `gigabrain/log.py` | records the messages |

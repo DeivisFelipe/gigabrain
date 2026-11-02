@@ -20,9 +20,14 @@ import json
 import os
 import re
 
+_PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+# The dataset is looked for next to the project and, if it is not there, inside it.
+_BESIDE = os.path.join(os.path.dirname(_PROJECT), "EntradasGigabrain")
+_INSIDE = os.path.join(_PROJECT, "EntradasGigabrain")
+
 DEFAULT_FOLDER = os.environ.get(
     "GIGABRAIN_DATASET",
-    os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "EntradasGigabrain"),
+    _INSIDE if os.path.isdir(_INSIDE) and not os.path.isdir(_BESIDE) else _BESIDE,
 )
 INDEX_FILE = "indice_documentos.csv"
 TRANSCRIPT_FILE = "transcricao_reuniao.txt"

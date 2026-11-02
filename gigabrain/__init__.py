@@ -9,7 +9,8 @@ Modules, in a good reading order:
 - approval.py            when a PO message counts as an approval
 - providers.py           access to the LLM (DeepSeek) or an offline simulator
 - log.py                 records every message
-- agents/                Digital Twin, Leader and Experts
+- agents/                Digital Twin, Leader, Experts and the Critic
+- validation/            what the Critic scores with: the checks, the gate and the report (no LLM)
 - council.py             a whole conversation with the PO
 - meeting.py             a meeting processed one utterance at a time
 - api.py                 REST API for the web application

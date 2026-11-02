@@ -1,0 +1,191 @@
+{
+  "schema_version": "1.1",
+  "run_id": "example-bad",
+  "project": "gigabrain",
+
+  "_comment": "Same domain as good.json, with defects seeded on purpose, at least one per family of checks. It is a manual acceptance test: every defect listed in examples/README.md must show in the report.",
+
+  "sources": [
+    {
+      "id": "T2",
+      "kind": "turn",
+      "origin": "meeting of 2026-03-12, Client",
+      "text": "We need that when a topic receives the third report from different users, it goes to the review queue as one item, and the moderator is told only once."
+    },
+    {
+      "id": "T4",
+      "kind": "turn",
+      "text": "The review queue has to load the first page in at most 2 seconds with 500 topics waiting, otherwise the moderators stop using it."
+    },
+    {
+      "id": "T6",
+      "kind": "turn",
+      "origin": "meeting of 2026-03-12, Client",
+      "text": "Also, the blog editor must be able to schedule the publication of a post, because today someone has to stay up to publish it at 19:00."
+    },
+    {
+      "id": "NEED-001",
+      "kind": "need",
+      "origin": "e-mail from the client, 2026-03-15",
+      "text": "A moderator must be able to dismiss a report that is clearly abusive, and the reporter is told why it was dismissed."
+    },
+    {
+      "id": "NEED-002",
+      "kind": "need",
+      "origin": "e-mail from the client, 2026-03-15",
+      "text": "Moderators want a weekly summary of the reports they handled."
+    }
+  ],
+
+  "glossary": [
+    { "term": "review queue", "definition": "Ordered list of the reported topics waiting for the decision of a moderator." },
+    { "term": "moderation queue", "definition": "synonym of review queue" },
+    { "term": "hot topic", "definition": "" }
+  ],
+
+  "artifacts": [
+    {
+      "id": "B1",
+      "kind": "requirement",
+      "title": "Better moderation",
+      "statement": "Moderation needs to be fast and intuitive for the moderators.",
+      "acceptance_criteria": [],
+      "evidence": [],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B2",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Text message for every report",
+      "statement": "When a hot topic is reported, the system shall always send a text message to the moderator.",
+      "ears_pattern": "ubiquitous",
+      "story": { "role": "user", "goal": "to get a text message for every report", "benefit": "" },
+      "acceptance_criteria": [
+        { "scenario": "Main flow", "given": "the system is in normal operation", "when": "the user performs the action", "then": "the system behaves as the PO described" },
+        { "scenario": "No Then", "given": "a reported topic", "when": "the moderator is offline", "then": "" }
+      ],
+      "evidence": [ { "source_id": "T6" }, { "source_id": "T99" } ],
+      "links": [ { "kind": "improves", "target": "B1", "reason": "" }, { "kind": "duplicates", "target": "B8" } ],
+      "provenance": { "agent_id": "expert:notifications", "agent_role": "expert", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B3",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Group the reports of a topic",
+      "statement": "When a topic receives the third report, the system shall create one item in the moderation queue.",
+      "ears_pattern": "event",
+      "story": { "role": "forum moderator", "goal": "to see the reports of a topic as one item", "benefit": "I decide once per topic" },
+      "acceptance_criteria": [
+        { "scenario": "Third report", "given": "a topic with two reports from different users", "when": "a third user reports the topic", "then": "the system creates one item for the topic in the review queue" }
+      ],
+      "evidence": [ { "source_id": "T2" } ],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B4",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Merge repeated reports",
+      "statement": "When a topic receives the third report, the system shall create one item in the review queue.",
+      "ears_pattern": "event",
+      "story": { "role": "forum moderator", "goal": "to see the reports of a topic as one item", "benefit": "I decide once per topic" },
+      "acceptance_criteria": [
+        { "scenario": "Third report", "given": "a topic with two reports from different users", "when": "a third user reports the topic", "then": "the system creates one item for the topic in the review queue" },
+        { "scenario": "Echo", "given": "a topic with two reports", "when": "the third report arrives", "then": "when a topic receives the third report, the system shall create one item in the review queue" }
+      ],
+      "evidence": [ { "source_id": "T2" } ],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B5",
+      "kind": "requirement",
+      "class": "NFR",
+      "subtype": "speed",
+      "supersedes": "B999",
+      "title": "Performance of the queue",
+      "statement": "The review queue shall basically load fast if possible and also give a good experience to many moderators.",
+      "ears_pattern": "ubiquitous",
+      "story": { "role": "forum moderator", "goal": "a queue that does not freeze", "benefit": "I keep using it" },
+      "acceptance_criteria": [
+        { "scenario": "Speed", "given": "the queue is open", "when": "a moderator scrolls it", "then": "the queue answers fast" },
+        { "scenario": "Experience", "given": "the queue is open", "when": "a moderator uses it", "then": "the experience is adequate" }
+      ],
+      "evidence": [ { "source_id": "T4" } ],
+      "links": [ { "kind": "refines", "target": "R77", "reason": "" } ],
+      "provenance": { "agent_id": "expert:moderation", "agent_role": "expert", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B6",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Do not group the reports",
+      "statement": "When a topic receives the third report, the system shall not create one item in the review queue.",
+      "ears_pattern": "event",
+      "story": { "role": "forum moderator", "goal": "to handle every report on its own", "benefit": "no report is hidden inside another" },
+      "acceptance_criteria": [
+        { "scenario": "Each report", "given": "a topic with two reports", "when": "a third user reports the topic", "then": "the system adds a third item to the review queue" },
+        { "scenario": "Order", "given": "three items of the same topic", "when": "the moderator opens the queue", "then": "the system lists them by time" }
+      ],
+      "evidence": [ { "source_id": "T2" } ],
+      "provenance": { "agent_id": "expert:moderation", "agent_role": "expert", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B7",
+      "kind": "requirement",
+      "class": "NFR",
+      "subtype": "PE",
+      "title": "Load time of the review queue",
+      "statement": "While 500 topics are waiting, the review queue shall load the first page within 2 seconds.",
+      "ears_pattern": "state",
+      "story": { "role": "forum moderator", "goal": "the review queue to open without waiting", "benefit": "I keep using it during peak hours" },
+      "acceptance_criteria": [
+        { "scenario": "Full queue", "given": "500 topics waiting in the review queue", "when": "a moderator opens the queue", "then": "the first page is displayed within 2 seconds" },
+        { "scenario": "Slow load", "given": "500 topics waiting in the review queue", "when": "the first page takes more than 2 seconds", "then": "the system logs the load time" }
+      ],
+      "evidence": [ { "source_id": "T4" } ],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B8",
+      "kind": "requirement",
+      "class": "NFR",
+      "subtype": "PE",
+      "title": "Load time of the review queue, relaxed",
+      "statement": "While 500 topics are waiting, the review queue shall load the first page within 4 seconds.",
+      "ears_pattern": "state",
+      "story": { "role": "forum moderator", "goal": "the review queue to open without waiting", "benefit": "I keep using it during peak hours" },
+      "acceptance_criteria": [
+        { "scenario": "Full queue", "given": "500 topics waiting in the review queue", "when": "a moderator opens the queue", "then": "the first page is displayed within 4 seconds" },
+        { "scenario": "Slow load", "given": "500 topics waiting in the review queue", "when": "the first page takes more than 4 seconds", "then": "the system records the load time" }
+      ],
+      "evidence": [ { "source_id": "T4" } ],
+      "provenance": { "agent_id": "expert:moderation", "agent_role": "expert", "model": "deepseek-chat" }
+    },
+    {
+      "id": "B9",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Dismiss an abusive report",
+      "statement": "When a moderator dismisses a report as abusive, the system shall tell the reporter the reason.",
+      "ears_pattern": "event",
+      "story": { "role": "forum moderator", "goal": "to dismiss an abusive report", "benefit": "the review queue only holds real problems" },
+      "acceptance_criteria": [
+        { "scenario": "Dismissal", "given": "a report in the review queue", "when": "the moderator dismisses it as abusive", "then": "the system removes the report from the review queue" },
+        { "scenario": "Reason", "given": "a report dismissed as abusive", "when": "the dismissal is saved", "then": "the system sends the reason to the reporter" }
+      ],
+      "evidence": [ { "source_id": "NEED-001", "quote": "the client asked that the reporter be banned after three abusive reports", "reason": "" } ],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    }
+  ],
+
+  "document": {
+    "title": "Requirements specification: forum moderation",
+    "sections": [
+      { "id": "introduction", "title": "Introduction", "text": "This document is basically about the moderation of the forum. It is worth noting that, in general terms, the goal is simply to improve the experience, and obviously whatever turns out to be needed, among other things, will be dealt with later, with regard to moderation." },
+      { "id": "stakeholders", "title": "Stakeholders and users", "text": "Moderators and users in general." },
+      { "id": "use_cases", "title": "Use cases", "text": "" }
+    ]
+  }
+}

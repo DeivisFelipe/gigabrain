@@ -41,14 +41,17 @@ class OpenAICompatibleProvider:
         self.name = model
         self.last_usage: dict = {}
 
-    def complete_json(self, role: str, system: str, messages: list[dict]) -> dict:
+    def complete_json(self, role: str, system: str, messages: list[dict], temperature: float | None = None) -> dict:
+        """`temperature`: None keeps the API default; the Critic's judge asks for 0."""
         conversation = [{"role": "system", "content": system}, *messages]
+        options = {} if temperature is None else {"temperature": temperature}
         for attempt in range(2):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=conversation,
                 response_format={"type": "json_object"},
                 max_tokens=8192,  # requirements with stories and criteria are long
+                **options,
             )
             usage = response.usage
             self.last_usage = {"tokens_in": getattr(usage, "prompt_tokens", None),
@@ -174,7 +177,7 @@ class SimulatedProvider:
         self.delay = delay
         self.last_usage: dict = {}
 
-    def complete_json(self, role: str, system: str, messages: list[dict]) -> dict:
+    def complete_json(self, role: str, system: str, messages: list[dict], temperature: float | None = None) -> dict:
         if self.delay:
             time.sleep(self.delay)
         method = getattr(self, "_" + role, None)
@@ -257,6 +260,14 @@ class SimulatedProvider:
             return {"requirements": []}
         role = SPEAKER_ROLE.get(speaker, "user")
         return {"requirements": [_structured(s, role, topic) for s in re.split(r"(?<=[.!?])\s+", _clean(text)) if len(s.split()) >= 6]}
+
+    def _twin_revise(self, messages: list[dict]) -> dict:
+        """The Critic returned a draft. Rules cannot improve a requirement: the draft goes back as it is."""
+        return {"requirement": _last(messages)["draft"]}
+
+    def _critic_judge(self, messages: list[dict]) -> dict:
+        """Tier 2 of the Critic. Rules cannot tell what a source means: nothing is reported."""
+        return {"claims": []}
 
     def _plain_llm(self, messages: list[dict]) -> dict:
         """Rule baseline over the whole meeting (no topic context, no structure)."""

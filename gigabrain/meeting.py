@@ -6,15 +6,23 @@
                                ├─ single_agent (baseline): saves the draft directly
                                │
                                └─ council, one draft at a time:
+                                    Critic scores the draft (a competency failed: back to the Twin)
                                     Twin ──query──▶ Leader ──▶ expert of the topic + quality expert
                                       ▲                              │ recommend: keep, fix,
                                       └──── recommendation ◀─────────┘ discard, links
+                                    Critic scores what the council added (failed: back to the Leader)
+                                    Critic scores the draft together with the repository ──report──▶ Twin
                                     Twin decides (final vote) ──▶ Requirements Repository
                                     the expert learns right away (notes the requirement)
       ──▶ next utterance
+    ──▶ Critic scores the whole repository
 
 There is no PO in a meeting processed in batch: the Digital Twin, who represents the PO
-in the Deliberative Council, gives the final vote. The Consultative Council only recommends.
+in the Deliberative Council, gives the final vote. The Consultative Council only recommends,
+and the Critic only scores: what does not pass goes back to whoever wrote it, and what still
+does not pass after that reaches the Twin with the report (or is discarded, in strict mode).
+
+In the baselines (single_agent, plain_llm) the Critic scores what is saved and sends nothing back.
 
 A third mode, plain_llm, sends the whole meeting in one request with a minimal prompt.
 """
@@ -42,7 +50,8 @@ def _record(ctx: Context, sender: str, recipient: str, kind: str, content: dict)
     ctx.recorder.record(Message(sender=sender, recipient=recipient, kind=kind, content=content, conversation_id=ctx.conversation_id))
 
 
-def _save(ctx: Context, project: dict, draft: dict, final: dict, recommendation: dict | None, mode: str) -> tuple[dict, dict]:
+def _save(ctx: Context, project: dict, draft: dict, final: dict, recommendation: dict | None, mode: str,
+          check: dict | None = None) -> tuple[dict, dict]:
     content = {k: draft.get(k) for k in REQUIREMENT_FIELDS}
     content.update({"statement": final["statement"], "class": final["class"], "subtype": final["subtype"],
                     "topics": [draft["topic"]], "turns": draft["turns"]})
@@ -51,6 +60,8 @@ def _save(ctx: Context, project: dict, draft: dict, final: dict, recommendation:
     sources += [{"kind": "turn", "ref": t, "project": project["id"]} for t in draft["turns"]]
     if recommendation and recommendation.get("expert_id"):
         sources.append({"kind": "expert", "ref": recommendation["expert_id"], "version": recommendation.get("knowledge_version")})
+    if check:  # which report of the Critic this requirement was saved with
+        sources.append({"kind": "validation", "ref": check["report_id"], "verdict": check["verdict"]})
     result = ctx.db.save_requirement(content, ctx.conversation_id, reason=final.get("motive") or "drafted from the transcript",
                                      links=final.get("links"), sources=sources)
     _record(ctx, TWIN, REPOSITORY, "requirement_saved", {**result, "decided_by": DECIDED_BY[mode]})
@@ -72,16 +83,26 @@ def process(ctx: Context, project: dict, mode: str = "council") -> dict:
     language = project.get("language", "en")
     utterances = {t["id"]: t["text"] for t in project["turns"]}
     twin = DigitalTwin(ctx)
+    critic = ctx.critic
+    if critic:  # the baselines are scored, never sent back: they must stay what they are
+        critic.observe_only = mode != "council"
     predicted, discarded = [], []
 
-    def keep(draft: dict, final: dict, recommendation: dict | None) -> None:
+    def keep(draft: dict, final: dict, recommendation: dict | None, guidance: dict | None = None) -> None:
+        check = None
+        if final["save"] and critic:
+            check = critic.for_saving(draft, recommendation, final, project, guidance)
+            if critic.closes_the_gate(check):
+                final = {**final, "save": False, "motive": "validation: did not pass " + ", ".join(check["failed_dimensions"])}
         if not final["save"]:
             discarded.append({**draft, "recommendation": recommendation, "motive": final["motive"]})
             return
-        result, content = _save(ctx, project, draft, final, recommendation, mode)
+        result, content = _save(ctx, project, draft, final, recommendation, mode, check)
         predicted.append({"id": result["requirement_id"], "text": final["statement"], "class": final["class"],
                           "subtype": final["subtype"], "turns": draft["turns"], "topic": draft["topic"],
                           "quality": requirement_format.check(content)})
+        if check:
+            predicted[-1]["validation"] = {k: check[k] for k in ("report_id", "verdict", "passed", "score", "scores", "failed_dimensions", "rounds")}
         if mode == "council":
             exp = Expert.load(ctx, slug(draft["topic"]))
             if exp:  # the expert of the topic learns right away
@@ -103,14 +124,22 @@ def process(ctx: Context, project: dict, mode: str = "council") -> dict:
             for draft in drafts:  # each draft goes to the end before the next one
                 if leader:
                     cited = {t: utterances[t] for t in draft["turns"] if t in utterances}
+                    if critic:  # gate of the Twin: the five item competencies of its draft
+                        draft = critic.gate_draft(twin, draft, project)
                     twin.send(LEADER, "query", {"question": f"draft from {turn['id']}: {draft['statement'][:100]}", "draft": draft})
                     recommendation = leader.consult_draft(draft, cited, language)
-                    keep(draft, twin.decide(draft, recommendation, cited, language), recommendation)
+                    guidance = None
+                    if critic:  # gate of the Consultative Council, then everything together for the vote
+                        recommendation = critic.gate_recommendation(leader, draft, recommendation, cited, project)
+                        guidance = critic.guide(draft, recommendation, project)
+                    keep(draft, twin.decide(draft, recommendation, cited, language, guidance), recommendation, guidance)
                 else:
                     keep(draft, {**draft, "save": True, "links": [], "motive": "drafted from the transcript"}, None)
 
+    # Everything together, at the end: the requirements of the repository as one specification.
+    repository = critic.review_repository() if critic else None
     ctx.db.end_conversation(ctx.conversation_id, "approved")
-    return {"conversation_id": ctx.conversation_id, "predicted": predicted, "discarded": discarded}
+    return {"conversation_id": ctx.conversation_id, "predicted": predicted, "discarded": discarded, "validation": repository}
 
 
 def _structure_metrics(predicted: list[dict]) -> dict:
@@ -125,8 +154,21 @@ def _structure_metrics(predicted: list[dict]) -> dict:
     }
 
 
+def _validation_metrics(predicted: list[dict]) -> dict:
+    """Share of saved requirements that pass the five item competencies, and each competency on its own."""
+    scored = [p["validation"] for p in predicted if p.get("validation")]
+    if not scored:
+        return {}
+    rate = lambda f: round(sum(1 for v in scored if f(v)) / len(scored), 4)
+    metrics = {"valid": rate(lambda v: v["passed"])}
+    for dimension in scored[0]["scores"]:
+        metrics[f"valid_{dimension}"] = rate(lambda v, d=dimension: d not in v["failed_dimensions"])
+    return metrics
+
+
 def _report(ctx: Context, project: dict, mode: str, base: dict) -> dict:
     base["metrics"].update(_structure_metrics(base["predicted"]))
+    base["metrics"].update(_validation_metrics(base["predicted"]))
     return {**base, "project": project["id"], "title": project["title"], "mode": mode,
             "provider": getattr(ctx.provider, "name", "?"), "gold": project["gold"]}
 
@@ -141,13 +183,13 @@ def process_and_evaluate(ctx: Context, project: dict, output_folder: str, mode: 
     result = process(ctx, project, mode)
     report = evaluation.evaluate(result["predicted"], project["gold"], project["turns"])
     report.update({"scenario": "meeting", "conversation_id": result["conversation_id"],
-                   "predicted": result["predicted"], "discarded": result["discarded"]})
+                   "predicted": result["predicted"], "discarded": result["discarded"], "validation": result["validation"]})
     return _write(output_folder, _report(ctx, project, mode, report))
 
 
 def process_sessions_and_evaluate(ctx: Context, project: dict, scenario: dict, output_folder: str, mode: str = "council") -> dict:
     """Several meetings in sequence over the SAME repository."""
-    predicted, discarded, conversations = [], [], []
+    predicted, discarded, conversations, repository = [], [], [], None
     n = len(scenario["sessions"])
     for k, session in enumerate(scenario["sessions"], start=1):
         part = {**project, "title": f"{project['title']} (session {k}/{n})", "turns": session["turns"]}
@@ -155,6 +197,8 @@ def process_sessions_and_evaluate(ctx: Context, project: dict, scenario: dict, o
         predicted += r["predicted"]
         discarded += r["discarded"]
         conversations.append(r["conversation_id"])
+        repository = r["validation"]  # the repository as the last session left it
     report = scenarios.evaluate(ctx.db, project, scenario, predicted)
-    report.update({"scenario": "sessions", "conversations": conversations, "predicted": predicted, "discarded": discarded})
+    report.update({"scenario": "sessions", "conversations": conversations, "predicted": predicted, "discarded": discarded,
+                   "validation": repository})
     return _write(output_folder, _report(ctx, project, mode, report))

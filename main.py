@@ -16,6 +16,8 @@ Commands:
     python main.py evaluate all --scenario sessions  several meetings with injected repetitions and changes
     python main.py annotation export links.csv       sample of links for manual annotation
     python main.py annotation kappa links.csv        agreement between the two annotators
+    python main.py validate                          score the whole repository (the Critic, no LLM)
+    python main.py validate R3 --format markdown     score one requirement against the others
 
 Global option --data <folder> chooses where the databases live (default: data/).
 
@@ -33,7 +35,9 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from gigabrain import annotation, dataset, demo, meeting, requirement_format, scenarios, stats
+from gigabrain.agents import ValidationSettings
 from gigabrain.council import Council, feed_expert, open_context
+from gigabrain.database import has_database
 from gigabrain.providers import ProviderError, SimulatedProvider, create_provider
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -41,6 +45,38 @@ ROOT = os.path.dirname(os.path.abspath(__file__))
 
 def _provider(simulated: bool):
     return SimulatedProvider() if simulated else create_provider("deepseek")
+
+
+def _validation(args) -> ValidationSettings | bool:
+    """Settings of the Critic from the command line, or False to run without it."""
+    if getattr(args, "no_validation", False):
+        return False
+    return ValidationSettings(rounds=getattr(args, "validation_rounds", 1), strict=getattr(args, "validation_strict", False),
+                              judge=getattr(args, "validation_judge", False))
+
+
+def _validation_options(p, batch: bool = False) -> None:
+    p.add_argument("--no-validation", action="store_true", help="run without the Critic (ablation)")
+    p.add_argument("--validation-rounds", type=int, default=1, metavar="N",
+                   help="how many times an artefact may go back to the agent that wrote it (default: 1; 0 = score only)")
+    p.add_argument("--validation-judge", action="store_true",
+                   help="tier 2: an LLM judge asks what the deterministic checks cannot see, such as content "
+                        "the sources do not say (one more call per requirement version; off by default)")
+    if batch:
+        p.add_argument("--validation-strict", action="store_true",
+                       help="discard what still fails validation after the rounds (changes precision and recall)")
+
+
+def _print_validation(check: dict) -> None:
+    """The Critic's report on a proposal, for the PO."""
+    line = f"  Critic: {check['verdict'].replace('_', ' ')}"
+    if check["failed_dimensions"]:
+        line += " · did not pass: " + ", ".join(d.replace("_", " ") for d in check["failed_dimensions"])
+    if check.get("rounds"):
+        line += f" · went back to the Twin {check['rounds']}x" + (" (it came back unchanged)" if check.get("unchanged") else "")
+    print(line)
+    for finding in check["findings"]:
+        print(f"   - [{finding['severity']}] {finding['target']}: {finding['message']}")
 
 
 def _print_requirement(req: dict) -> None:
@@ -59,7 +95,7 @@ def _print_requirement(req: dict) -> None:
 
 def cmd_chat(args) -> None:
     provider = _provider(args.simulated)
-    ctx = open_context(args.data, provider, mode=args.mode, show_agents=not args.quiet)
+    ctx = open_context(args.data, provider, mode=args.mode, show_agents=not args.quiet, validation=_validation(args))
     council = Council(ctx)
     conversation = council.start()
 
@@ -84,6 +120,9 @@ def cmd_chat(args) -> None:
         print(f"\nTwin> {answer['message_to_po']}")
         for req in answer.get("requirements", []):
             _print_requirement(req)
+        if answer.get("validation"):
+            print()
+            _print_validation(answer["validation"])
         print()
         if answer["action"] == "approved":
             break
@@ -144,7 +183,7 @@ def _fmt(v) -> str:
 
 
 COLUMNS = ["predicted", "gold", "hits", "precision", "recall", "f1", "class", "subtype", "trace", "unsupported",
-           "ears", "story", "gherkin", "not_vague"]
+           "ears", "story", "gherkin", "not_vague", "valid"]
 SESSION_COLUMNS = ["repetitions_avoided", "changes_captured", "changes_linked"]
 
 
@@ -154,7 +193,7 @@ def _run_evaluation(args, project_name: str, mode: str, rep: int, root: str) -> 
     folder = os.path.join(root, args.scenario, project_name, mode, f"rep-{rep}")
     if os.path.exists(folder):
         shutil.rmtree(folder)
-    ctx = open_context(folder, _provider(args.simulated), show_agents=args.show_agents)
+    ctx = open_context(folder, _provider(args.simulated), show_agents=args.show_agents, validation=_validation(args))
     ctx.with_quality = not args.no_quality
     try:
         if args.scenario == "sessions":
@@ -238,6 +277,33 @@ def cmd_annotation(args) -> None:
               f" · consensus (both say correct) {r['precision_consensus']:.0%}")
 
 
+def cmd_validate(args) -> None:
+    from gigabrain.validation import POLICIES, CheckConfig, Verdict, to_agent_feedback, to_console, to_json, to_markdown
+    from gigabrain.validation.cli import list_checks
+
+    if args.list_checks:
+        print(list_checks())
+        return
+    def bad_input(message: str) -> None:  # exit codes as in validation/cli.py: 1 rejected, 2 invalid input
+        print(message, file=sys.stderr)
+        sys.exit(2)
+
+    if not has_database(args.data):
+        bad_input(f"No requirements repository in '{args.data}'. Use --data <folder> (before the command).")
+    settings = ValidationSettings(policy=POLICIES[args.policy], config=CheckConfig(disabled_checks=frozenset(args.disable)))
+    ctx = open_context(args.data, SimulatedProvider(), validation=settings)
+    try:
+        focus = None if args.requirement == "all" else {args.requirement}
+        if focus and not ctx.db.get_requirement(args.requirement):
+            bad_input(f"Requirement not found: {args.requirement}")
+        report = ctx.critic.validate_repository(focus)
+    finally:
+        ctx.db.close()
+    print({"console": to_console, "markdown": to_markdown, "json": to_json, "feedback": to_agent_feedback}[args.format](report))
+    if report.verdict is Verdict.REJECTED:
+        sys.exit(1)
+
+
 def cmd_api(args) -> None:
     import uvicorn
     from gigabrain.api import create_app
@@ -247,7 +313,7 @@ def cmd_api(args) -> None:
     factory = SimulatedProvider if args.simulated else (lambda: create_provider("deepseek"))
     token = args.token or os.environ.get("GIGABRAIN_API_TOKEN")
     origins = [o.strip() for o in args.origins.split(",")] if args.origins else ["*"]
-    app = create_app(args.data, factory, origins=origins, token=token)
+    app = create_app(args.data, factory, origins=origins, token=token, validation=_validation(args))
     print(f"GigaBrain API at http://{args.host}:{args.port}  ·  docs: http://{args.host}:{args.port}/docs")
     print(f"data: {os.path.abspath(args.data)} · provider: {'simulated' if args.simulated else 'deepseek'}"
           f" · token: {'yes' if token else 'no'} · origins: {', '.join(origins)}")
@@ -265,6 +331,7 @@ def main() -> None:
     p.add_argument("--simulated", action="store_true", help="no API call; rule-based answers")
     p.add_argument("--mode", choices=["after_meeting", "in_meeting"], default="after_meeting")
     p.add_argument("--quiet", action="store_true", help="hide the internal conversation of the agents")
+    _validation_options(p)
     p.set_defaults(func=cmd_chat)
 
     sub.add_parser("demo", help="run sample conversations with the simulated provider").set_defaults(func=cmd_demo)
@@ -302,6 +369,7 @@ def main() -> None:
     p.add_argument("--show-agents", action="store_true")
     p.add_argument("--parallel", type=int, default=4, help="how many runs at the same time (default: 4)")
     p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER)
+    _validation_options(p, batch=True)
     p.set_defaults(func=cmd_evaluate)
 
     p = sub.add_parser("annotation", help="manual annotation of the links (export a sample / compute kappa)")
@@ -318,7 +386,16 @@ def main() -> None:
     p.add_argument("--simulated", action="store_true", help="no API call; rule-based answers (to build the front end)")
     p.add_argument("--origins", default="", help="CORS origins, comma-separated (default: all)")
     p.add_argument("--token", default="", help="require Authorization: Bearer <token> (or set GIGABRAIN_API_TOKEN)")
+    _validation_options(p)
     p.set_defaults(func=cmd_api)
+
+    p = sub.add_parser("validate", help="score the requirements of the repository with the Critic (deterministic, no LLM)")
+    p.add_argument("requirement", nargs="?", default="all", help="a requirement id (e.g. R3) or 'all' (default)")
+    p.add_argument("--format", choices=["console", "markdown", "json", "feedback"], default="console")
+    p.add_argument("--policy", choices=["default", "strict", "lenient"], default="default", help="ruler of the gate")
+    p.add_argument("--disable", metavar="CHECK_ID", action="append", default=[], help="switch a check off (may be repeated)")
+    p.add_argument("--list-checks", action="store_true", help="list the registered checks and exit")
+    p.set_defaults(func=cmd_validate)
 
     args = parser.parse_args()
     try:

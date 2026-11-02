@@ -406,6 +406,7 @@ const PARTICIPANT = {
   llm: { name: "LLM", color: "var(--llm)", initials: "AI" },
   repository: { name: "Requirements Repository", short: "Repository", color: "var(--system)", initials: "RR" },
   registry: { name: "Expert Registry", short: "Registry", color: "var(--system)", initials: "ER" },
+  critic: { name: "Critic", color: "var(--bad)", initials: "CR" },
 };
 function who(p) {
   if (PARTICIPANT[p]) return PARTICIPANT[p];
@@ -419,6 +420,7 @@ const KIND_NAME = {
   requirement_saved: "requirement saved", requirement_under_review: "requirement under review",
   knowledge_updated: "knowledge updated", llm_call: "LLM call", error: "error", transcript: "transcript",
   utterance: "meeting utterance", drafts: "drafts", decision: "decision (final vote)",
+  validation_report: "validation report", validation_return: "returned to the agent",
 };
 const LINK_KIND = {
   refines: { color: "#2563eb", txt: "refines" }, splits: { color: "#7c3aed", txt: "splits" }, merges: { color: "#0891b2", txt: "merges" },
@@ -639,7 +641,7 @@ function drawBenchmark() {
 // - 5 or more identical messages in a row become one step.
 const ARCH = { all: [], steps: [], pos: -1, timer: null, experts: [], conversations: [], conv: null, relevant: [], firstStep: {} };
 
-function layoutArchitecture(withCouncil, experts) {
+function layoutArchitecture(withCouncil, experts, withCritic) {
   const n = experts.length;
   const cols = n <= 6 ? 1 : n <= 14 ? 2 : 3;
   const rows = Math.max(1, Math.ceil(n / cols));
@@ -671,6 +673,8 @@ function layoutArchitecture(withCouncil, experts) {
   const step = B.w / bases.length;
   bases.forEach((b, i) => { P[b] = { x: B.x + step * (i + 0.5), y: yB + 68, w: 200, h: 64, base: true }; });
   P.llm = { x: P.input.x, y: yB + 68, w: 140 };
+  // The Critic sits below the Deliberative Council, between the input and the LLM.
+  if (withCritic) P.critic = { x: P.input.x, y: (D.y + D.h + yB + 40) / 2, w: 140 };
   return { P, D, C, B, L, H: yB + B.h + 20 };
 }
 
@@ -727,7 +731,8 @@ function drawArchitecture() {
   const step = ARCH.steps[ARCH.pos], ev = step?.ev;
   const withCouncil = !/single_agent|plain_llm/.test(String(ARCH.conv?.mode || ""));
   const batch = String(ARCH.conv?.mode || "").startsWith("meeting");
-  const { P, D, C, B, L, H } = layoutArchitecture(withCouncil, ARCH.relevant);
+  const withCritic = ARCH.all.some((e) => e.sender === "critic");
+  const { P, D, C, B, L, H } = layoutArchitecture(withCouncil, ARCH.relevant, withCritic);
   const now = stepTime(ARCH.pos);
   const actives = ev ? [nodeOf(ev.sender), nodeOf(ev.recipient)] : [];
 
@@ -751,7 +756,7 @@ function drawArchitecture() {
   s += `<rect x="${B.x}" y="${B.y}" width="${B.w}" height="${B.h}" rx="18" fill="var(--system)" fill-opacity=".05" stroke="var(--system)" stroke-opacity=".4" stroke-dasharray="6 6"/>
     <text x="${B.x + B.w / 2}" y="${B.y + 20}" text-anchor="middle" font-size="13" font-weight="600" fill="var(--system)">Local databases · one file each</text>`;
 
-  s += wire("input", "twin") + wire("twin", "repository") + wire("twin", "llm", 'stroke-dasharray="4 5"');
+  s += wire("input", "twin") + wire("twin", "repository") + wire("twin", "llm", 'stroke-dasharray="4 5"') + wire("twin", "critic");
   if (C) {
     s += wire("twin", "leader") + wire("leader", "registry");
     const shown = ARCH.relevant.filter(visible);
@@ -775,6 +780,7 @@ function drawArchitecture() {
   s += box("input", batch ? "Meeting" : "Real PO", batch ? "input transcript" : "talks and approves", "var(--po)");
   s += box("twin", "Digital Twin", batch ? "drafts and gives the final vote" : "talks, proposes and saves", "var(--twin)");
   s += box("llm", "LLM", "called by the agents", "var(--llm)");
+  s += box("critic", "Critic", "scores, never writes", "var(--bad)");
   if (C) {
     s += box("leader", "Leader", "routes and consolidates", "var(--leader)");
     ARCH.relevant.forEach((e) => {
@@ -997,6 +1003,21 @@ function qualityChecks(q) {
     ${check(q.criteria_gherkin, `Given/When/Then (${q.criteria_count})`)}${check(!q.vague_terms.length, q.vague_terms.length ? "vague: " + q.vague_terms.join(", ") : "no vague terms")}</div>`;
 }
 
+function validationBlock(v) {
+  if (!v) return "";
+  const name = (d) => d.replaceAll("_", " ");
+  const badge = (d, score, ok) => `<span class="badge ${ok ? "ok" : "warn"}">${ok ? "✓" : "✗"} ${name(d)} ${score.toFixed(2)}</span>`;
+  const item = Object.entries(v.scores || {}).map(([d, score]) => badge(d, score, !v.failed_dimensions.includes(d))).join("");
+  const doc = Object.entries(v.document || {}).filter(([, x]) => x.assessed).map(([d, x]) => badge(d, x.score, x.passed)).join("");
+  const findings = (v.findings || []).map((f) => `<li><span class="badge ${f.severity === "minor" ? "" : "warn"}">${esc(f.severity)}</span> ${esc(f.message)}
+      ${f.suggestion ? `<div class="muted" style="font-size:13px">${esc(f.suggestion)}</div>` : ""}</li>`).join("");
+  const savedWith = v.saved_with ? ` · saved with report ${esc(v.saved_with.report_id)} (${esc(name(v.saved_with.verdict || ""))})` : "";
+  return `<h3>Validation · ${esc(name(v.verdict))}</h3>
+    <div class="muted" style="font-size:13px">The Critic's score for each competency (0 to 1), computed now${savedWith}.</div>
+    <div class="checks">${item}</div>${doc ? `<div class="checks">${doc}</div>` : ""}
+    ${findings ? `<ul class="plain" style="margin-top:10px">${findings}</ul>` : ""}`;
+}
+
 function storyBlock(story) {
   if (!story || !(story.role || story.goal)) return "";
   return `<h3>User story</h3><div class="block"><b>As a</b> ${esc(story.role)}, <b>I want</b> ${esc(story.goal)}, <b>so that</b> ${esc(story.benefit)}.</div>`;
@@ -1028,6 +1049,7 @@ async function showRequirement() {
     <div class="big-title">${esc(c.title)}</div>
     <div>${r.topics.map((t) => `<span class="tag">${esc(t)}</span>`).join("")}<span class="tag">${classTxt(c)}</span><span class="tag">${c.kind === "enabler" ? "technical enabler" : "business"}</span></div>
     ${qualityChecks(r.quality)}
+    ${validationBlock(r.validation)}
     <h3>Statement${c.ears_pattern ? ` · EARS ${esc(c.ears_pattern)}` : ""}</h3><div class="block" style="font-size:16px">${esc(c.statement)}</div>
     ${storyBlock(c.story)}
     ${criteriaBlock(c.acceptance_criteria)}

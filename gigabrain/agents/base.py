@@ -1,8 +1,8 @@
 """What every agent shares.
 
 `Context` holds what every agent needs: the database, the log recorder, the LLM
-provider, where the knowledge files live, the conversation mode and the id of the
-current conversation.
+provider, where the knowledge files live, the conversation mode, the id of the
+current conversation and the Critic that validates what the agents produce.
 
 `Agent` gives every agent two shortcuts:
 - send(...)     creates a JSON Message and records it in the log
@@ -34,6 +34,7 @@ class Context:
     mode: str = "after_meeting"
     conversation_id: str | None = None
     with_quality: bool = True  # consult the quality expert (FR/NFR class and subtype)
+    critic: object | None = None  # the Critic agent (validation); None switches validation off
 
 
 def requirement_summary(req: dict) -> dict:
@@ -64,10 +65,11 @@ class Agent:
         msg = Message(sender=self.name, recipient=recipient, kind=kind, content=content, conversation_id=self.ctx.conversation_id)
         return self.ctx.recorder.record(msg)
 
-    def call_llm(self, role: str, system: str, messages: list[dict]) -> dict:
+    def call_llm(self, role: str, system: str, messages: list[dict], **options) -> dict:
+        """`options` (e.g. temperature) go to the provider only when given."""
         start = time.perf_counter()
         try:
-            answer = self.ctx.provider.complete_json(role, system, messages)
+            answer = self.ctx.provider.complete_json(role, system, messages, **options)
         except Exception as exc:
             self.send(SYSTEM, "error", {"role": role, "error": str(exc)})
             raise
