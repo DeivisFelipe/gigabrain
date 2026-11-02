@@ -9,3 +9,13 @@ requisitos/
 dados/
 dados-demo/
 dados-avaliacao/
+# local secrets and run data, never versioned
+.env
+.env.*
+*.key
+*.pem
+*.bundle
+runs/
+EntradasGigabrain/
+# local design notes of the validation layer
+docs/validation/
