@@ -35,7 +35,7 @@ from ..lexicons import STOPWORDS
 from ..model import Artifact, ArtifactKind, Dimension, Finding, Level, Severity
 from ..ports import NullTraceabilityProvider
 from ..registry import CheckContext, item_check
-from ..text import containment, coverage, jaccard, normalize
+from ..text import containment, coverage, jaccard, language_of, normalize
 from ._requires import requires_sources
 
 #: Claims carried as links that the repository does not store as links.
@@ -152,9 +152,28 @@ def statement_supported(artifact: Artifact, ctx: CheckContext) -> Iterable[Findi
     if not cited:
         return  # nothing resolvable: reported by evidence_present / evidence_resolvable
     threshold = ctx.config.min_statement_support
-    score = coverage(claim, "\n".join(source.text for source in cited), stopwords=STOPWORDS)
+    said = "\n".join(source.text for source in cited)
+    score = coverage(claim, said, stopwords=STOPWORDS)
     if score < threshold:
         names = ", ".join(source.id for source in cited[:5])
+        written, source_language = language_of(claim), language_of(said)
+        if written and source_language and written != source_language:
+            # Words of two languages cannot be compared, and "keep the words" does not tell the agent what happened.
+            yield Finding(
+                check_id="grounding.statement_supported",
+                dimension=Dimension.CORRECTNESS,
+                severity=Severity.MAJOR,
+                level=Level.ITEM,
+                target_id=artifact.id,
+                locator="statement",
+                excerpt=claim[:160],
+                message=(
+                    f"The statement is in {written} and its source ({names}) is in {source_language}, "
+                    "so it cannot be compared with what was said."
+                ),
+                suggestion=f"Write the requirement in {source_language}, the language of whoever asked for it.",
+            )
+            return
         yield Finding(
             check_id="grounding.statement_supported",
             dimension=Dimension.CORRECTNESS,

@@ -11,7 +11,8 @@ What this layer does **not** do: write requirements (the Twin and the experts do
 links between requirements (the repository does) or decide what is saved (the PO does, or the
 Twin in a meeting processed in batch).
 
-It is deterministic and calls no LLM. Same input, same rule set, same report.
+The first tier is deterministic and calls no LLM: same input, same rule set, same report. A second
+tier, an LLM judge (`judge.py`, `--validation-judge`, off by default), asks what the first cannot see.
 
 ## Two levels, ten competencies
 
@@ -49,6 +50,11 @@ Options of the Critic, on `chat`, `evaluate` and `api`:
 | `--no-validation` | | run without the Critic (ablation) |
 | `--validation-rounds N` | 1 | how many times an artefact may go back to the agent that wrote it; 0 = score only |
 | `--validation-strict` | | `evaluate` only: discard what still fails after the rounds |
+| `--validation-judge` | off | tier 2: an LLM judge reports content the sources do not say (one more call per requirement version) |
+
+`demo` takes the same options, except `--validation-strict`. A broken layer does not stop a run with
+`--no-validation`; asked for, it stops the command with an error that says so. The read routes of the API
+and the dashboard always compute the scores, and answer `validation: null` if the layer fails.
 
 Options of `validate` and of the standalone command line: `--format console|markdown|json|feedback`,
 `--policy default|strict|lenient`, `--disable CHECK_ID` (may be repeated). Exit code: `0`
@@ -87,6 +93,7 @@ report = ctx.critic.validate_repository({"R3"})
 | `policy.py` | the gate: `default`, `strict`, `lenient` |
 | `engine.py` | runs the checks and builds the report |
 | `report.py` | Markdown, JSON, console, compact summary, feedback for the agent |
+| `judge.py` | second tier: the LLM judge |
 | `ports.py` | what the layer needs from outside, with neutral implementations |
 | `host.py` | adapters to GigaBrain's data: agents, repository, event log |
 | `envelope.py` | JSON contract for running outside the system |

@@ -14,6 +14,7 @@ Commands:
     python main.py evaluate 2008-keepass      process the meeting and compare with the gold standard
     python main.py evaluate all --repetitions 5      every project, 5 times, with statistics
     python main.py evaluate all --scenario sessions  several meetings with injected repetitions and changes
+    python main.py evaluate all --variant rules-hard a noisier variant of the dataset (default: v1-original)
     python main.py annotation export links.csv       sample of links for manual annotation
     python main.py annotation kappa links.csv        agreement between the two annotators
     python main.py validate                          score the whole repository (the Critic, no LLM)
@@ -35,7 +36,6 @@ import sys
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from gigabrain import annotation, dataset, demo, meeting, requirement_format, scenarios, stats
-from gigabrain.agents import ValidationSettings
 from gigabrain.council import Council, feed_expert, open_context
 from gigabrain.database import has_database
 from gigabrain.providers import ProviderError, SimulatedProvider, create_provider
@@ -47,11 +47,20 @@ def _provider(simulated: bool):
     return SimulatedProvider() if simulated else create_provider("deepseek")
 
 
-def _validation(args) -> ValidationSettings | bool:
+def _validation_settings():
+    """The settings class of the Critic. It loads validation/, so a broken layer fails here, by name."""
+    try:
+        from gigabrain.agents import ValidationSettings
+    except Exception as exc:
+        sys.exit(f"Error: the validation layer did not load ({type(exc).__name__}: {exc}). Fix it or use --no-validation.")
+    return ValidationSettings
+
+
+def _validation(args):
     """Settings of the Critic from the command line, or False to run without it."""
     if getattr(args, "no_validation", False):
         return False
-    return ValidationSettings(rounds=getattr(args, "validation_rounds", 1), strict=getattr(args, "validation_strict", False),
+    return _validation_settings()(rounds=getattr(args, "validation_rounds", 1), strict=getattr(args, "validation_strict", False),
                               judge=getattr(args, "validation_judge", False))
 
 
@@ -133,7 +142,7 @@ def cmd_demo(args) -> None:
     folder = args.data if args.data != "data" else os.path.join(ROOT, "data-demo")
     if os.path.exists(folder):
         shutil.rmtree(folder)
-    demo.run(folder)
+    demo.run(folder, validation=_validation(args))
     print("\nDone. See it in the dashboard: python main.py dashboard")
 
 
@@ -144,7 +153,7 @@ def cmd_dashboard(args) -> None:
 
 
 def cmd_requirements(args) -> None:
-    ctx = open_context(args.data, SimulatedProvider())
+    ctx = open_context(args.data, SimulatedProvider(), validation=False)
     for req in ctx.db.list_requirements():
         print(f"{req['id']:>4}  v{req['current_version']}  {req['status']:<12} {req['content'].get('statement') or req['title']}  [{', '.join(req['topics'])}]")
     for link in ctx.db.list_links():
@@ -152,7 +161,7 @@ def cmd_requirements(args) -> None:
 
 
 def cmd_trace(args) -> None:
-    ctx = open_context(args.data, SimulatedProvider())
+    ctx = open_context(args.data, SimulatedProvider(), validation=False)
     for step in ctx.db.trace(args.requirement):
         if step["event"] == "version":
             print(f"{step['timestamp']}  {step['requirement_id']} v{step['version']}  {step['title']}  ({step['reason']})")
@@ -161,20 +170,20 @@ def cmd_trace(args) -> None:
 
 
 def cmd_experts(args) -> None:
-    ctx = open_context(args.data, SimulatedProvider())
+    ctx = open_context(args.data, SimulatedProvider(), validation=False)
     for exp in ctx.db.list_experts():
         print(f"{exp['id']:<16} v{exp['knowledge_version']}  {exp['consultations']} consultation(s)  {exp['file']}")
 
 
 def cmd_feed(args) -> None:
-    ctx = open_context(args.data, _provider(args.simulated), show_agents=True)
+    ctx = open_context(args.data, _provider(args.simulated), show_agents=True, validation=False)
     with open(args.file, encoding="utf-8") as f:
         version = feed_expert(ctx, args.expert, os.path.basename(args.file), f.read())
     print(f"Knowledge of {args.expert}: " + (f"version {version}" if version else "no changes"))
 
 
 def cmd_dataset(args) -> None:
-    for p in dataset.list_projects(args.dataset):
+    for p in dataset.list_projects(args.dataset, args.variant):
         print(f"{p['folder']:<22} tier {p['tier']}  {p['requirements']:>3} requirements  {p['words']:>5} words  {p['name']}")
 
 
@@ -185,12 +194,18 @@ def _fmt(v) -> str:
 COLUMNS = ["predicted", "gold", "hits", "precision", "recall", "f1", "class", "subtype", "trace", "unsupported",
            "ears", "story", "gherkin", "not_vague", "valid"]
 SESSION_COLUMNS = ["repetitions_avoided", "changes_captured", "changes_linked"]
+VARIANT_COLUMNS = ["distractor_hits", "rejected_hits", "omitted_hits", "detail_hallucination"]
+
+
+def _scenario_folder(args) -> str:
+    """The results of a variant never touch those of the reference (v1-original)."""
+    return args.scenario if args.variant == dataset.DEFAULT_VARIANT else f"{args.scenario}-{args.variant}"
 
 
 def _run_evaluation(args, project_name: str, mode: str, rep: int, root: str) -> dict:
     """One run (project + mode + repetition), with its own folder, databases and provider."""
-    project = dataset.load_project(project_name, args.dataset)
-    folder = os.path.join(root, args.scenario, project_name, mode, f"rep-{rep}")
+    project = dataset.load_project(project_name, args.dataset, args.variant)
+    folder = os.path.join(root, _scenario_folder(args), project_name, mode, f"rep-{rep}")
     if os.path.exists(folder):
         shutil.rmtree(folder)
     ctx = open_context(folder, _provider(args.simulated), show_agents=args.show_agents, validation=_validation(args))
@@ -212,7 +227,7 @@ def _row(label: str, mode: str, values: dict, columns: list[str]) -> str:
 
 def cmd_evaluate(args) -> None:
     provider_name = SimulatedProvider.name if args.simulated else create_provider("deepseek").name
-    projects = [p["folder"] for p in dataset.list_projects(args.dataset) if p["requirements"] > 0]
+    projects = [p["folder"] for p in dataset.list_projects(args.dataset, args.variant) if p["requirements"] > 0]
     if args.project != "all":
         projects = [args.project]
     modes = list(meeting.MODES) if args.mode == "all" else args.mode.split(",")
@@ -220,9 +235,12 @@ def cmd_evaluate(args) -> None:
 
     # Each (project, mode, repetition) is independent: several run at the same time.
     tasks = [(name, mode, rep) for rep in range(1, args.repetitions + 1) for name in projects for mode in modes]
-    columns = COLUMNS + (SESSION_COLUMNS if args.scenario == "sessions" else [])
+    columns = [c for c in COLUMNS if c != "valid" or not args.no_validation]
+    columns += SESSION_COLUMNS if args.scenario == "sessions" else []
+    columns += VARIANT_COLUMNS if args.variant != dataset.DEFAULT_VARIANT else []
     rows = []
-    print(f"{len(tasks)} run(s) · scenario {args.scenario} · {args.parallel} at a time")
+    print(f"{len(tasks)} run(s) · scenario {args.scenario} · {args.parallel} at a time"
+          + (f" · variant {args.variant}" if args.variant != dataset.DEFAULT_VARIANT else ""))
     print(f"{'project':<22} {'mode':<13} " + " ".join(f"{c[:9]:>9}" for c in columns))
     with ThreadPoolExecutor(max_workers=args.parallel) as executor:
         futures = {executor.submit(_run_evaluation, args, *t, root): t for t in tasks}
@@ -253,7 +271,7 @@ def cmd_evaluate(args) -> None:
             print(f"  {c['metric']:<20} {c['a']} {c['mean_a']:.3f} x {c['b']} {c['mean_b']:.3f}"
                   f"  p={'<0.0001' if c['p'] < 0.0001 else format(c['p'], '.4f')}  effect={c['effect']:+.2f}  ({c['projects']} projects){mark}")
 
-    scenario_folder = os.path.join(root, args.scenario)
+    scenario_folder = os.path.join(root, _scenario_folder(args))
     os.makedirs(scenario_folder, exist_ok=True)
     with open(os.path.join(scenario_folder, "summary.csv"), "w", encoding="utf-8", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=["project", "mode", "rep", *columns], extrasaction="ignore")
@@ -290,7 +308,7 @@ def cmd_validate(args) -> None:
 
     if not has_database(args.data):
         bad_input(f"No requirements repository in '{args.data}'. Use --data <folder> (before the command).")
-    settings = ValidationSettings(policy=POLICIES[args.policy], config=CheckConfig(disabled_checks=frozenset(args.disable)))
+    settings = _validation_settings()(policy=POLICIES[args.policy], config=CheckConfig(disabled_checks=frozenset(args.disable)))
     ctx = open_context(args.data, SimulatedProvider(), validation=settings)
     try:
         focus = None if args.requirement == "all" else {args.requirement}
@@ -334,7 +352,9 @@ def main() -> None:
     _validation_options(p)
     p.set_defaults(func=cmd_chat)
 
-    sub.add_parser("demo", help="run sample conversations with the simulated provider").set_defaults(func=cmd_demo)
+    p = sub.add_parser("demo", help="run sample conversations with the simulated provider")
+    _validation_options(p)
+    p.set_defaults(func=cmd_demo)
 
     p = sub.add_parser("dashboard", help="visual dashboard in the browser")
     p.add_argument("--port", type=int, default=8765)
@@ -355,6 +375,7 @@ def main() -> None:
 
     p = sub.add_parser("dataset", help="list the projects of the test dataset")
     p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER, help="folder of the EntradasGigabrain repository")
+    p.add_argument("--variant", default=dataset.DEFAULT_VARIANT, help="variant of the dataset (default: v1-original)")
     p.set_defaults(func=cmd_dataset)
 
     p = sub.add_parser("evaluate", help="process dataset meetings and compare with the gold standard")
@@ -369,6 +390,8 @@ def main() -> None:
     p.add_argument("--show-agents", action="store_true")
     p.add_argument("--parallel", type=int, default=4, help="how many runs at the same time (default: 4)")
     p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER)
+    p.add_argument("--variant", default=dataset.DEFAULT_VARIANT,
+                   help="variant of the dataset: v1-original (default), rules-clean, rules-realistic, rules-hard, llm-clean, llm-realistic, llm-hard")
     _validation_options(p, batch=True)
     p.set_defaults(func=cmd_evaluate)
 
@@ -400,7 +423,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         args.func(args)
-    except ProviderError as exc:
+    except (ProviderError, dataset.DatasetError) as exc:
         sys.exit(f"Error: {exc}")
 
 

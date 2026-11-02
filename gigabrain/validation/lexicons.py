@@ -160,7 +160,10 @@ _EN_VERBS = (
 _EN_IRREGULAR = (
     "sent shown kept written read found lost set became begun got "
     "logged logging flagged flagging stopped stopping submitted submitting emitted emitting synced "
-    "resetting setting works worked stated tested reviewed linked runs ran uses used describes determines"
+    "resetting setting works worked stated tested reviewed linked runs ran uses used describes determines "
+    # Added on 02/11/2026: "the videos are made available to the reviewer" had no effect, the Critic
+    # returned it, and the Twin answered with a list of files nobody asked for.
+    "available"
 ).split()
 
 
@@ -187,7 +190,7 @@ _PT_AR_STEMS = (
     # Left out on purpose because the bare form is also a common noun: conta, marca,
     # entrada, passa(do), soma.
     "neg const fic ativ desativ reativ sinaliz ocult apag recus increment decrement zer "
-    "contabiliz carreg associ vincul destac solicit encaminh"
+    "contabiliz carreg associ vincul destac solicit encaminh disponibiliz"
 ).split()
 _PT_AR_ENDINGS = r"(?:a|am|ar|ou|aram|ado|ada|ados|adas|ando|ara|arao|e|em)"
 #: Verbs in -ear take an "i" in the present: bloqueia, bloqueiam.
@@ -199,7 +202,7 @@ _PT_ER_IR_STEMS = (
     "aparec desaparec permanec devolv respond substitu atribu"
 ).split()
 _PT_ER_IR_ENDINGS = r"(?:e|em|er|ir|eu|iu|i|ido|ida|idos|idas|endo|indo|a|am)"
-_PT_IRREGULAR = "mantem manter mantido mantida contem conter contido contida sai saem sair saiu".split()
+_PT_IRREGULAR = "mantem manter mantido mantida contem conter contido contida sai saem sair saiu disponivel disponiveis".split()
 
 OBSERVABLE_RE = re.compile(
     r"(?<!\w)(?:"

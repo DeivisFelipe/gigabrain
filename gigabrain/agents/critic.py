@@ -199,7 +199,9 @@ class Critic(Agent):
 
     def _proposal_artifacts(self, requirements: list[dict]) -> tuple[list[Artifact], list]:
         evidence, sources = host.conversation_evidence(self.ctx.db, self.ctx.conversation_id)
-        return [host.artifact_from_requirement(r, f"P{i}", evidence=evidence) for i, r in enumerate(requirements, start=1)], sources
+        ids = host.proposal_ids(self.ctx.db, requirements)
+        return [host.artifact_from_requirement(host.with_run_links(r, ids), f"P{i}", evidence=evidence)
+                for i, r in enumerate(requirements, start=1)], sources
 
     def gate_proposal(self, twin, decision: dict, rework) -> dict:
         """Gate of the Twin's proposal, before the PO sees it.

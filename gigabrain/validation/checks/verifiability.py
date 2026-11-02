@@ -48,8 +48,21 @@ _FILLER_RE = re.compile(r"\b(as|conforme|como) (follows|expected|described|speci
                         r"esperado|descrito|especificado|previsto)\b")
 
 
+#: An action stated by the grammar, for the verbs no word list will ever have ("the messages are
+#: transported", "the system does not execute", "the system coordinates"). What a state or an
+#: expectation says in the same form is not an action ("is considered", "is satisfied").
+_NOT_AN_ACTION = "expected required intended described considered satisfied needed desired supposed based related given"
+_STATED_ACTION_RE = re.compile(
+    rf"\b(?:is|are|be|been|being)\s+(?:not\s+|no longer\s+)?(?!(?:{_NOT_AN_ACTION.replace(' ', '|')})\b)\w+(?:ed|en)\b"
+    r"|\b(?:does|do|did)\s+not\s+\w+"
+    r"|\b(?:system|site|website|application|app|server|service|platform|software|tool|api|page|module|component|solution|program|interface|database)\s+"
+    r"(?:still\s+|also\s+|then\s+|only\s+)?(?!(?:behaves|functions|operates|acts|is|has|does|was|needs|wants)\b)\w+s\b"
+)
+
+
 def _has_effect(text: str) -> bool:
-    return bool(OBSERVABLE_RE.search(_FILLER_RE.sub(" ", normalize(text)))) or has_measurable_quantity(text)
+    plain = _FILLER_RE.sub(" ", normalize(text))
+    return bool(OBSERVABLE_RE.search(plain) or _STATED_ACTION_RE.search(plain)) or has_measurable_quantity(text)
 
 
 def _then_clauses(artifact: Artifact) -> list[tuple[int, str, str]]:

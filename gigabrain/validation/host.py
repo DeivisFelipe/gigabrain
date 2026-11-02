@@ -102,6 +102,29 @@ def artifact_from_requirement(
     )
 
 
+def proposal_ids(db: Database, requirements: list[dict]) -> dict[str, str]:
+    """The ids the proposed requirements get when approved, in order: {"R3": "P1", "R4": "P2"}.
+
+    The Twin does not know P1, and writes R3 for the requirement it proposes just before: once
+    saved, that link is right. A new version of an existing requirement takes no new id.
+    """
+    number = int(db._next_requirement_id()[1:])
+    ids: dict[str, str] = {}
+    for position, requirement in enumerate(requirements, start=1):
+        if not (requirement.get("base") and db.get_requirement(requirement["base"])):
+            ids[f"R{number}"] = f"P{position}"
+            number += 1
+    return ids
+
+
+def with_run_links(requirement: dict, ids: dict[str, str]) -> dict:
+    """The requirement with its links to the same proposal written as the Critic knows them."""
+    links = requirement.get("links")
+    if not links:
+        return requirement
+    return {**requirement, "links": [{**l, "target": ids.get(l.get("target"), l.get("target"))} if isinstance(l, dict) else l for l in links]}
+
+
 # --------------------------------------------------------------------------
 # Sources
 # --------------------------------------------------------------------------

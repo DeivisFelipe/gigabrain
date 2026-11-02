@@ -8,7 +8,7 @@ Ports and the adapters that implement them today (validation/host.py):
 
     ReportStore            -> the event log (log.db), through EventReportStore
     TraceabilityProvider   -> the Requirements Repository, through RepositoryTraceability
-    JudgeProvider          -> second tier, LLM judge (not implemented yet)
+    JudgeProvider          -> second tier, LLM judge (validation/judge.py, off by default)
     ClockProvider          -> injected to make a report reproducible
 
 Scope decision: validation **verifies** traceability, it does not

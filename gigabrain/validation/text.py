@@ -222,6 +222,21 @@ def jaccard(
     return len(sa & sb) / len(sa | sb)
 
 
+#: Common words only one of the two languages uses, to tell them apart (no word that exists in both: "a", "as", "do", "no").
+_LANGUAGE_WORDS = {
+    "English": frozenset("the and of to that is are for with when shall must this from by which".split()),
+    "Portuguese": frozenset("de da dos das que para com em uma deve quando nao ao aos pelo pela sao".split()),
+}
+
+
+def language_of(text: str) -> str | None:
+    """"English", "Portuguese" or None when the text does not say clearly (too short, or mixed)."""
+    found = words(strip_accents(text.lower()))
+    counts = {language: sum(w in common for w in found) for language, common in _LANGUAGE_WORDS.items()}
+    first, second = sorted(counts, key=counts.get, reverse=True)
+    return first if counts[first] >= 3 and counts[first] >= 3 * counts[second] else None
+
+
 def coverage(claim: str, source: str, *, stopwords: frozenset[str] = frozenset()) -> float:
     """How much of the claim's content appears in the source, in [0, 1].
 

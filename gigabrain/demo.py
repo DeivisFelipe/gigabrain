@@ -50,9 +50,9 @@ DOCUMENT = """\
 """
 
 
-def run(data_folder: str, show=print) -> None:
+def run(data_folder: str, show=print, validation=True) -> None:
     for mode, messages in CONVERSATIONS:
-        ctx = open_context(data_folder, SimulatedProvider(), mode=mode, show_agents=True)
+        ctx = open_context(data_folder, SimulatedProvider(), mode=mode, show_agents=True, validation=validation)
         council = Council(ctx)
         show(f"\n=== Conversation {council.start()} (mode {mode}) ===")
         for message in messages:
@@ -61,7 +61,7 @@ def run(data_folder: str, show=print) -> None:
             show(f"Twin> {answer['message_to_po']}\n")
         ctx.db.close()
 
-    ctx = open_context(data_folder, SimulatedProvider(), show_agents=True)
+    ctx = open_context(data_folder, SimulatedProvider(), show_agents=True, validation=validation)
     show("\n=== Document given to the payments expert ===")
     feed_expert(ctx, "payments", "payment-rules.md", DOCUMENT)
     ctx.db.close()

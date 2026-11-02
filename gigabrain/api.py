@@ -41,7 +41,7 @@ from .council import Council, open_context
 from .database import Database
 from .log import summary as message_summary
 from .messages import PO, TWIN, Message
-from .validation.host import validation_of
+from .validation_read import validation_of
 
 # Messages the PO sees on screen; the rest happens behind the scenes (agents talking).
 CONVERSATION_KINDS = ("po_request", "approval", "question_to_po", "proposal", "confirmation")

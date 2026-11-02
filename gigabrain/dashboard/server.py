@@ -27,7 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .. import knowledge, requirement_format, stats
 from ..database import FILES, Database
-from ..validation.host import validation_of
+from ..validation_read import validation_of
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
 IGNORE = {".git", "venv", ".venv", "__pycache__", "node_modules", "knowledge", "logs"}

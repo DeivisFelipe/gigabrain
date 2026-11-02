@@ -22,12 +22,16 @@ When the PO approves:
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
-from .agents import Context, Critic, DigitalTwin, Expert, Leader, ValidationSettings
+from .agents import Context, DigitalTwin, Expert, Leader
 from .approval import is_approval
 from .database import Database, slug
 from .log import Recorder
 from .messages import LEADER, PO, REGISTRY, REPOSITORY, SYSTEM, TWIN, Message
+
+if TYPE_CHECKING:
+    from .agents.critic import ValidationSettings
 
 MAX_CONSULTATIONS_PER_MESSAGE = 2
 REQUIREMENT_FIELDS = ("title", "statement", "ears_pattern", "story", "acceptance_criteria", "class", "subtype", "kind", "topics")
@@ -41,6 +45,7 @@ def open_context(data_folder: str, provider, mode: str = "after_meeting", show_a
     recorder = Recorder(db, os.path.join(data_folder, "logs"), show_agents=show_agents)
     ctx = Context(db, recorder, provider, os.path.join(data_folder, "knowledge"), mode)
     if validation:
+        from .agents.critic import Critic, ValidationSettings  # here so that an error in validation/ cannot stop a run without it
         ctx.critic = Critic(ctx, validation if isinstance(validation, ValidationSettings) else None)
     return ctx
 

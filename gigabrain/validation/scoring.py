@@ -34,8 +34,13 @@ from .registry import CheckRegistry
 #: artefact of the run are information; more Portuguese and English
 #: verbs of effect, and filler ("as follows") is not an effect; a single
 #: criterion, a generic role the sources support and vagueness the sources
-#: themselves have are information, not defects.
-RULESET_VERSION = "2.1"
+#: themselves have are information, not defects. 2.2 (02/11/2026): a link to
+#: the id a requirement of the same proposal will get is a link inside the run, and a
+#: statement in another language than its source says so. 2.3 (02/11/2026): "available"
+#: and its Portuguese forms are an observable effect. 2.4 (02/11/2026): an action stated by the
+#: grammar is an observable effect, whatever the verb (contaminates 2008-peering and
+#: 2008-keepass for measurement).
+RULESET_VERSION = "2.4"
 
 #: Range of the ReqInOne questionnaire.
 LIKERT_MIN = 1.0

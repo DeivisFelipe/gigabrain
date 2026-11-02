@@ -27,6 +27,10 @@ class ProviderError(RuntimeError):
     pass
 
 
+class InvalidAnswer(ProviderError):
+    """The model answered, even after being asked again, with something that is not a JSON object."""
+
+
 class OpenAICompatibleProvider:
     def __init__(self, base_url: str, model: str, key_variable: str):
         try:
@@ -58,14 +62,17 @@ class OpenAICompatibleProvider:
                                "tokens_out": getattr(usage, "completion_tokens", None)}
             text = response.choices[0].message.content or ""
             try:
-                return json.loads(text)
+                answer = json.loads(text)
             except json.JSONDecodeError:
-                if attempt == 1:
-                    raise ProviderError(f"{role}: the model did not return valid JSON: {text[:200]}")
-                conversation += [
-                    {"role": "assistant", "content": text},
-                    {"role": "user", "content": "Answer only with a valid JSON object, no text outside it."},
-                ]
+                answer = None
+            if isinstance(answer, dict):
+                return answer
+            if attempt == 1:
+                raise InvalidAnswer(f"{role}: the model did not return valid JSON: {text[:200]}")
+            conversation += [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content": "Answer only with a valid JSON object, no text outside it."},
+            ]
         raise AssertionError("unreachable")
 
 
@@ -109,6 +116,9 @@ NFR_WORDS = [
     ("L", r"licen[cs]e|law|legal|regulat|complian"),
     ("FT", r"backup|recover|fault|failure"),
 ]
+
+# "[T7] Client: ..." or, in a dataset with several meetings, "[M2:T7] Client: ...".
+TURN_LINE = r"\[((?:M\d+:)?T\d+)\] (\w+): (.*)"
 
 SPEAKER_ROLE = {"Client": "client", "EndUser": "end user", "TechLead": "technical lead"}
 
@@ -252,7 +262,7 @@ class SimulatedProvider:
             found = re.search(r"\] Analyst: .*?(?:next topic|talk about|move on to)[:\s]+([^.?]+)", line, re.I)
             if found:
                 topic = found.group(1).strip().lower()
-        m = re.match(r"\[(T\d+)\] (\w+): (.*)", data["utterance"])
+        m = re.match(TURN_LINE, data["utterance"])
         if not m:
             return {"requirements": []}
         _, speaker, text = m.groups()
@@ -273,7 +283,7 @@ class SimulatedProvider:
         """Rule baseline over the whole meeting (no topic context, no structure)."""
         requirements = []
         for line in messages[-1]["content"].splitlines():
-            m = re.match(r"\[(T\d+)\] (\w+): (.*)", line)
+            m = re.match(TURN_LINE, line)
             if not m or m.group(2) == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", m.group(3), re.I):
                 continue
             for sentence in re.split(r"(?<=[.!?])\s+", _clean(m.group(3))):

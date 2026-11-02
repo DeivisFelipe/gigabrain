@@ -32,7 +32,7 @@ from __future__ import annotations
 import json
 import os
 
-from . import evaluation, requirement_format, scenarios
+from . import evaluation, evaluation_meetings, requirement_format, scenarios
 from .agents import Context, DigitalTwin, Expert, Leader
 from .database import slug
 from .messages import LEADER, REPOSITORY, SYSTEM, TWIN, Message
@@ -142,6 +142,26 @@ def process(ctx: Context, project: dict, mode: str = "council") -> dict:
     return {"conversation_id": ctx.conversation_id, "predicted": predicted, "discarded": discarded, "validation": repository}
 
 
+def _process_meetings(ctx: Context, project: dict, mode: str) -> dict:
+    """A project with several meetings: one after the other, over the SAME repository.
+
+    plain_llm is the exception: the baseline sends the whole input in one request.
+    """
+    meetings = project.get("meetings") or []
+    if len(meetings) <= 1 or mode == "plain_llm":
+        return process(ctx, project, mode)
+    predicted, discarded, conversations, repository = [], [], [], None
+    for k, m in enumerate(meetings, start=1):
+        part = {**project, "title": f"{project['title']} (meeting {k}/{len(meetings)})", "turns": m["turns"]}
+        r = process(ctx, part, mode)
+        predicted += r["predicted"]
+        discarded += r["discarded"]
+        conversations.append(r["conversation_id"])
+        repository = r["validation"]  # the repository as the last meeting left it
+    return {"conversation_id": conversations[-1], "conversations": conversations, "predicted": predicted,
+            "discarded": discarded, "validation": repository}
+
+
 def _structure_metrics(predicted: list[dict]) -> dict:
     """Share of saved requirements with an EARS statement, a full story, Gherkin criteria and no vague terms."""
     n = len(predicted)
@@ -169,21 +189,28 @@ def _validation_metrics(predicted: list[dict]) -> dict:
 def _report(ctx: Context, project: dict, mode: str, base: dict) -> dict:
     base["metrics"].update(_structure_metrics(base["predicted"]))
     base["metrics"].update(_validation_metrics(base["predicted"]))
+    if "negatives" in project:  # gold standard schema 2.0
+        base.update(evaluation_meetings.evaluate(base, project))
+        base["metrics"].update(base.pop("metrics_meetings"))
     return {**base, "project": project["id"], "title": project["title"], "mode": mode,
             "provider": getattr(ctx.provider, "name", "?"), "gold": project["gold"]}
 
 
 def _write(folder: str, report: dict) -> dict:
+    # Without validation, the file is the one the system always wrote.
+    written = {k: v for k, v in report.items() if k != "validation" or v is not None}
     with open(os.path.join(folder, "evaluation.json"), "w", encoding="utf-8") as f:
-        json.dump(report, f, ensure_ascii=False, indent=1)
+        json.dump(written, f, ensure_ascii=False, indent=1)
     return report
 
 
 def process_and_evaluate(ctx: Context, project: dict, output_folder: str, mode: str = "council") -> dict:
-    result = process(ctx, project, mode)
+    result = _process_meetings(ctx, project, mode)
     report = evaluation.evaluate(result["predicted"], project["gold"], project["turns"])
     report.update({"scenario": "meeting", "conversation_id": result["conversation_id"],
                    "predicted": result["predicted"], "discarded": result["discarded"], "validation": result["validation"]})
+    if "conversations" in result:
+        report["conversations"] = result["conversations"]
     return _write(output_folder, _report(ctx, project, mode, report))
 
 

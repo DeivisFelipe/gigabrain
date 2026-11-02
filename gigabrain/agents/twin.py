@@ -181,6 +181,9 @@ to guide your vote: fix what it points out when the utterances allow it, and dis
 whose origin could not be confirmed.
 """
 
+# What the PO reads when a model answer had nothing usable for the PO.
+NOTHING_TO_SAY = "I could not work out an answer. Could you say that again?"
+
 CONTEXT_UTTERANCES = 6
 SAVED_IN_PROMPT = 30
 
@@ -212,6 +215,7 @@ class DigitalTwin(Agent):
             decision["action"] = "ask"
         if decision["action"] == "propose" and not decision["requirements"]:
             decision["action"] = "ask"
+        decision["message_to_po"] = decision.get("message_to_po") or NOTHING_TO_SAY
         decision["requirements"] = [
             {**requirement_format.normalize(r), **{k: r.get(k) for k in ("base", "links", "reason") if k in r},
              "topics": r.get("topics") or ["general"]}
@@ -222,7 +226,7 @@ class DigitalTwin(Agent):
 
     def _announce(self, decision: dict) -> None:
         if decision["action"] == "consult":
-            self.send(LEADER, "query", decision["query"] or {})
+            self.send(LEADER, "query", decision.get("query") or {})
         elif decision["action"] == "propose":
             self.send(PO, "proposal", {"text": decision.get("message_to_po", ""), "requirements": decision["requirements"]})
         else:
