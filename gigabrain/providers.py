@@ -32,14 +32,14 @@ class InvalidAnswer(ProviderError):
 
 
 class OpenAICompatibleProvider:
-    def __init__(self, base_url: str, model: str, key_variable: str):
+    def __init__(self, base_url: str, model: str, key_variable: str, api_key: str | None = None):
         try:
             import openai
         except ImportError as exc:
             raise ProviderError("Install the dependencies: pip install -r requirements.txt") from exc
-        key = os.environ.get(key_variable)
+        key = api_key or os.environ.get(key_variable)
         if not key:
-            raise ProviderError(f"{key_variable} is not set. Set the environment variable or use --simulated.")
+            raise ProviderError(f"{key_variable} is not set. Set the environment variable, send the key from the app or use --simulated.")
         self.client = openai.OpenAI(base_url=base_url, api_key=key)
         self.model = model
         self.name = model
@@ -76,11 +76,11 @@ class OpenAICompatibleProvider:
         raise AssertionError("unreachable")
 
 
-def create_provider(name: str):
+def create_provider(name: str, api_key: str | None = None):
     if name == "simulated":
         return SimulatedProvider()
     if name == "deepseek":
-        return OpenAICompatibleProvider("https://api.deepseek.com", "deepseek-chat", "DEEPSEEK_API_KEY")
+        return OpenAICompatibleProvider("https://api.deepseek.com", "deepseek-chat", "DEEPSEEK_API_KEY", api_key)
     raise ProviderError(f"unknown provider: {name}")
 
 

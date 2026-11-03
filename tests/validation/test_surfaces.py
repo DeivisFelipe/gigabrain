@@ -34,12 +34,13 @@ class TestApi(Flow):
         client = TestClient(create_app(self.folder(), SimulatedProvider, **options))
         client.__enter__()
         self.addCleanup(client.__exit__, None, None, None)
+        client.post("/api/v1/projects", json={"name": "p"})
         return client
 
     def propose(self, client) -> tuple[str, dict]:
-        conversation = client.post("/api/v1/conversations", json={"mode": "after_meeting"}).json()["id"]
-        client.post(f"/api/v1/conversations/{conversation}/messages", json={"text": REQUEST})
-        return conversation, client.post(f"/api/v1/conversations/{conversation}/messages", json={"text": DETAIL}).json()
+        conversation = client.post("/api/v1/projects/p/conversations", json={"mode": "after_meeting"}).json()["id"]
+        client.post(f"/api/v1/projects/p/conversations/{conversation}/messages", json={"text": REQUEST})
+        return conversation, client.post(f"/api/v1/projects/p/conversations/{conversation}/messages", json={"text": DETAIL}).json()
 
     def test_the_proposal_comes_with_the_report(self):
         client = self.client()
@@ -52,16 +53,16 @@ class TestApi(Flow):
         # What the Critic did is behind the scenes, with everything else the agents did.
         self.assertTrue({"validation_report", "validation_return"} <= {b["kind"] for b in answer["behind_the_scenes"]})
 
-        saved = client.post(f"/api/v1/conversations/{conversation}/approve").json()
+        saved = client.post(f"/api/v1/projects/p/conversations/{conversation}/approve").json()
         self.assertEqual(saved["validation"], None)  # an approval is not a proposal
-        detail = client.get("/api/v1/requirements/R1").json()
+        detail = client.get("/api/v1/projects/p/requirements/R1").json()
         self.assertEqual(detail["validation"]["saved_with"]["report_id"], answer["validation"]["report_id"])
         self.assertEqual(len(detail["validation"]["scores"]), 5)
 
     def test_a_question_has_no_report(self):
         client = self.client()
-        conversation = client.post("/api/v1/conversations").json()["id"]
-        answer = client.post(f"/api/v1/conversations/{conversation}/messages", json={"text": REQUEST}).json()
+        conversation = client.post("/api/v1/projects/p/conversations").json()["id"]
+        answer = client.post(f"/api/v1/projects/p/conversations/{conversation}/messages", json={"text": REQUEST}).json()
         self.assertEqual((answer["action"], answer["validation"]), ("ask", None))
 
     def test_validation_can_be_off_or_adjusted(self):
@@ -72,6 +73,7 @@ class TestApi(Flow):
         client = TestClient(create_app(self.folder("other"), SimulatedProvider, validation=ValidationSettings(rounds=0)))
         client.__enter__()
         self.addCleanup(client.__exit__, None, None, None)
+        client.post("/api/v1/projects", json={"name": "p"})
         _, scored = self.propose(client)
         self.assertEqual(scored["validation"]["rounds"], 0)
         self.assertNotIn("validation_return", {b["kind"] for b in scored["behind_the_scenes"]})

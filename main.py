@@ -326,9 +326,9 @@ def cmd_api(args) -> None:
     import uvicorn
     from gigabrain.api import create_app
 
-    if not args.simulated:
-        create_provider("deepseek")  # fail early if the key is not set
-    factory = SimulatedProvider if args.simulated else (lambda: create_provider("deepseek"))
+    if not args.simulated and not os.environ.get("DEEPSEEK_API_KEY"):
+        print("DEEPSEEK_API_KEY is not set: each conversation needs the key sent by the app (X-LLM-Key).")
+    factory = (lambda key=None: SimulatedProvider()) if args.simulated else (lambda key=None: create_provider("deepseek", key))
     token = args.token or os.environ.get("GIGABRAIN_API_TOKEN")
     origins = [o.strip() for o in args.origins.split(",")] if args.origins else ["*"]
     app = create_app(args.data, factory, origins=origins, token=token, validation=_validation(args))

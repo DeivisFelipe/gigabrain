@@ -111,12 +111,13 @@ class TestBrokenValidation(unittest.TestCase):
             from gigabrain.api import create_app
             from gigabrain.providers import SimulatedProvider
             with TestClient(create_app({{data!r}}, SimulatedProvider, validation=False)) as client:
-                cid = client.post("/api/v1/conversations", json={{{{}}}}).json()["id"]
-                base = f"/api/v1/conversations/{{{{cid}}}}/messages"
+                client.post("/api/v1/projects", json={{{{"name": "p"}}}})
+                cid = client.post("/api/v1/projects/p/conversations", json={{{{}}}}).json()["id"]
+                base = f"/api/v1/projects/p/conversations/{{{{cid}}}}/messages"
                 for text in {REQUEST.splitlines()[:2]!r}:
                     assert client.post(base, json={{{{"text": text}}}}).status_code == 200
-                assert client.post(f"/api/v1/conversations/{{{{cid}}}}/approve", json={{{{}}}}).status_code == 200
-                r = client.get("/api/v1/requirements/R1")
+                assert client.post(f"/api/v1/projects/p/conversations/{{{{cid}}}}/approve", json={{{{}}}}).status_code == 200
+                r = client.get("/api/v1/projects/p/requirements/R1")
                 print(json.dumps({{{{"status": r.status_code, "validation": r.json()["validation"], "id": r.json()["id"]}}}}))
         """)
         for broken in self.each_break():

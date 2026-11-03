@@ -6,18 +6,22 @@ Interactive docs: http://127.0.0.1:8000/docs   (OpenAPI at /openapi.json)
 
 Conversation flow:
 
-    POST /api/v1/conversations                     open a conversation -> {id}
-    POST /api/v1/conversations/{id}/messages       the PO writes -> answer of the Twin
+    GET/POST /api/v1/projects, GET/PATCH /api/v1/projects/{project}      the PO's projects
+
+Everything below lives inside a project: /api/v1/projects/{project}/...
+
+    POST /conversations                     open a conversation -> {id}
+    POST /conversations/{id}/messages       the PO writes -> answer of the Twin
          (a question, a proposal of requirements with the Critic's validation report, or a
           confirmation of what was saved)
-    POST /api/v1/conversations/{id}/approve        approve the pending proposal (button)
-    POST /api/v1/conversations/{id}/close          close without approving
+    POST /conversations/{id}/approve        approve the pending proposal (button)
+    POST /conversations/{id}/close          close without approving
 
 History (read only):
 
-    GET  /api/v1/conversations[/{id}[/events]]     conversations, messages and behind the scenes
-    GET  /api/v1/requirements[/{id}]               requirements, versions, links, trace and validation
-    GET  /api/v1/links, /api/v1/experts[/{id}]
+    GET  /conversations[/{id}[/events]]     conversations, messages and behind the scenes
+    GET  /requirements[/{id}]               requirements, versions, links, trace and validation
+    GET  /links, /experts[/{id}]
 
 Each active conversation lives in the server's memory (the Twin keeps its history). If
 the API restarts, open conversations stop accepting messages (409) and the PO opens a
@@ -41,6 +45,7 @@ from .council import Council, open_context
 from .database import Database
 from .log import summary as message_summary
 from .messages import PO, TWIN, Message
+from .projects import ProjectError, Projects
 from .validation_read import validation_of
 
 # Messages the PO sees on screen; the rest happens behind the scenes (agents talking).
@@ -49,6 +54,16 @@ CONVERSATION_MODES = ("after_meeting", "in_meeting")
 
 
 # ---------------------------------------------------------------------------- models
+
+class NewProject(BaseModel):
+    name: str = Field(..., min_length=1, max_length=80, description="Name of the project.")
+    description: str = Field("", max_length=2000, description="What the project is about (optional).")
+
+
+class ProjectChanges(BaseModel):
+    name: str | None = Field(None, max_length=80)
+    description: str | None = Field(None, max_length=2000)
+
 
 class NewConversation(BaseModel):
     mode: Literal["after_meeting", "in_meeting"] = Field(
@@ -94,6 +109,7 @@ class TwinAnswer(BaseModel):
 @dataclass
 class ActiveConversation:
     council: Council
+    key: str = ""
     lock: threading.Lock = field(default_factory=threading.Lock)
 
 
@@ -131,7 +147,7 @@ def _requirement_summary(r: dict) -> dict:
 
 # ---------------------------------------------------------------------------- application
 
-def create_app(data_folder: str, create_provider: Callable[[], object], origins: list[str] | None = None,
+def create_app(data_folder: str, create_provider: Callable[..., object], origins: list[str] | None = None,
                token: str | None = None, validation=True) -> FastAPI:
     active: dict[str, ActiveConversation] = {}
     active_lock = threading.Lock()
@@ -139,8 +155,8 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
     @asynccontextmanager
     async def lifespan(_app):
         yield
-        for conversation_id in list(active):  # on shutdown, close the connections of open conversations
-            finish(conversation_id)
+        for key in list(active):  # on shutdown, close the connections of open conversations
+            finish(key)
 
     app = FastAPI(lifespan=lifespan, title="GigaBrain API", version="1.0.0",
                   description="Conversation of the PO with the Digital Twin and history of the Requirements Repository.")
@@ -150,8 +166,16 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
         if token and authorization != f"Bearer {token}":
             raise HTTPException(401, "Missing or invalid token (header Authorization: Bearer <token>).")
 
-    def get_db():
-        db = Database(data_folder)
+    projects = Projects(data_folder)
+
+    def folder_of(project_id: str) -> str:
+        try:
+            return projects.folder(project_id)
+        except ProjectError as exc:
+            raise HTTPException(404, str(exc)) from exc
+
+    def get_db(project_id: str):
+        db = Database(folder_of(project_id))
         try:
             yield db
         finally:
@@ -159,16 +183,16 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
 
     protected = [Depends(authorize)]
 
-    def get_active(conversation_id: str) -> ActiveConversation:
+    def get_active(project_id: str, conversation_id: str) -> ActiveConversation:
         with active_lock:
-            session = active.get(conversation_id)
+            session = active.get(f"{project_id}:{conversation_id}")
         if not session:
             raise HTTPException(409, "This conversation is not active (it was closed, approved or the API restarted). Open a new one.")
         return session
 
-    def finish(conversation_id: str) -> None:
+    def finish(key: str) -> None:
         with active_lock:
-            session = active.pop(conversation_id, None)
+            session = active.pop(key, None)
         if session:
             session.council.ctx.db.close()
 
@@ -186,7 +210,7 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
             "behind_the_scenes": [_behind(e) for e in events if e["kind"] not in CONVERSATION_KINDS],
         }
         if answer["action"] == "approved":
-            finish(ctx.conversation_id)
+            finish(session.key)
         return body
 
     def last_event(session: ActiveConversation) -> int:
@@ -198,26 +222,62 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
 
     @app.get("/api/v1/health", tags=["system"])
     def health() -> dict:
-        return {"status": "ok", "provider": getattr(create_provider(), "name", "?"), "active_conversations": len(active)}
+        try:
+            provider = getattr(create_provider(), "name", "?")
+        except Exception:  # no key on the server: the app sends its own when it opens a conversation
+            provider = None
+        return {"status": "ok", "provider": provider, "needs_key": provider is None, "active_conversations": len(active)}
+
+    # ------------------------------------------------------------------ projects
+
+    @app.get("/api/v1/projects", tags=["projects"], dependencies=protected)
+    def list_projects() -> list[dict]:
+        return projects.list()
+
+    @app.post("/api/v1/projects", tags=["projects"], status_code=201, dependencies=protected)
+    def create_project(data: NewProject) -> dict:
+        """Create a project. Its requirements, conversations and experts are kept apart from the other projects'."""
+        try:
+            return projects.create(data.name, data.description)
+        except ProjectError as exc:
+            raise HTTPException(422, str(exc)) from exc
+
+    @app.get("/api/v1/projects/{project_id}", tags=["projects"], dependencies=protected)
+    def get_project(project_id: str) -> dict:
+        folder_of(project_id)
+        return projects.get(project_id)
+
+    @app.patch("/api/v1/projects/{project_id}", tags=["projects"], dependencies=protected)
+    def update_project(project_id: str, data: ProjectChanges) -> dict:
+        folder_of(project_id)
+        try:
+            return projects.update(project_id, data.name, data.description)
+        except ProjectError as exc:
+            raise HTTPException(422, str(exc)) from exc
 
     # ------------------------------------------------------------------ conversation
 
-    @app.post("/api/v1/conversations", tags=["conversation"], status_code=201, dependencies=protected)
-    def open_conversation(data: NewConversation | None = None) -> dict:
-        """Open a conversation of the PO with the Digital Twin."""
+    @app.post("/api/v1/projects/{project_id}/conversations", tags=["conversation"], status_code=201, dependencies=protected)
+    def open_conversation(project_id: str, data: NewConversation | None = None, x_llm_key: str | None = Header(None)) -> dict:
+        """Open a conversation of the PO with the Digital Twin. The optional X-LLM-Key header carries the
+        provider key for this conversation only (it is never stored); without it the server's own key is used."""
         mode = (data or NewConversation()).mode
-        council = Council(open_context(data_folder, create_provider(), mode=mode, validation=validation))
+        try:
+            provider = create_provider(x_llm_key.strip()) if x_llm_key and x_llm_key.strip() else create_provider()
+        except Exception as exc:
+            raise HTTPException(400, str(exc))
+        council = Council(open_context(folder_of(project_id), provider, mode=mode, validation=validation))
         conversation_id = council.start()
         with active_lock:
-            active[conversation_id] = ActiveConversation(council)
+            active[f"{project_id}:{conversation_id}"] = ActiveConversation(council, f"{project_id}:{conversation_id}")
         return {"id": conversation_id, "mode": mode, "status": "open", "active": True}
 
-    @app.post("/api/v1/conversations/{conversation_id}/messages", tags=["conversation"], response_model=TwinAnswer,
+    @app.post("/api/v1/projects/{project_id}/conversations/{conversation_id}/messages", tags=["conversation"], response_model=TwinAnswer,
               dependencies=protected)
-    def send_message(conversation_id: str, data: NewMessage) -> dict:
+    def send_message(project_id: str, conversation_id: str, data: NewMessage) -> dict:
         """The PO sends a message. It may take from a few seconds to ~1 minute: the Twin may consult
         the Leader and the experts before answering. Writing "approved" also approves the pending proposal."""
-        session = get_active(conversation_id)
+        session = get_active(project_id, conversation_id)
         with session.lock:  # one message at a time per conversation
             since = last_event(session)
             try:
@@ -226,11 +286,11 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
                 raise HTTPException(502, f"The language model failed: {exc}") from exc
             return reply(session, answer, since)
 
-    @app.post("/api/v1/conversations/{conversation_id}/approve", tags=["conversation"], response_model=TwinAnswer,
+    @app.post("/api/v1/projects/{project_id}/conversations/{conversation_id}/approve", tags=["conversation"], response_model=TwinAnswer,
               dependencies=protected)
-    def approve(conversation_id: str) -> dict:
+    def approve(project_id: str, conversation_id: str) -> dict:
         """Approve the pending proposal (same as the PO writing "approved")."""
-        session = get_active(conversation_id)
+        session = get_active(project_id, conversation_id)
         with session.lock:
             if not session.council.pending_proposal:
                 raise HTTPException(409, "There is no pending proposal to approve.")
@@ -239,33 +299,33 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
                 Message(PO, TWIN, "approval", {"text": "approved (button)"}, session.council.ctx.conversation_id))
             return reply(session, session.council.approve(), since)
 
-    @app.post("/api/v1/conversations/{conversation_id}/close", tags=["conversation"], dependencies=protected)
-    def close(conversation_id: str) -> dict:
+    @app.post("/api/v1/projects/{project_id}/conversations/{conversation_id}/close", tags=["conversation"], dependencies=protected)
+    def close(project_id: str, conversation_id: str) -> dict:
         """Close the conversation without approving anything."""
-        session = get_active(conversation_id)
+        session = get_active(project_id, conversation_id)
         with session.lock:
             session.council.end("closed")
-        finish(conversation_id)
+        finish(session.key)
         return {"id": conversation_id, "status": "closed", "active": False}
 
     # ------------------------------------------------------------------ conversation history
 
-    @app.get("/api/v1/conversations", tags=["history"], dependencies=protected)
-    def list_conversations(only_po: bool = Query(True, description="false also returns meetings processed in batch"),
+    @app.get("/api/v1/projects/{project_id}/conversations", tags=["history"], dependencies=protected)
+    def list_conversations(project_id: str, only_po: bool = Query(True, description="false also returns meetings processed in batch"),
                            db: Database = Depends(get_db)) -> list[dict]:
         conversations = db.list_conversations()
         if only_po:
             conversations = [c for c in conversations if c["mode"] in CONVERSATION_MODES]
-        return [{**c, "active": c["id"] in active} for c in conversations]
+        return [{**c, "active": f"{project_id}:{c['id']}" in active} for c in conversations]
 
-    @app.get("/api/v1/conversations/{conversation_id}", tags=["history"], dependencies=protected)
-    def get_conversation(conversation_id: str, db: Database = Depends(get_db)) -> dict:
+    @app.get("/api/v1/projects/{project_id}/conversations/{conversation_id}", tags=["history"], dependencies=protected)
+    def get_conversation(project_id: str, conversation_id: str, db: Database = Depends(get_db)) -> dict:
         """The conversation as the PO sees it: their messages and the Twin's answers."""
         conversation = next((c for c in db.list_conversations() if c["id"] == conversation_id), None)
         if not conversation:
             raise HTTPException(404, "Conversation not found.")
         events = db.list_events(conversation_id, limit=5000)
-        session = active.get(conversation_id)
+        session = active.get(f"{project_id}:{conversation_id}")
         return {
             **conversation,
             "active": session is not None,
@@ -274,8 +334,8 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
             "saved_requirements": [e["content"]["requirement_id"] for e in events if e["kind"] == "requirement_saved"],
         }
 
-    @app.get("/api/v1/conversations/{conversation_id}/events", tags=["history"], dependencies=protected)
-    def conversation_events(conversation_id: str, since: int = Query(0, description="only events with a larger id"),
+    @app.get("/api/v1/projects/{project_id}/conversations/{conversation_id}/events", tags=["history"], dependencies=protected)
+    def conversation_events(project_id: str, conversation_id: str, since: int = Query(0, description="only events with a larger id"),
                             full: bool = Query(False, description="true includes the full JSON of each message"),
                             db: Database = Depends(get_db)) -> list[dict]:
         """Behind the scenes: every JSON message between the agents, in order."""
@@ -284,8 +344,8 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
 
     # ------------------------------------------------------------------ requirements
 
-    @app.get("/api/v1/requirements", tags=["history"], dependencies=protected)
-    def list_requirements(status: str | None = Query(None, description="active, under_review, superseded, split, merged"),
+    @app.get("/api/v1/projects/{project_id}/requirements", tags=["history"], dependencies=protected)
+    def list_requirements(project_id: str, status: str | None = Query(None, description="active, under_review, superseded, split, merged"),
                           topic: str | None = None, search: str | None = Query(None, description="free text"),
                           db: Database = Depends(get_db)) -> list[dict]:
         requirements = [_requirement_summary(r) for r in db.list_requirements()]
@@ -298,8 +358,8 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
             requirements = [r for r in requirements if s in " ".join([r["id"], r["title"], r["statement"] or "", *r["topics"]]).lower()]
         return requirements
 
-    @app.get("/api/v1/requirements/{requirement_id}", tags=["history"], dependencies=protected)
-    def get_requirement(requirement_id: str, db: Database = Depends(get_db)) -> dict:
+    @app.get("/api/v1/projects/{project_id}/requirements/{requirement_id}", tags=["history"], dependencies=protected)
+    def get_requirement(project_id: str, requirement_id: str, db: Database = Depends(get_db)) -> dict:
         """Current content, all versions, links, sources, quality checks and the trace ("how did we get here")."""
         req = db.get_requirement(requirement_id)
         if not req:
@@ -308,18 +368,18 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
                 "versions": db.requirement_versions(requirement_id),
                 "links": db.list_links(requirement_id), "trace": db.trace(requirement_id)}
 
-    @app.get("/api/v1/links", tags=["history"], dependencies=protected)
-    def list_links(db: Database = Depends(get_db)) -> list[dict]:
+    @app.get("/api/v1/projects/{project_id}/links", tags=["history"], dependencies=protected)
+    def list_links(project_id: str, db: Database = Depends(get_db)) -> list[dict]:
         return db.list_links()
 
     # ------------------------------------------------------------------ experts
 
-    @app.get("/api/v1/experts", tags=["history"], dependencies=protected)
-    def list_experts(db: Database = Depends(get_db)) -> list[dict]:
+    @app.get("/api/v1/projects/{project_id}/experts", tags=["history"], dependencies=protected)
+    def list_experts(project_id: str, db: Database = Depends(get_db)) -> list[dict]:
         return db.list_experts()
 
-    @app.get("/api/v1/experts/{expert_id}", tags=["history"], dependencies=protected)
-    def get_expert(expert_id: str, db: Database = Depends(get_db)) -> dict:
+    @app.get("/api/v1/projects/{project_id}/experts/{expert_id}", tags=["history"], dependencies=protected)
+    def get_expert(project_id: str, expert_id: str, db: Database = Depends(get_db)) -> dict:
         """The current knowledge file and all its versions."""
         exp = db.get_expert(expert_id)
         if not exp:
