@@ -1,0 +1,115 @@
+{
+  "schema_version": "1.1",
+  "run_id": "example-good",
+  "project": "gigabrain",
+
+  "sources": [
+    {
+      "id": "T2",
+      "kind": "turn",
+      "origin": "meeting of 2026-03-12, Client",
+      "text": "We need that when a topic receives the third report from different users, it goes to the review queue as one item, and the moderator is told only once."
+    },
+    {
+      "id": "T4",
+      "kind": "turn",
+      "origin": "meeting of 2026-03-12, EndUser",
+      "text": "The review queue has to load the first page in at most 2 seconds with 500 topics waiting, otherwise the moderators stop using it."
+    },
+    {
+      "id": "T6",
+      "kind": "turn",
+      "origin": "meeting of 2026-03-12, Client",
+      "text": "Also, the blog editor must be able to schedule the publication of a post, because today someone has to stay up to publish it at 19:00."
+    },
+    {
+      "id": "NEED-001",
+      "kind": "need",
+      "origin": "e-mail from the client, 2026-03-15",
+      "text": "A moderator must be able to dismiss a report that is clearly abusive, and the reporter is told why it was dismissed."
+    }
+  ],
+
+  "glossary": [
+    { "term": "review queue", "definition": "Ordered list of the reported topics waiting for the decision of a moderator." },
+    { "term": "report", "definition": "A flag raised by a user saying that a topic breaks the rules of the forum." }
+  ],
+
+  "artifacts": [
+    {
+      "id": "R1",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Group the reports of a topic",
+      "statement": "When a topic receives the third report, the system shall create one item in the review queue.",
+      "ears_pattern": "event",
+      "story": { "role": "forum moderator", "goal": "to see the reports of a topic as one item", "benefit": "I decide once per topic" },
+      "acceptance_criteria": [
+        { "scenario": "Third report", "given": "a topic with two reports from different users", "when": "a third user reports the topic", "then": "the system creates one item for the topic in the review queue" },
+        { "scenario": "Later report", "given": "a topic that is already in the review queue", "when": "another user reports it", "then": "the system increments the counter of the existing item" }
+      ],
+      "evidence": [ { "source_id": "T2" } ],
+      "topics": ["moderation"],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    },
+    {
+      "id": "R2",
+      "kind": "requirement",
+      "class": "NFR",
+      "subtype": "PE",
+      "title": "Load time of the review queue",
+      "statement": "While 500 topics are waiting, the review queue shall load the first page within 2 seconds.",
+      "ears_pattern": "state",
+      "story": { "role": "forum moderator", "goal": "the review queue to open without waiting", "benefit": "I keep using it during peak hours" },
+      "acceptance_criteria": [
+        { "scenario": "Full queue", "given": "500 topics waiting in the review queue", "when": "a moderator opens the queue", "then": "the first page is displayed within 2 seconds" },
+        { "scenario": "Slow load", "given": "500 topics waiting in the review queue", "when": "the first page takes more than 2 seconds", "then": "the system logs the load time" }
+      ],
+      "evidence": [ { "source_id": "T4" } ],
+      "topics": ["moderation"],
+      "provenance": { "agent_id": "expert:moderation", "agent_role": "expert", "model": "deepseek-chat" }
+    },
+    {
+      "id": "R3",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Publish a scheduled post",
+      "statement": "When the scheduled time arrives, the system shall publish the post.",
+      "ears_pattern": "event",
+      "story": { "role": "blog editor", "goal": "to schedule the publication of a post", "benefit": "nobody has to stay up to publish it" },
+      "acceptance_criteria": [
+        { "scenario": "On time", "given": "a post scheduled for 19:00", "when": "the clock reaches 19:00", "then": "the system publishes the post" },
+        { "scenario": "Failure", "given": "a post scheduled for 19:00", "when": "publishing fails", "then": "the system notifies the editor" }
+      ],
+      "evidence": [ { "source_id": "T6" } ],
+      "topics": ["blog"],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    },
+    {
+      "id": "R4",
+      "kind": "requirement",
+      "class": "FR",
+      "title": "Dismiss an abusive report",
+      "statement": "When a moderator dismisses a report as abusive, the system shall tell the reporter the reason.",
+      "ears_pattern": "event",
+      "story": { "role": "forum moderator", "goal": "to dismiss an abusive report", "benefit": "the review queue only holds real problems" },
+      "acceptance_criteria": [
+        { "scenario": "Dismissal", "given": "a report in the review queue", "when": "the moderator dismisses it as abusive", "then": "the system removes the report from the review queue" },
+        { "scenario": "Reason", "given": "a report dismissed as abusive", "when": "the dismissal is saved", "then": "the system sends the reason to the reporter" }
+      ],
+      "evidence": [ { "source_id": "NEED-001", "quote": "the reporter is told why it was dismissed", "reason": "The client asks for the reason to reach the reporter." } ],
+      "topics": ["moderation"],
+      "provenance": { "agent_id": "twin", "agent_role": "po_twin", "model": "deepseek-chat" }
+    }
+  ],
+
+  "document": {
+    "title": "Requirements specification: forum moderation and blog editor",
+    "sections": [
+      { "id": "introduction", "title": "Introduction", "text": "This document specifies two parts of the product: the moderation of reported topics in the forum and the scheduling of posts in the blog editor. Both were elicited in the meeting of 2026-03-12 and completed by e-mail on 2026-03-15." },
+      { "id": "stakeholders", "title": "Stakeholders and users", "text": "Forum moderator: decides what happens to reported topics. Blog editor: schedules the publication of posts. Product Owner: approves the final version of the requirements." },
+      { "id": "use_cases", "title": "Use cases", "text": "UC-01 Review a reported topic: the moderator opens the review queue, picks an item and keeps or removes the topic. UC-02 Schedule a post: the editor writes the post, picks a date and a time and saves it; the system publishes it at that time." },
+      { "id": "glossary", "title": "Glossary", "text": "Review queue: ordered list of the reported topics waiting for the decision of a moderator. Report: a flag raised by a user saying that a topic breaks the rules of the forum." }
+    ]
+  }
+}

@@ -14,7 +14,7 @@ import math
 from itertools import combinations
 
 MODE_ORDER = ("council", "single_agent", "plain_llm")
-COMPARED_METRICS = ["f1", "precision", "recall", "class", "subtype", "ears", "story", "gherkin",
+COMPARED_METRICS = ["f1", "precision", "recall", "class", "subtype", "ears", "story", "gherkin", "valid",
                     "repetitions_avoided", "changes_captured", "changes_linked"]
 
 

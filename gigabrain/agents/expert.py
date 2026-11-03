@@ -96,6 +96,15 @@ Answer with a single JSON object:
 """
 
 
+# Added to REVIEW_PROMPT only when the Critic returns a recommendation (the prompt above is left as it is).
+FEEDBACK_NOTE = """
+You receive "validation_feedback": the Critic checked your previous recommendation for this draft
+and part of it did not hold (a link to a requirement that does not exist, a repetition that is not
+one, a rewritten statement the utterances do not support...). Review the draft again and fix those
+points. Recommend only what the utterances and the saved requirements support.
+"""
+
+
 class Expert(Agent):
     def __init__(self, ctx, data: dict):
         super().__init__(ctx)
@@ -168,7 +177,7 @@ class Expert(Agent):
         md = answer.get("knowledge_markdown")
         if not md:
             return None
-        return self._store(md, reason, {"trigger": trigger["kind"], "changes": answer.get("changes", [])})
+        return self._store(md, reason, {"trigger": trigger["kind"], "changes": (answer.get("changes") or [])})
 
     def note_requirement(self, requirement: dict, links: list[dict], under_review: list[str]) -> int | None:
         """Write a saved requirement into the file without the LLM; reorganize with the LLM once in a while."""
@@ -201,10 +210,13 @@ class Expert(Agent):
 
     # ------------------------------------------------------------------ recommendations
 
-    def review(self, draft: dict, utterances: dict[str, str], language: str = "en") -> dict:
-        """Recommend what to do with a draft requirement (does not decide)."""
+    def review(self, draft: dict, utterances: dict[str, str], language: str = "en", feedback: str | None = None) -> dict:
+        """Recommend what to do with a draft requirement (does not decide).
+
+        `feedback` is what the Critic said about a previous recommendation for the same draft.
+        """
         self.sync()
-        answer = self.call_llm("expert_review", REVIEW_PROMPT, [{"role": "user", "content": as_json({
+        payload = {
             "topic": self.topic,
             "language": language,
             "knowledge": self.read_knowledge(),
@@ -212,7 +224,11 @@ class Expert(Agent):
             "similar_from_other_topics": self.similar_from_other_topics(draft["statement"]),
             "draft": {k: draft[k] for k in ("statement", "class", "subtype", "turns")},
             "utterances": utterances,
-        })}])
+        }
+        if feedback:
+            payload["validation_feedback"] = feedback
+        answer = self.call_llm("expert_review", REVIEW_PROMPT + (FEEDBACK_NOTE if feedback else ""),
+                               [{"role": "user", "content": as_json(payload)}])
         action = answer.get("action") if answer.get("action") in ("keep", "fix", "discard") else "keep"
         recommendation = {
             "expert_id": self.id,
@@ -222,7 +238,7 @@ class Expert(Agent):
             "class": answer.get("class") if action == "fix" else None,
             "subtype": answer.get("subtype") if action == "fix" else None,
             "duplicate_of": answer.get("duplicate_of"),
-            "links": [l for l in answer.get("links", []) if isinstance(l, dict) and l.get("target")],
+            "links": [l for l in (answer.get("links") or []) if isinstance(l, dict) and l.get("target")],
             "motive": answer.get("motive", ""),
         }
         self.send(LEADER, "expert_answer", {**recommendation, "answer": f"{action}: {recommendation['motive']}"})
@@ -256,9 +272,9 @@ class Expert(Agent):
             "expert_id": self.id,
             "knowledge_version": self.ctx.db.get_expert(self.id)["knowledge_version"],
             "answer": answer.get("answer", ""),
-            "related_requirements": answer.get("related_requirements", []),
-            "conflicts": answer.get("conflicts", []),
-            "questions_for_po": answer.get("questions_for_po", []),
+            "related_requirements": (answer.get("related_requirements") or []),
+            "conflicts": (answer.get("conflicts") or []),
+            "questions_for_po": (answer.get("questions_for_po") or []),
             "confidence": answer.get("confidence", "medium"),
         }
         self.send(LEADER, "expert_answer", result)

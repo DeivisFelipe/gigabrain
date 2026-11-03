@@ -38,6 +38,7 @@ It is for testing the flow, not for measuring quality.
 | `python main.py trace R3` | show how R3 came to be |
 | `python main.py experts` | list the experts |
 | `python main.py feed payments minutes.md` | give a document to an expert |
+| `python main.py validate` | score the saved requirements with the Critic (no LLM) |
 | `python main.py evaluate ...` | evaluation with the dataset (see below) |
 | `python main.py annotation ...` | manual annotation of the links (see below) |
 | `python -m unittest discover tests` | tests (offline) |
@@ -63,6 +64,8 @@ PO ──▶ Digital Twin ──▶ Leader ──▶ Experts (one per topic: pay
   Twin decides.
 - **Quality expert:** always present; checks whether the requirement is functional (FR) or
   non-functional (NFR), its subtype (performance, security...) and its format.
+- **Critic:** scores what the other agents write, without an LLM, and sends back what does not
+  pass. It informs; it does not decide. See [Validation](#validation).
 
 Nothing is saved without an explicit approval. "Approved, but change the deadline" does not approve.
 
@@ -142,6 +145,47 @@ Each requirement has an id (R1, R2...), versions (none is ever deleted) and link
 
 Read it as "source *link* target": "R3 supersedes R1".
 
+## Validation
+
+The Critic (`gigabrain/agents/critic.py`) scores every requirement an agent writes. By default
+it is deterministic and calls no LLM: same input, same report. The optional LLM judge is below.
+
+| Level | Competencies |
+|---|---|
+| one requirement | conforming, unambiguous, verifiable, correctness (grounded in its source), understandable |
+| the requirements together | internal consistency, non-redundancy, completeness, conciseness, traceability |
+
+Each competency gets a score from 0 to 1. A requirement passes only if every competency passes
+(at least 0.70 and no blocking finding).
+
+- **Each agent has a gate.** A proposal of the Twin, a draft of the Twin, what the experts add
+  to a draft: if a competency fails, it goes back to the agent that wrote it with the list of
+  what to fix, once by default.
+- **Then everything together.** What reaches the PO (or the Twin's final vote, in a meeting) is
+  assessed with the repository, and the report goes with it. The PO still decides.
+- The sources are read from the transcript and from the log, never from the agent that wrote
+  the requirement.
+
+```bash
+python main.py validate                        # the whole repository
+python main.py validate R3 --format markdown   # one requirement against the others
+python -m gigabrain.validation.cli --list-checks
+```
+
+| Option (`chat`, `evaluate`, `api`, `demo`) | Default | Use |
+|---|---|---|
+| `--no-validation` | | run without the Critic |
+| `--validation-rounds N` | 1 | how many times an artefact may go back; 0 = score only |
+| `--validation-strict` | | `evaluate` only: discard what still fails after the rounds |
+| `--validation-judge` | off | tier 2: an LLM judge reports content the sources do not say; its findings are marked `llm_judgment` and count in the gate (one more call per requirement version) |
+
+With `--no-validation` the run is the same as without the Critic, and an error inside
+`gigabrain/validation/` does not stop it. The pages of a saved requirement (API and dashboard) still
+compute its scores, or answer `validation: null` if the layer fails.
+
+The format checks above (`quality`) stay as they are; the Critic's scores (`validation`) show
+next to them in the API and in the dashboard. More in `gigabrain/validation/README.md`.
+
 ## Experts
 
 The knowledge of each expert is in `data/knowledge/<topic>.md`, with fixed sections: business
@@ -205,7 +249,8 @@ Base: `/api/v1`
 {
   "action": "propose",
   "message": "text to show the PO",
-  "proposed_requirements": [{"title": "...", "statement": "...", "story": {}, "acceptance_criteria": [], "quality": {}}],
+  "proposed_requirements": [{"title": "...", "statement": "...", "story": {}, "acceptance_criteria": [], "quality": {}, "validation": {}}],
+  "validation": {"verdict": "approved_with_remarks", "passed": true, "failed_dimensions": [], "findings": [], "rounds": 0},
   "saved": [],
   "pending_proposal": true,
   "conversation_active": true,
@@ -217,6 +262,9 @@ Base: `/api/v1`
 - `action = propose`: show the requirements and the Approve button.
 - `action = approved`: the conversation is over. `saved` has the saved ids.
 - `behind_the_scenes`: what the agents did to answer. Optional on screen.
+- `validation`: the Critic's report on the proposal (verdict, competencies that did not pass,
+  findings, how many times it went back to the Twin). `null` when it is not a proposal or the
+  API runs with `--no-validation`.
 
 ### Notes
 
@@ -254,7 +302,7 @@ It runs on `http://127.0.0.1:8765` and shows every data folder of the project (s
 | Benchmark | evaluation results, means and statistical tests |
 | Architecture | a conversation replayed step by step |
 | Conversations | the messages of each conversation |
-| Requirements | list, link map, versions, trace and format checks |
+| Requirements | list, link map, versions, trace, format checks and the Critic's scores |
 | Experts | knowledge of each one and what changed between versions |
 | Evaluation | comparison with the gold standard of a project |
 
@@ -272,14 +320,28 @@ Projects/
 └── EntradasGigabrain/
 ```
 
-It has 18 simulated meetings, generated by a script from the PURE dataset, each with the gold
-standard requirements. Project `2005-microcare` has an empty gold standard and is skipped.
+It has 18 projects, generated by a script from the PURE dataset, each with the gold standard
+requirements. Project `2005-microcare` has an empty gold standard and is skipped. They come in
+variants with growing noise:
+
+| Variant | Meetings per project | What it has |
+|---|---|---|
+| `v1-original` (default) | 1 | the reference: lexical noise only, every requirement said clearly |
+| `rules-clean`, `llm-clean` | 1 | more casual speech |
+| `rules-realistic`, `llm-realistic` | 2-3 | messy conversation, about 25% of the requirements with a conflict, ambiguity, inconsistency or gap |
+| `rules-hard`, `llm-hard` | 3-4 | the same, about 45% |
+
+`rules-*` are written by rules and `llm-*` by a language model, from the same plan and gold standard.
+In a project with several meetings, each one is processed in turn, as its own conversation, over the
+same repository; `plain_llm` sends them all in one request.
 
 ### Commands
 
 ```bash
 python main.py dataset                                      # list the projects
+python main.py dataset --variant rules-hard                 # the same, in a variant
 python main.py evaluate 2008-keepass                        # one project
+python main.py evaluate 2008-keepass --variant llm-realistic  # in a variant
 python main.py evaluate all --repetitions 5                 # all of them, 5 times each
 python main.py evaluate all --scenario sessions             # several meetings per project
 python main.py evaluate all --mode council --no-quality     # without the quality expert
@@ -290,8 +352,14 @@ python main.py evaluate all --mode council --no-quality     # without the qualit
 | `--mode` | all | `council`, `single_agent`, `plain_llm` (comma-separated) |
 | `--repetitions` | 1 | how many times to run each project and mode |
 | `--scenario` | meeting | `meeting` or `sessions` |
+| `--variant` | v1-original | variant of the dataset; its results go to `data-eval/<provider>/<scenario>-<variant>/` |
 | `--parallel` | 4 | how many runs at the same time |
 | `--simulated` | | no key |
+| `--no-validation`, `--validation-rounds N`, `--validation-strict`, `--validation-judge` | | the Critic (see [Validation](#validation)) |
+
+`evaluate` and `annotation` always use `data-eval/` in the code folder and ignore `--data`. A new
+`evaluate` deletes the `rep-N` folders it runs again and rewrites `summary.csv`: to keep a run, copy it
+first. `demo` deletes its `--data` folder before it starts.
 
 ### Compared modes
 
@@ -299,6 +367,9 @@ python main.py evaluate all --mode council --no-quality     # without the qualit
   experts and the Twin decides whether to save it.
 - **single_agent**: the same Twin, without the experts.
 - **plain_llm**: the whole meeting in one request, with a minimal instruction.
+
+The Critic sends drafts back only in **council**. In the other two it scores what is saved and
+returns nothing, so they stay baselines.
 
 ### Scenarios
 
@@ -319,6 +390,7 @@ python main.py evaluate all --mode council --no-quality     # without the qualit
 | trace | cited the utterance the requirement came from |
 | unsupported | requirement not backed by the cited utterance |
 | ears, story, gherkin, not_vague | share of requirements that pass each format check |
+| valid | share of saved requirements that pass the Critic's five item competencies |
 | repetitions_avoided | `sessions` scenario only |
 | changes_linked | `sessions` scenario only |
 
@@ -376,7 +448,10 @@ The draft of the evaluation method for the paper is in `docs/evaluation-method.m
 | `gigabrain/knowledge.py` | knowledge file of the experts |
 | `gigabrain/approval.py` | when a PO message counts as an approval |
 | `gigabrain/providers.py` | DeepSeek and the simulator |
-| `gigabrain/agents/` | Twin, Leader and Expert |
+| `gigabrain/answers.py` | what each role may answer; an LLM answer of the wrong shape stops here |
+| `gigabrain/agents/` | Twin, Leader, Expert and Critic |
+| `gigabrain/validation/` | the checks, the gate and the report the Critic uses |
+| `gigabrain/validation_read.py` | the scores of a saved requirement, for the API and the dashboard |
 | `gigabrain/council.py` | conversation with the PO |
 | `gigabrain/meeting.py` | meeting processed one utterance at a time |
 | `gigabrain/log.py` | records the messages |
@@ -384,6 +459,7 @@ The draft of the evaluation method for the paper is in `docs/evaluation-method.m
 | `gigabrain/dashboard/` | dashboard |
 | `gigabrain/dataset.py` | reads the dataset |
 | `gigabrain/evaluation.py` | comparison with the gold standard |
+| `gigabrain/evaluation_meetings.py` | what the gold standard schema 2.0 adds (losing proposals, withdrawn requirements, removed details) |
 | `gigabrain/scenarios.py` | scenario with several meetings |
 | `gigabrain/stats.py` | mean, deviation and Wilcoxon |
 | `gigabrain/annotation.py` | manual annotation and kappa |

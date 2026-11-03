@@ -102,12 +102,16 @@ class Leader(Agent):
 
     # ------------------------------------------------------------------ meeting in batch
 
-    def consult_draft(self, draft: dict, utterances: dict[str, str], language: str = "en") -> dict:
-        """Take a draft to the expert of its topic and to the quality expert; return the recommendation to the Twin."""
+    def consult_draft(self, draft: dict, utterances: dict[str, str], language: str = "en", feedback: str | None = None) -> dict:
+        """Take a draft to the expert of its topic and to the quality expert; return the recommendation to the Twin.
+
+        `feedback` is what the Critic said about the previous recommendation for this draft; it goes to the expert.
+        """
         exp = self._get_or_create({"topic": draft["topic"], "description": f"Requirements about {draft['topic']}."})
         if exp:
-            self.send(expert(exp.id), "query", {"question": "review draft: " + draft["statement"][:100], "topic": exp.topic})
-            recommendation = exp.review(draft, utterances, language)
+            question = ("review again: " if feedback else "review draft: ") + draft["statement"][:100]
+            self.send(expert(exp.id), "query", {"question": question, "topic": exp.topic})
+            recommendation = exp.review(draft, utterances, language, feedback)
         else:
             recommendation = {"expert_id": None, "action": "keep", "links": [], "duplicate_of": None,
                               "motive": "no expert for the topic; nothing to recommend"}

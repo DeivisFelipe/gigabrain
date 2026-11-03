@@ -10,7 +10,7 @@ to show with the parameter ?source=<relative path>.
     GET /api/summary?source=...                  counts and list of conversations
     GET /api/events?source=...&conversation=     messages of a conversation, in order
     GET /api/requirements?source=...             requirements + links
-    GET /api/requirement/<id>?source=...         versions, links, trace and quality of a requirement
+    GET /api/requirement/<id>?source=...         versions, links, trace, quality and validation of a requirement
     GET /api/experts?source=...                  expert registry
     GET /api/expert/<id>?source=...              current file + all versions
     GET /api/evaluation?source=...               result against the gold standard, if any
@@ -27,6 +27,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .. import knowledge, requirement_format, stats
 from ..database import FILES, Database
+from ..validation_read import validation_of
 
 FOLDER = os.path.dirname(os.path.abspath(__file__))
 IGNORE = {".git", "venv", ".venv", "__pycache__", "node_modules", "knowledge", "logs"}
@@ -112,7 +113,8 @@ def _routes(db: Database, folder: str, parts: list[str], query: dict) -> object:
         req = db.get_requirement(parts[1])
         if not req:
             return None
-        return {**req, "quality": requirement_format.check(req["content"]), "versions": db.requirement_versions(req["id"]),
+        return {**req, "quality": requirement_format.check(req["content"]), "validation": validation_of(db, req["id"]),
+                "versions": db.requirement_versions(req["id"]),
                 "links": db.list_links(req["id"]), "trace": db.trace(req["id"])}
     if parts == ["experts"]:
         return [{**e, "versions_at": db.knowledge_dates(e["id"])} for e in db.list_experts()]

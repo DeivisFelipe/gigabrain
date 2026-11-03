@@ -15,7 +15,8 @@ import os
 from .database import Database
 from .messages import Message
 
-COLORS = {"po": "\033[97m", "twin": "\033[96m", "leader": "\033[95m", "expert": "\033[93m", "system": "\033[90m"}
+COLORS = {"po": "\033[97m", "twin": "\033[96m", "leader": "\033[95m", "expert": "\033[93m", "system": "\033[90m",
+          "critic": "\033[91m"}
 RESET = "\033[0m"
 
 

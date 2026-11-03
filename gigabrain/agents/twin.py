@@ -10,6 +10,9 @@ In a conversation, for each PO message it chooses one of three actions:
 In a meeting processed in batch (no PO), it drafts the requirements of each utterance
 and gives the final vote after the experts' recommendation.
 
+What it writes passes the Critic (agents/critic.py): a proposal before the PO sees it, a
+draft before it goes to the experts. What does not pass comes back to be fixed.
+
 The PO always has the final word: nothing is saved without explicit approval.
 """
 
@@ -153,6 +156,34 @@ Answer with a single JSON object:
  "links": [{"kind": "depends_on", "target": "R2", "reason": "..."}], "motive": "why you decided this"}
 """
 
+# The Critic returned a draft: fix only what it lists (see agents/critic.py).
+REVISE_PROMPT = f"""\
+You are the Digital Twin of GigaBrain. You drafted a requirement from one utterance of a meeting
+and the Critic returned it: it did not pass validation. You receive your draft, the utterances it
+cites and the points to fix.
+
+Rules:
+- Fix ONLY the listed points. Do not add requirements and do not change the scope.
+- Keep the stakeholder's words in "statement" and keep the language given in "language".
+- Do not invent what the utterances do not say (a number, a limit, a role). If a point cannot be
+  fixed with what was said, leave that part as it is.
+
+{REQUIREMENT_FORMAT}
+Answer with a single JSON object:
+{{"requirement": {{ ...requirement structure..., "topic": "..." }}}}
+"""
+
+# Added to DECIDE_PROMPT only when the Critic sends its report (the prompt above is left as it is).
+GUIDANCE_NOTE = """
+You also receive "validation": the Critic's report on this draft taken together with the
+repository (one score per competency, the competencies that did not pass and the findings). Use it
+to guide your vote: fix what it points out when the utterances allow it, and discard a draft
+whose origin could not be confirmed.
+"""
+
+# What the PO reads when a model answer had nothing usable for the PO.
+NOTHING_TO_SAY = "I could not work out an answer. Could you say that again?"
+
 CONTEXT_UTTERANCES = 6
 SAVED_IN_PROMPT = 30
 
@@ -167,25 +198,35 @@ class DigitalTwin(Agent):
     # ------------------------------------------------------------------ conversation with the PO
 
     def _decide(self, data: dict) -> dict:
+        decision = self._think(data)
+        # A proposal passes the Critic before the PO sees it; what does not pass comes
+        # back here, through _think, as a system notice (see agents/critic.py).
+        if self.ctx.critic and decision["action"] == "propose":
+            decision = self.ctx.critic.gate_proposal(self, decision, self._think)
+        self._announce(decision)
+        return decision
+
+    def _think(self, data: dict) -> dict:
+        """Take one message and decide the next action, without telling anyone yet."""
         self.history.append({"role": "user", "content": as_json(data)})
         decision = self.call_llm("twin", SYSTEM_PROMPT, self.history)
-        decision.setdefault("requirements", [])
+        decision["requirements"] = decision.get("requirements") or []
         if decision.get("action") not in ("ask", "consult", "propose"):
             decision["action"] = "ask"
         if decision["action"] == "propose" and not decision["requirements"]:
             decision["action"] = "ask"
+        decision["message_to_po"] = decision.get("message_to_po") or NOTHING_TO_SAY
         decision["requirements"] = [
             {**requirement_format.normalize(r), **{k: r.get(k) for k in ("base", "links", "reason") if k in r},
              "topics": r.get("topics") or ["general"]}
             for r in decision["requirements"]
         ]
         self.history.append({"role": "assistant", "content": as_json(decision)})
-        self._announce(decision)
         return decision
 
     def _announce(self, decision: dict) -> None:
         if decision["action"] == "consult":
-            self.send(LEADER, "query", decision["query"] or {})
+            self.send(LEADER, "query", decision.get("query") or {})
         elif decision["action"] == "propose":
             self.send(PO, "proposal", {"text": decision.get("message_to_po", ""), "requirements": decision["requirements"]})
         else:
@@ -215,7 +256,7 @@ class DigitalTwin(Agent):
             "already_saved": already_saved[-SAVED_IN_PROMPT:],
         })}])
         drafts = []
-        for raw in answer.get("requirements", []):
+        for raw in (answer.get("requirements") or []):
             req = requirement_format.normalize(raw)
             if not req["statement"]:
                 continue
@@ -225,39 +266,64 @@ class DigitalTwin(Agent):
             self.send(TWIN, "drafts", {"turn": utterance["id"], "requirements": drafts})
         return drafts
 
+    def revise(self, draft: dict, feedback: str, utterances: dict[str, str], language: str = "en") -> dict | None:
+        """Fix a draft the Critic returned. Returns the new draft, or None if nothing usable came back."""
+        answer = self.call_llm("twin_revise", REVISE_PROMPT, [{"role": "user", "content": as_json({
+            "language": language,
+            "draft": {k: draft.get(k) for k in (*requirement_format.EMPTY_REQUIREMENT, "topic")},
+            "utterances": utterances,
+            "validation_feedback": feedback,
+        })}])
+        raw = answer.get("requirement")
+        if not isinstance(raw, dict) or not raw.get("statement"):
+            return None
+        revised = {**draft, **requirement_format.normalize(raw), "topic": raw.get("topic") or draft.get("topic") or "general"}
+        self.send(TWIN, "drafts", {"turn": (draft.get("turns") or [None])[0], "requirements": [revised], "revision": True})
+        return revised
+
     def extract_all_at_once(self, project: dict) -> list[dict]:
         """"Plain LLM" baseline: the whole meeting in a single request with the minimal prompt."""
         answer = self.call_llm("plain_llm", PLAIN_LLM_PROMPT, [{"role": "user", "content": "\n".join(
             f"[{t['id']}] {t['speaker']}: {t['text']}" for t in project["turns"])}])
         drafts = []
-        for raw in answer.get("requirements", []):
+        for raw in (answer.get("requirements") or []):
             if not raw.get("text"):
                 continue
             req = requirement_format.normalize({"statement": raw["text"].strip(), "class": raw.get("class"), "subtype": raw.get("subtype")})
             drafts.append({**req, "index": len(drafts), "topic": "general",
-                           "turns": [t for t in raw.get("turns", []) if isinstance(t, str)]})
+                           "turns": [t for t in (raw.get("turns") or []) if isinstance(t, str)]})
         self.send(TWIN, "drafts", {"requirements": drafts})
         return drafts
 
-    def decide(self, draft: dict, recommendation: dict, utterances: dict[str, str], language: str = "en") -> dict:
-        """Final vote: save (as is or fixed) or discard the draft."""
-        if recommendation["action"] == "keep" and not recommendation.get("links"):
+    def decide(self, draft: dict, recommendation: dict, utterances: dict[str, str], language: str = "en",
+               guidance: dict | None = None) -> dict:
+        """Final vote: save (as is or fixed) or discard the draft.
+
+        `guidance` is the Critic's report on the draft taken together with the repository.
+        When it says something did not pass, the Twin looks at it before voting.
+        """
+        guided = bool(guidance) and not guidance.get("passed", True)
+        if recommendation["action"] == "keep" and not recommendation.get("links") and not guided:
             decision = {"save": True, "statement": draft["statement"], "class": draft["class"], "subtype": draft["subtype"],
                         "links": [], "motive": "the expert agreed with the draft"}
         else:
-            answer = self.call_llm("twin_decide", DECIDE_PROMPT, [{"role": "user", "content": as_json({
+            payload = {
                 "language": language,
                 "draft": {k: draft[k] for k in ("statement", "class", "subtype", "turns")},
-                "recommendation": recommendation,
+                "recommendation": {k: v for k, v in recommendation.items() if k != "validation"},
                 "utterances": utterances,
-            })}])
+            }
+            if guidance:
+                payload["validation"] = {k: guidance.get(k) for k in ("verdict", "failed_dimensions", "scores", "document", "findings")}
+            answer = self.call_llm("twin_decide", DECIDE_PROMPT + (GUIDANCE_NOTE if guidance else ""),
+                                   [{"role": "user", "content": as_json(payload)}])
             cls = "NFR" if str(answer.get("class", draft["class"])).upper() == "NFR" else "FR"
             decision = {
                 "save": bool(answer.get("save", True)),
                 "statement": (answer.get("statement") or draft["statement"]).strip(),
                 "class": cls,
                 "subtype": answer.get("subtype") if cls == "NFR" else None,
-                "links": [l for l in answer.get("links", []) if isinstance(l, dict) and l.get("target")],
+                "links": [l for l in (answer.get("links") or []) if isinstance(l, dict) and l.get("target")],
                 "motive": answer.get("motive", ""),
             }
         self.send(TWIN, "decision", {

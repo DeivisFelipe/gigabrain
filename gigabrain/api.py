@@ -8,14 +8,15 @@ Conversation flow:
 
     POST /api/v1/conversations                     open a conversation -> {id}
     POST /api/v1/conversations/{id}/messages       the PO writes -> answer of the Twin
-         (a question, a proposal of requirements or a confirmation of what was saved)
+         (a question, a proposal of requirements with the Critic's validation report, or a
+          confirmation of what was saved)
     POST /api/v1/conversations/{id}/approve        approve the pending proposal (button)
     POST /api/v1/conversations/{id}/close          close without approving
 
 History (read only):
 
     GET  /api/v1/conversations[/{id}[/events]]     conversations, messages and behind the scenes
-    GET  /api/v1/requirements[/{id}]               requirements, versions, links and trace
+    GET  /api/v1/requirements[/{id}]               requirements, versions, links, trace and validation
     GET  /api/v1/links, /api/v1/experts[/{id}]
 
 Each active conversation lives in the server's memory (the Twin keeps its history). If
@@ -40,6 +41,7 @@ from .council import Council, open_context
 from .database import Database
 from .log import summary as message_summary
 from .messages import PO, TWIN, Message
+from .validation_read import validation_of
 
 # Messages the PO sees on screen; the rest happens behind the scenes (agents talking).
 CONVERSATION_KINDS = ("po_request", "approval", "question_to_po", "proposal", "confirmation")
@@ -75,7 +77,12 @@ class TwinAnswer(BaseModel):
     proposed_requirements: list[dict] = Field(
         default_factory=list,
         description="With action=propose: title, statement (EARS), story, acceptance_criteria (Given/When/Then), "
-                    "class, subtype, topics, base, links, and 'quality' (automatic checks).")
+                    "class, subtype, topics, base, links, 'quality' (automatic checks) and 'validation' "
+                    "(the Critic's scores and findings for that requirement).")
+    validation: dict | None = Field(
+        None, description="With action=propose: the Critic's report on the proposal taken together with the repository: "
+                          "verdict, one score per competency (items, document), failed_dimensions, findings and how many "
+                          "times the proposal went back to the Twin (rounds). Null when validation is off.")
     saved: list[str] = Field(default_factory=list, description="With action=approved: saved ids (e.g. R3).")
     pending_proposal: bool = Field(..., description="Whether a proposal is waiting for approval (enables the Approve button).")
     conversation_active: bool
@@ -125,7 +132,7 @@ def _requirement_summary(r: dict) -> dict:
 # ---------------------------------------------------------------------------- application
 
 def create_app(data_folder: str, create_provider: Callable[[], object], origins: list[str] | None = None,
-               token: str | None = None) -> FastAPI:
+               token: str | None = None, validation=True) -> FastAPI:
     active: dict[str, ActiveConversation] = {}
     active_lock = threading.Lock()
 
@@ -172,6 +179,7 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
             "action": answer["action"],
             "message": answer.get("message_to_po", ""),
             "proposed_requirements": _with_quality(answer.get("requirements", [])) if answer["action"] == "propose" else [],
+            "validation": answer.get("validation") if answer["action"] == "propose" else None,
             "saved": [s["requirement_id"] for s in answer.get("saved", [])],
             "pending_proposal": bool(session.council.pending_proposal),
             "conversation_active": answer["action"] != "approved",
@@ -198,7 +206,7 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
     def open_conversation(data: NewConversation | None = None) -> dict:
         """Open a conversation of the PO with the Digital Twin."""
         mode = (data or NewConversation()).mode
-        council = Council(open_context(data_folder, create_provider(), mode=mode))
+        council = Council(open_context(data_folder, create_provider(), mode=mode, validation=validation))
         conversation_id = council.start()
         with active_lock:
             active[conversation_id] = ActiveConversation(council)
@@ -296,7 +304,8 @@ def create_app(data_folder: str, create_provider: Callable[[], object], origins:
         req = db.get_requirement(requirement_id)
         if not req:
             raise HTTPException(404, "Requirement not found.")
-        return {**req, "quality": requirement_format.check(req["content"]), "versions": db.requirement_versions(requirement_id),
+        return {**req, "quality": requirement_format.check(req["content"]), "validation": validation_of(db, requirement_id),
+                "versions": db.requirement_versions(requirement_id),
                 "links": db.list_links(requirement_id), "trace": db.trace(requirement_id)}
 
     @app.get("/api/v1/links", tags=["history"], dependencies=protected)

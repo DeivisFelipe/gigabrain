@@ -27,6 +27,10 @@ class ProviderError(RuntimeError):
     pass
 
 
+class InvalidAnswer(ProviderError):
+    """The model answered, even after being asked again, with something that is not a JSON object."""
+
+
 class OpenAICompatibleProvider:
     def __init__(self, base_url: str, model: str, key_variable: str):
         try:
@@ -41,28 +45,34 @@ class OpenAICompatibleProvider:
         self.name = model
         self.last_usage: dict = {}
 
-    def complete_json(self, role: str, system: str, messages: list[dict]) -> dict:
+    def complete_json(self, role: str, system: str, messages: list[dict], temperature: float | None = None) -> dict:
+        """`temperature`: None keeps the API default; the Critic's judge asks for 0."""
         conversation = [{"role": "system", "content": system}, *messages]
+        options = {} if temperature is None else {"temperature": temperature}
         for attempt in range(2):
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=conversation,
                 response_format={"type": "json_object"},
                 max_tokens=8192,  # requirements with stories and criteria are long
+                **options,
             )
             usage = response.usage
             self.last_usage = {"tokens_in": getattr(usage, "prompt_tokens", None),
                                "tokens_out": getattr(usage, "completion_tokens", None)}
             text = response.choices[0].message.content or ""
             try:
-                return json.loads(text)
+                answer = json.loads(text)
             except json.JSONDecodeError:
-                if attempt == 1:
-                    raise ProviderError(f"{role}: the model did not return valid JSON: {text[:200]}")
-                conversation += [
-                    {"role": "assistant", "content": text},
-                    {"role": "user", "content": "Answer only with a valid JSON object, no text outside it."},
-                ]
+                answer = None
+            if isinstance(answer, dict):
+                return answer
+            if attempt == 1:
+                raise InvalidAnswer(f"{role}: the model did not return valid JSON: {text[:200]}")
+            conversation += [
+                {"role": "assistant", "content": text},
+                {"role": "user", "content": "Answer only with a valid JSON object, no text outside it."},
+            ]
         raise AssertionError("unreachable")
 
 
@@ -106,6 +116,9 @@ NFR_WORDS = [
     ("L", r"licen[cs]e|law|legal|regulat|complian"),
     ("FT", r"backup|recover|fault|failure"),
 ]
+
+# "[T7] Client: ..." or, in a dataset with several meetings, "[M2:T7] Client: ...".
+TURN_LINE = r"\[((?:M\d+:)?T\d+)\] (\w+): (.*)"
 
 SPEAKER_ROLE = {"Client": "client", "EndUser": "end user", "TechLead": "technical lead"}
 
@@ -174,7 +187,7 @@ class SimulatedProvider:
         self.delay = delay
         self.last_usage: dict = {}
 
-    def complete_json(self, role: str, system: str, messages: list[dict]) -> dict:
+    def complete_json(self, role: str, system: str, messages: list[dict], temperature: float | None = None) -> dict:
         if self.delay:
             time.sleep(self.delay)
         method = getattr(self, "_" + role, None)
@@ -249,7 +262,7 @@ class SimulatedProvider:
             found = re.search(r"\] Analyst: .*?(?:next topic|talk about|move on to)[:\s]+([^.?]+)", line, re.I)
             if found:
                 topic = found.group(1).strip().lower()
-        m = re.match(r"\[(T\d+)\] (\w+): (.*)", data["utterance"])
+        m = re.match(TURN_LINE, data["utterance"])
         if not m:
             return {"requirements": []}
         _, speaker, text = m.groups()
@@ -258,11 +271,19 @@ class SimulatedProvider:
         role = SPEAKER_ROLE.get(speaker, "user")
         return {"requirements": [_structured(s, role, topic) for s in re.split(r"(?<=[.!?])\s+", _clean(text)) if len(s.split()) >= 6]}
 
+    def _twin_revise(self, messages: list[dict]) -> dict:
+        """The Critic returned a draft. Rules cannot improve a requirement: the draft goes back as it is."""
+        return {"requirement": _last(messages)["draft"]}
+
+    def _critic_judge(self, messages: list[dict]) -> dict:
+        """Tier 2 of the Critic. Rules cannot tell what a source means: nothing is reported."""
+        return {"claims": []}
+
     def _plain_llm(self, messages: list[dict]) -> dict:
         """Rule baseline over the whole meeting (no topic context, no structure)."""
         requirements = []
         for line in messages[-1]["content"].splitlines():
-            m = re.match(r"\[(T\d+)\] (\w+): (.*)", line)
+            m = re.match(TURN_LINE, line)
             if not m or m.group(2) == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", m.group(3), re.I):
                 continue
             for sentence in re.split(r"(?<=[.!?])\s+", _clean(m.group(3))):

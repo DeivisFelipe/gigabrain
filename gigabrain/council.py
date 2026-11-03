@@ -7,8 +7,10 @@ Flow of one PO message:
                       └── consolidated answer┘
                       │
                       ├─ ask ─────▶ PO
-                      └─ propose ─▶ PO ──"approved"──▶ save in the Repository
-                                                        and update the experts
+                      └─ propose ─▶ Critic ──(a competency failed: back to the Twin)
+                                      │
+                                      └─ proposal + validation report ─▶ PO ──"approved"──▶ save in
+                                                                         the Repository and update the experts
 
 When the PO approves:
 1. each proposed requirement is saved (new or new version), with its sources
@@ -20,6 +22,7 @@ When the PO approves:
 from __future__ import annotations
 
 import os
+from typing import TYPE_CHECKING
 
 from .agents import Context, DigitalTwin, Expert, Leader
 from .approval import is_approval
@@ -27,15 +30,24 @@ from .database import Database, slug
 from .log import Recorder
 from .messages import LEADER, PO, REGISTRY, REPOSITORY, SYSTEM, TWIN, Message
 
+if TYPE_CHECKING:
+    from .agents.critic import ValidationSettings
+
 MAX_CONSULTATIONS_PER_MESSAGE = 2
 REQUIREMENT_FIELDS = ("title", "statement", "ears_pattern", "story", "acceptance_criteria", "class", "subtype", "kind", "topics")
 
 
-def open_context(data_folder: str, provider, mode: str = "after_meeting", show_agents: bool = False) -> Context:
+def open_context(data_folder: str, provider, mode: str = "after_meeting", show_agents: bool = False,
+                 validation: ValidationSettings | bool = True) -> Context:
+    """`validation`: True for the Critic with its defaults, settings to adjust it, False to run without it."""
     os.makedirs(data_folder, exist_ok=True)
     db = Database(data_folder)
     recorder = Recorder(db, os.path.join(data_folder, "logs"), show_agents=show_agents)
-    return Context(db, recorder, provider, os.path.join(data_folder, "knowledge"), mode)
+    ctx = Context(db, recorder, provider, os.path.join(data_folder, "knowledge"), mode)
+    if validation:
+        from .agents.critic import Critic, ValidationSettings  # here so that an error in validation/ cannot stop a run without it
+        ctx.critic = Critic(ctx, validation if isinstance(validation, ValidationSettings) else None)
+    return ctx
 
 
 def _record(ctx: Context, sender: str, recipient: str, kind: str, content: dict) -> None:
@@ -93,10 +105,10 @@ class Council:
         return decision
 
     def _keep_sources(self, answer: dict) -> None:
-        for source in answer.get("sources", []):
+        for source in (answer.get("sources") or []):
             if source not in self.sources:
                 self.sources.append(source)
-        for rid in answer.get("related_requirements", []):
+        for rid in (answer.get("related_requirements") or []):
             if rid not in self.related:
                 self.related.append(rid)
 
@@ -111,6 +123,9 @@ class Council:
             content = {k: proposed[k] for k in REQUIREMENT_FIELDS if k in proposed}
             sources = [{"kind": "conversation", "ref": self.ctx.conversation_id}, *self.sources]
             sources += [{"kind": "requirement", "ref": rid} for rid in self.related]
+            if proposed.get("validation"):  # which report of the Critic this version was approved with
+                sources.append({"kind": "validation", "ref": proposed["validation"]["report_id"],
+                                "verdict": proposed["validation"]["verdict"]})
             result = self.ctx.db.save_requirement(content, self.ctx.conversation_id, base_id=proposed.get("base"),
                                                   reason=proposed.get("reason"), links=proposed.get("links"), sources=sources)
             _record(self.ctx, TWIN, REPOSITORY, "requirement_saved", {**result, "decided_by": "po (explicit approval)"})
