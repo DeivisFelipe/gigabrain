@@ -20,6 +20,7 @@
     --agent:#4A4FD6;
     --data:#1E8A82;
     --output:#B8862E;
+    --critic:#7B3FA0;
   }
 
   *{box-sizing:border-box;}
@@ -220,13 +221,13 @@
 <div class="page">
   <p class="runhead">GigaBrain — Architecture Note · Master's Research</p>
   <h1>A Multi-Agent Model for Defining Software Requirements</h1>
-  <p class="subtitle">Architecture draft — version 1</p>
+  <p class="subtitle">Architecture draft — version 2</p>
 
-  <p class="abstract"><span class="abstract-label">Abstract. </span>This document describes the preliminary architecture of GigaBrain, an LLM-based agent model to support the definition of software requirements. The architecture organizes the agents into two councils: a <i>deliberative council</i>, in which the real Product Owner (PO) negotiates directly with a digital twin until they converge on a defined requirement; and a <i>consultative council</i>, responsible for investigating the technical knowledge of the platform and mobilizing domain experts on demand. The consultative council is led by a manager agent, which queries a structural knowledge base of the platform and decides, for each requested change, whether an expert already exists or must be created — in which case the new agent builds its own knowledge repository from the existing code or from external research. Figure 1 shows this architecture in detail.</p>
+  <p class="abstract"><span class="abstract-label">Abstract. </span>This document describes the architecture of GigaBrain, an LLM-based agent model to support the definition of software requirements. The architecture organizes the agents into two councils: a <i>deliberative council</i>, in which the real Product Owner (PO) negotiates directly with a digital twin until they converge on a defined requirement; and a <i>consultative council</i>, responsible for holding the knowledge of each topic and mobilizing domain experts on demand. The consultative council is led by a manager agent, which consults a registry of experts and decides, for each question, whether an expert already exists or must be created — in which case the new agent builds its own knowledge file from the documents and the answers the PO provides, never from the source code or the web. A <i>critic</i> scores every proposed requirement against objective criteria without rewriting it, and sends back what does not pass; the PO has the final word, and approved requirements are saved, with versions, links and traceability, in a repository kept separately for each project. Figure 1 shows this architecture in detail.</p>
 
   <figure>
     <div class="diagram-wrap">
-      <svg viewBox="0 0 1200 940" role="img" aria-label="GigaBrain architecture diagram: at the top, the real PO and the digital twin form the deliberative council and produce the defined requirement when they agree; the digital twin consults the consultative council below, led by a manager agent that queries the main database, checks whether an expert for the domain already exists and, if not, creates a new expert that builds its own RAG from the existing code or from web research.">
+      <svg viewBox="0 0 1200 940" role="img" aria-label="GigaBrain architecture diagram: at the top, the real PO and the digital twin form the deliberative council; the twin sends each proposal to the critic, which returns a report, and saves the requirement in the requirements repository when the PO approves; the twin consults the consultative council below, led by a manager agent that checks the expert registry and, if there is no expert for the topic, creates one whose knowledge file is built from documents and the PO's answers.">
 
         <defs>
           <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6.4" markerHeight="6.4" orient="auto-start-reverse">
@@ -265,17 +266,6 @@
             <line x1="9" y1="14.5" x2="16" y2="14.5"/>
             <line x1="9" y1="17.5" x2="13" y2="17.5"/>
           </g>
-
-          <g id="ic-code" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M9,7 L4,12 L9,17"/>
-            <path d="M15,7 L20,12 L15,17"/>
-          </g>
-
-          <g id="ic-globe" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="8"/>
-            <ellipse cx="12" cy="12" rx="3.2" ry="8"/>
-            <line x1="4" y1="12" x2="20" y2="12"/>
-          </g>
         </defs>
 
         <style>
@@ -287,6 +277,7 @@
           .icon-agent{ color:var(--agent); }
           .icon-data{ color:var(--data); }
           .icon-output{ color:var(--output); }
+          .icon-critic{ color:var(--critic); }
           .icon-neutral{ color:var(--ink-muted); }
 
           .card-agent{ fill:none; stroke:var(--agent); stroke-width:1.4; stroke-dasharray:5 4; }
@@ -317,18 +308,33 @@
         <text class="title" x="585" y="165">Digital Twin</text>
         <text class="sub" x="585" y="181">the PO's main agent</text>
 
-        <!-- Defined Requirement -->
-        <use class="icon-output" href="#ic-doc" transform="translate(954,99) scale(2.2)"/>
-        <text class="title" x="980" y="165">Defined Requirement</text>
-        <text class="sub" x="980" y="181">aligned with the market</text>
+        <!-- Critic -->
+        <use class="icon-critic" href="#ic-agent" transform="translate(764,99) scale(2.2)"/>
+        <text class="title" x="790" y="165">Critic</text>
+        <text class="sub" x="790" y="181">scores, never writes</text>
+
+        <!-- Requirements Repository -->
+        <use class="icon-output" href="#ic-doc" transform="translate(984,99) scale(2.2)"/>
+        <text class="title" x="1010" y="165">Requirements Repository</text>
+        <text class="sub" x="1010" y="181">versions · links · trace</text>
 
         <!-- PO <-> Twin -->
         <line class="flow" x1="232" y1="125" x2="560" y2="125" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
         <text class="edge-label" x="396" y="111" text-anchor="middle">questions &amp; suggestions</text>
 
-        <!-- Twin -> Requirement -->
-        <line class="flow" x1="610" y1="125" x2="954" y2="125" marker-end="url(#arrow)"/>
-        <text class="edge-label" x="782" y="111" text-anchor="middle">when they approve</text>
+        <!-- Twin <-> Critic -->
+        <line class="flow" x1="612" y1="116" x2="762" y2="116" marker-end="url(#arrow)"/>
+        <line class="flow" x1="762" y1="134" x2="612" y2="134" marker-end="url(#arrow)"/>
+        <text class="edge-label" x="687" y="108" text-anchor="middle">proposal</text>
+        <text class="edge-label" x="687" y="150" text-anchor="middle">report · sends back what fails</text>
+
+        <!-- Repository -> Critic (comparison with what is already saved) -->
+        <line class="flow-muted" x1="982" y1="125" x2="818" y2="125" marker-end="url(#arrow-muted)"/>
+        <text class="edge-label" x="900" y="111" text-anchor="middle">compared with saved</text>
+
+        <!-- Twin -> Repository (only when the PO approves) -->
+        <path class="flow" d="M598,98 V72 H1010 V97" fill="none" marker-end="url(#arrow)"/>
+        <text class="edge-label" x="800" y="65" text-anchor="middle">saved when the PO approves</text>
 
         <!-- ===== Spine: Twin <-> Leader (starts after the Twin's text, stops before the Leader's icon) ===== -->
         <line class="flow" x1="573" y1="198" x2="573" y2="308" marker-end="url(#arrow)"/>
@@ -347,20 +353,20 @@
         <text class="title-sm" x="585" y="396">Consultative Council</text>
         <text class="sub" x="585" y="412">manager · always exists</text>
 
-        <!-- Main Database -->
+        <!-- Expert Registry -->
         <use class="icon-data" href="#ic-db" transform="translate(924,314) scale(2.2)"/>
-        <text class="title" x="950" y="380">Main Database</text>
-        <text class="sub" x="950" y="396">RAG · structure &amp; registry</text>
+        <text class="title" x="950" y="380">Expert Registry</text>
+        <text class="sub" x="950" y="396">topics · who knows what</text>
 
         <!-- Leader <-> MainDB -->
         <line class="flow" x1="610" y1="340" x2="923" y2="340" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
-        <text class="edge-label" x="766" y="326" text-anchor="middle">query &amp; registry</text>
+        <text class="edge-label" x="766" y="326" text-anchor="middle">look up &amp; register</text>
 
         <!-- Fan lines: Leader -> Experts (start after the Leader's text, stop before the icons/card) -->
         <line class="flow" x1="585" y1="428" x2="245" y2="468" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
         <line class="flow" x1="585" y1="428" x2="585" y2="468" marker-end="url(#arrow)" marker-start="url(#arrow)"/>
         <line class="flow-muted" x1="585" y1="428" x2="920" y2="480" marker-end="url(#arrow-muted)"/>
-        <text class="tag" x="710" y="445" text-anchor="start">creates it if not in the registry</text>
+        <text class="tag" x="710" y="445" text-anchor="start">creates one if the topic is new</text>
 
         <!-- Payments Expert -->
         <use class="icon-agent" href="#ic-agent" transform="translate(219,474) scale(2.2)"/>
@@ -369,39 +375,39 @@
 
         <!-- Notifications Expert -->
         <use class="icon-agent" href="#ic-agent" transform="translate(559,474) scale(2.2)"/>
-        <text class="title-sm" x="585" y="540">Expert · Notifications</text>
-        <text class="sub" x="585" y="556">domain knowledge</text>
+        <text class="title-sm" x="585" y="540">Expert · Quality</text>
+        <text class="sub" x="585" y="556">always present</text>
 
         <!-- + New Expert (does not exist yet: a card, no icon) — aligned with the top of the icons beside it -->
         <rect class="card-agent" x="780" y="480" width="280" height="86" rx="4"/>
         <text class="title-sm" x="920" y="540">+ New Expert</text>
         <text class="sub" x="920" y="556">created on demand</text>
 
-        <!-- Expert -> own RAG (the line starts after the text, stops before the icon) -->
+        <!-- Expert -> own knowledge file (the line starts after the text, stops before the icon) -->
         <line class="flow" x1="245" y1="572" x2="245" y2="618" marker-end="url(#arrow)"/>
         <line class="flow" x1="585" y1="572" x2="585" y2="618" marker-end="url(#arrow)"/>
         <line class="flow-muted" x1="920" y1="566" x2="920" y2="630" marker-end="url(#arrow-muted)"/>
 
-        <!-- Payments RAG -->
+        <!-- Payments knowledge file -->
         <use class="icon-data" href="#ic-db" transform="translate(219,624) scale(2.2)"/>
-        <text class="title-sm" x="245" y="690">RAG · Payments</text>
+        <text class="title-sm" x="245" y="690">Knowledge · Payments</text>
 
-        <!-- Notifications RAG -->
+        <!-- Quality knowledge file -->
         <use class="icon-data" href="#ic-db" transform="translate(559,624) scale(2.2)"/>
-        <text class="title-sm" x="585" y="690">RAG · Notifications</text>
+        <text class="title-sm" x="585" y="690">Knowledge · Quality</text>
 
-        <!-- Expert's RAG (does not exist yet: card, no icon) — aligned with the top of the RAG icons beside it -->
+        <!-- Expert's knowledge file (does not exist yet: card, no icon) -->
         <rect class="card-data" x="780" y="630" width="280" height="70" rx="4"/>
-        <text class="title-sm" x="920" y="671">Expert's RAG</text>
+        <text class="title-sm" x="920" y="671">Expert's knowledge file</text>
 
-        <!-- ===== External sources (outside the council) ===== -->
-        <use class="icon-neutral" href="#ic-code" transform="translate(759,804) scale(2.2)"/>
-        <text class="title-sm" x="785" y="870">Source code</text>
-        <text class="sub" x="785" y="886">study of the current system</text>
+        <!-- ===== What the PO provides (outside the council) ===== -->
+        <use class="icon-human" href="#ic-doc" transform="translate(759,804) scale(2.2)"/>
+        <text class="title-sm" x="785" y="870">Documents</text>
+        <text class="sub" x="785" y="886">handed in by the PO</text>
 
-        <use class="icon-neutral" href="#ic-globe" transform="translate(1024,804) scale(2.2)"/>
-        <text class="title-sm" x="1050" y="870">Web research</text>
-        <text class="sub" x="1050" y="886">when the domain is new</text>
+        <use class="icon-human" href="#ic-person" transform="translate(1024,804) scale(2.2)"/>
+        <text class="title-sm" x="1050" y="870">PO's answers</text>
+        <text class="sub" x="1050" y="886">learned from the conversation</text>
 
         <line class="flow-muted" x1="785" y1="798" x2="905" y2="700" marker-end="url(#arrow-muted)"/>
         <line class="flow-muted" x1="1050" y1="798" x2="935" y2="700" marker-end="url(#arrow-muted)"/>
@@ -410,14 +416,15 @@
     </div>
 
     <figcaption>
-      <b>Figure 1.</b> Multi-agent architecture of GigaBrain. The real PO and the digital twin debate in the deliberative council until they approve a requirement together. To get there, the twin consults the consultative council — whose leader checks in the main database whether an expert for the domain already exists, reusing it or creating a new one (dashed, does not exist yet), which builds its own RAG by studying the existing code or searching the web.
+      <b>Figure 1.</b> Multi-agent architecture of GigaBrain. The real PO and the digital twin debate in the deliberative council. Each proposal goes to the critic, which returns a report and sends back what does not pass, comparing it with the requirements already saved; it informs, it does not decide. When the PO approves, the requirement is saved in the repository of the project. To get there, the twin consults the consultative council — whose leader checks the registry whether an expert for the topic already exists, reusing it or creating a new one (dashed, does not exist yet), which builds its own knowledge file from documents and the PO's answers. The twin, the leader and the experts call the language model; the critic scores without it by default.
     </figcaption>
 
     <div class="legend">
       <span><i style="background:var(--human)"></i>Human</span>
       <span><i style="background:var(--agent)"></i>Agent (LLM)</span>
-      <span><i style="background:var(--data)"></i>Knowledge base (RAG)</span>
-      <span><i style="background:var(--output)"></i>Output artifact</span>
+      <span><i style="background:var(--critic)"></i>Validator (no LLM by default)</span>
+      <span><i style="background:var(--data)"></i>Knowledge file</span>
+      <span><i style="background:var(--output)"></i>Saved requirements</span>
       <span><i class="dashed"></i>Does not exist yet / on demand</span>
     </div>
   </figure>
@@ -432,9 +439,11 @@
       <tbody>
         <tr><td>Real PO</td><td>The person who actually decides; asks questions, proposes changes and approves the final version of the requirement.</td></tr>
         <tr><td>Digital Twin</td><td>Replica of the real PO inside the system; debates with the human, asks the consultative council the right question and translates the answer into product language.</td></tr>
-        <tr><td>Leader of the Consultative Council</td><td>The only agent present from the start; queries the main database, decides whether an expert already exists and creates a new one when the domain is new.</td></tr>
-        <tr><td>Domain Experts</td><td>Agents created on demand, one per area of the system (payments, notifications, etc.); each keeps its own RAG and answers the leader.</td></tr>
-        <tr><td>RAG bases</td><td>A shared base with the structure of the platform and one base per expert, fed by the existing code or by research when the topic is new.</td></tr>
+        <tr><td>Critic</td><td>Scores each proposed requirement (ambiguity, completeness, verifiability, consistency with the saved ones) without an LLM by default; reports to the twin and sends back what fails. It informs, it never writes or decides.</td></tr>
+        <tr><td>Leader of the Consultative Council</td><td>The only agent present from the start; consults the expert registry, decides whether an expert already exists and creates a new one when the topic is new.</td></tr>
+        <tr><td>Domain Experts</td><td>Agents created on demand, one per topic (payments, search, etc.), plus a quality expert that is always present; each keeps its own knowledge file and answers the leader.</td></tr>
+        <tr><td>Knowledge files</td><td>One Markdown file per expert, fed by the documents and the answers the PO provides. No source code and no web research.</td></tr>
+        <tr><td>Requirements Repository</td><td>Stores the approved requirements (user story, EARS statement and Given/When/Then criteria) with versions, links and traceability. Each project has its own repository.</td></tr>
       </tbody>
     </table>
   </section>
@@ -444,13 +453,14 @@
     <ol class="steps">
       <li>The <b>real PO</b> asks: "I want to add a notification to the payment".</li>
       <li>The <b>digital twin</b> passes the question to the leader of the consultative council.</li>
-      <li>The <b>leader</b> queries the main database: is there already a payments expert?</li>
-      <li>If there is, the leader asks it directly; if not, it <b>creates a new expert</b>, which studies the code of the payment system — and searches the web if the concept is new.</li>
-      <li>The <b>expert</b> answers the leader, which consolidates the knowledge and returns it to the digital twin — which resumes the conversation with the real PO until both approve the final story.</li>
+      <li>The <b>leader</b> consults the registry: is there already a payments expert?</li>
+      <li>If there is, the leader asks it directly; if not, it <b>creates a new expert</b> and sends the question back to the PO through the twin, since the new expert only knows what the PO tells it.</li>
+      <li>The <b>expert</b> answers the leader, which consolidates the knowledge and returns it to the digital twin — which resumes the conversation with the real PO.</li>
+      <li>When the twin proposes a requirement, the <b>critic</b> scores it and reports what is ambiguous or missing; the twin revises and the PO <b>approves</b> it, saving it in the project's repository.</li>
     </ol>
   </section>
 
-  <footer>Architecture draft — GigaBrain, Master's · subject to revision as the research progresses</footer>
+  <footer>Architecture draft, version 2 — GigaBrain, Master's · subject to revision as the research progresses</footer>
 </div>
 </body>
 </html>
