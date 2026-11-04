@@ -203,6 +203,9 @@ class SimulatedProvider:
         leader_answers = [m["consolidated_answer"] for m in received if m.get("from") == "leader"]
         last = received[-1]
 
+        if last.get("reason") == "language":  # rules cannot translate: the same answer goes back
+            return self._twin(messages[:-1])
+
         if last.get("from") == "po" and not leader_answers:
             return {"action": "consult", "message_to_po": "I will consult the experts before proposing anything.",
                     "query": {"question": last["text"], "topics": _guess_topics(" ".join(po_texts))}, "requirements": []}

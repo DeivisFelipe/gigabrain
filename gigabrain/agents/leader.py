@@ -28,6 +28,9 @@ involve several topics: "notify the customer when the payment is confirmed" invo
 and notifications. Reuse existing experts; suggest a new topic only when no existing expert
 covers the subject. Topics are about the business, never about code.
 
+LANGUAGE: write each "question" and "description" in the language given in "language", even when
+the query is in another one. When no "language" comes, use the language of the query.
+
 Answer with a single JSON object:
 {
   "subqueries": [
@@ -42,6 +45,9 @@ You are the Leader of the Consultative Council of GigaBrain. Merge the experts' 
 single answer for the Digital Twin. Point out conflicts between experts or with existing
 requirements, and keep the questions only the PO can answer.
 
+LANGUAGE: write "summary", "conflicts" and "questions_for_po" in the language given in "language",
+even when an expert answered in another one. When no "language" comes, use the language of the "question".
+
 Answer with a single JSON object:
 {"summary": "...", "conflicts": ["..."], "questions_for_po": ["..."], "related_requirements": ["R1", ...]}
 """
@@ -55,13 +61,15 @@ class Leader(Agent):
 
     # ------------------------------------------------------------------ conversation with the PO
 
-    def consult(self, question: str, topics: list[str]) -> dict:
+    def consult(self, question: str, topics: list[str], language: str | None = None) -> dict:
+        """`language`: the PO's, when the code could tell it (language.py)."""
         experts = self.ctx.db.list_experts()
         decomposition = self.call_llm("leader_decompose", DECOMPOSE_PROMPT, [{"role": "user", "content": as_json({
             "question": question,
             "suggested_topics": topics,
             "experts": [{"id": e["id"], "topic": e["topic"], "description": e["description"]} for e in experts],
             "mode": self.ctx.mode,
+            **({"language": language} if language else {}),
         })}])
         subqueries = decomposition.get("subqueries") or [
             {"expert_id": None, "topic": t, "description": f"Requirements about {t}", "question": question} for t in topics
@@ -75,9 +83,9 @@ class Leader(Agent):
                 without_expert.append(sub["topic"])
                 continue
             self.send(expert(exp.id), "query", {"question": sub["question"], "topic": exp.topic})
-            answers.append(exp.answer(sub["question"]))
+            answers.append(exp.answer(sub["question"], language))
 
-        consolidated = self._consolidate(question, answers)
+        consolidated = self._consolidate(question, answers, language)
         if without_expert:
             consolidated["questions_for_po"].append(
                 "There is no expert yet for: " + ", ".join(without_expert)
@@ -87,7 +95,7 @@ class Leader(Agent):
         self.send(TWIN, "consolidated_answer", consolidated)
         return consolidated
 
-    def _consolidate(self, question: str, answers: list[dict]) -> dict:
+    def _consolidate(self, question: str, answers: list[dict], language: str | None = None) -> dict:
         empty = {"summary": "", "conflicts": [], "questions_for_po": [], "related_requirements": []}
         if not answers:
             return {**empty, "summary": "No expert available to answer."}
@@ -97,6 +105,7 @@ class Leader(Agent):
                     "related_requirements": list(a["related_requirements"])}
         result = self.call_llm("leader_consolidate", CONSOLIDATE_PROMPT, [{"role": "user", "content": as_json({
             "question": question, "answers": answers,
+            **({"language": language} if language else {}),
         })}])
         return {key: result.get(key, default) for key, default in empty.items()}
 
