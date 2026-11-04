@@ -19,7 +19,8 @@ The PO always has the final word: nothing is saved without explicit approval.
 from __future__ import annotations
 
 from .. import requirement_format
-from ..messages import LEADER, PO, TWIN
+from ..language import spoken_language, written_in
+from ..messages import LEADER, PO, SYSTEM, TWIN
 from .base import Agent, as_json
 
 # The requirement structure every prompt asks for (see requirement_format.py).
@@ -84,7 +85,9 @@ You receive JSON messages:
 If the Leader returns questions_for_po, take them to the PO before proposing.
 If there are conflicts, show them to the PO and let the PO decide.
 
-LANGUAGE: write "message_to_po" and the requirements in the language the PO uses.
+LANGUAGE: write "message_to_po", the "question" of the query and the requirements in the
+language given in "language", even when the Consultative Council answers in another language.
+When a message brings no "language", use the language the PO uses.
 
 Always answer with a single JSON object:
 {{
@@ -194,6 +197,7 @@ class DigitalTwin(Agent):
     def __init__(self, ctx):
         super().__init__(ctx)
         self.history: list[dict] = []
+        self.language: str | None = None  # the PO's, as far as the code can tell (language.py)
 
     # ------------------------------------------------------------------ conversation with the PO
 
@@ -206,8 +210,10 @@ class DigitalTwin(Agent):
         self._announce(decision)
         return decision
 
-    def _think(self, data: dict) -> dict:
+    def _think(self, data: dict, may_retry: bool = True) -> dict:
         """Take one message and decide the next action, without telling anyone yet."""
+        if self.language:
+            data = {**data, "language": self.language}
         self.history.append({"role": "user", "content": as_json(data)})
         decision = self.call_llm("twin", SYSTEM_PROMPT, self.history)
         decision["requirements"] = decision.get("requirements") or []
@@ -222,7 +228,20 @@ class DigitalTwin(Agent):
             for r in decision["requirements"]
         ]
         self.history.append({"role": "assistant", "content": as_json(decision)})
+        if self.language and not self._in_language(decision):
+            if may_retry:  # here, before the query reaches the Leader and the other agents follow it
+                self.send(SYSTEM, "language_retry", {"text": f"the answer was not in {self.language}; asked once more"})
+                return self._think({"from": "system", "reason": "language", "notice":
+                                    f"Your last answer was not in {self.language}. Give the same answer in {self.language}."}, False)
+            self.send(SYSTEM, "language_off", {"text": f"the answer is still not in {self.language}; it goes on as it is"})
         return decision
+
+    def _in_language(self, decision: dict) -> bool:
+        texts = [decision["message_to_po"], (decision.get("query") or {}).get("question") or ""]
+        for requirement in decision["requirements"]:
+            criteria = requirement.get("acceptance_criteria") or []
+            texts += [requirement["statement"], " ".join(f"{c.get('given')} {c.get('when')} {c.get('then')}" for c in criteria)]
+        return all(written_in(text, self.language) for text in texts)
 
     def _announce(self, decision: dict) -> None:
         if decision["action"] == "consult":
@@ -233,6 +252,7 @@ class DigitalTwin(Agent):
             self.send(PO, "question_to_po", {"text": decision.get("message_to_po", "")})
 
     def hear_po(self, text: str) -> dict:
+        self.language = spoken_language(text) or self.language  # a short "yes" keeps the language of the conversation
         return self._decide({"from": "po", "text": text})
 
     def hear_leader(self, consolidated_answer: dict) -> dict:
