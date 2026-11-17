@@ -10,8 +10,9 @@ import json
 import tempfile
 import unittest
 
+from gigabrain.agents.leader import Leader
 from gigabrain.council import Council, open_context
-from gigabrain.language import spoken_language, written_in
+from gigabrain.language import phrase, spoken_language, written_in
 from gigabrain.providers import SimulatedProvider
 
 REQUEST_EN = "I need a requirement that allows registered users to change their email, but only once every 30 days"
@@ -186,3 +187,79 @@ class TestTheTwinIsChecked(Conversation):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFixedTexts(Conversation):
+    """What the code itself says to the PO follows the conversation too: "Saved: R1 v1." came in English in Portuguese."""
+
+    def test_the_confirmation_in_portuguese(self):
+        _, answers = self.talk(SimulatedProvider(), REQUEST_PT, REQUEST_PT, "aprovado")
+        self.assertTrue(answers[-1]["message_to_po"].startswith("Requisitos gravados: R1 v1"), answers[-1]["message_to_po"])
+
+    def test_the_confirmation_in_english(self):
+        _, answers = self.talk(SimulatedProvider(), REQUEST_EN, REQUEST_EN, "approved")
+        self.assertTrue(answers[-1]["message_to_po"].startswith("Saved: R1 v1"), answers[-1]["message_to_po"])
+
+    def test_a_language_without_the_text_gets_english(self):
+        self.assertEqual(phrase("nothing_to_approve", "French"), "There is no proposal to approve yet.")
+        self.assertEqual(phrase("nothing_to_approve", None), "There is no proposal to approve yet.")
+        self.assertEqual(phrase("nothing_to_approve", "Brazilian Portuguese"), "Ainda não há proposta para aprovar.")
+
+
+class TestIdentifiersAreNotWords(unittest.TestCase):
+    # The Twin's question to the Council in a real run in Portuguese: asked again twice for nothing.
+    QUERY = ("Quais pontos concretos estão a impedir a aprovação dos requisitos P3 (listagem de nomes em ordem alfabética) e P5 "
+             "(exclusão de nome registado), sobretudo a falta de suporte face às fontes citadas (c-20261104-144648, "
+             "expert:gestao-de-nomes-e-identificadores, expert:portabilidade-e-ambientes-posix)? Que sugestões de correção "
+             "permitem elevar o suporte acima de 30% sem alterar o âmbito?")
+
+    def test_a_question_full_of_ids_is_still_portuguese(self):
+        self.assertTrue(written_in(self.QUERY, "Portuguese"))
+        self.assertFalse(written_in(self.QUERY, "English"))
+
+    def test_only_ids_say_nothing(self):
+        self.assertTrue(written_in("R1 v2, R3 v1, POSIX IEEE 1003.1-2024, expert:nomes, c-20261104-144648", "English"))
+
+
+class TestKnowledgeFiles(Conversation):
+    """listagem.md, edicao.md and exclusao.md were written in English in a conversation in Portuguese."""
+
+    def test_an_expert_born_in_the_conversation_writes_in_its_language(self):
+        provider = Script()
+        self.talk(provider, REQUEST_PT, REQUEST_PT, "aprovado")
+        for role in ("expert_create", "expert_update"):
+            for received in provider.received.get(role, []):
+                with self.subTest(role):
+                    self.assertEqual(received["language"], "Portuguese")
+        self.assertIn("expert_create", provider.received)
+
+    def test_a_meeting_keeps_its_prompts(self):
+        provider = Script()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        ctx = open_context(tmp.name, provider, validation=False)
+        self.addCleanup(ctx.db.close)
+        Leader(ctx).consult_draft({"topic": "accounts", "statement": "The system shall export reports.", "class": "FR",
+                                   "subtype": None, "turns": []}, {})
+        self.assertNotIn("language", provider.received["expert_create"][0])
+
+
+class TestAcceptanceCriteria(unittest.TestCase):
+    # Criteria of real proposals in Portuguese, joined as the Twin's check joins them: each one was asked again
+    # for nothing, because the words Portuguese shares with Spanish and Italian do not count. "o" now does.
+    CRITERIA_PT = [
+        "a lista contém 'Ana' o usuário tenta alterar 'Ana' para 'Ana Maria' o sistema rejeita a alteração e a lista "
+        "continua contendo 'Ana' a lista contém 'Ana' o usuário exclui 'Ana' e registra 'Ana Maria' a lista passa a conter 'Ana Maria'",
+        "que o usuário informa o nome \"Ana\" confirma o cadastro o sistema registra \"Ana\" e ele passa a aparecer na listagem "
+        "que o campo nome está vazio tenta confirmar o cadastro o sistema recusa o cadastro e exibe mensagem de que o nome é obrigatório",
+    ]
+    SPANISH = "Cuando el usuario registra un nombre, el sistema debe almacenar el nombre informado o rechazarlo si está vacío."
+
+    def test_criteria_in_portuguese_are_portuguese(self):
+        for text in self.CRITERIA_PT:
+            with self.subTest(text[:30]):
+                self.assertTrue(written_in(text, "Portuguese"))
+                self.assertFalse(written_in(text, "English"))
+
+    def test_one_shared_word_does_not_make_spanish_portuguese(self):
+        self.assertFalse(written_in(self.SPANISH, "Portuguese"))

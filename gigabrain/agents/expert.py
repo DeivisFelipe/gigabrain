@@ -60,6 +60,14 @@ Answer with a single JSON object:
 {"knowledge_markdown": "...", "changes": ["what changed, in short sentences"]}
 """
 
+# Added to CREATE_PROMPT and UPDATE_PROMPT only in a conversation, when the code knows the PO's language
+# (language.py): the meeting in batch keeps its prompts as they are.
+KNOWLEDGE_LANGUAGE_NOTE = """
+LANGUAGE: write the knowledge file in the language given in "language", even when the requirements,
+the description or the current file are in another one. Keep the section titles ("## ...") of the
+template exactly as they are: the code finds the sections by them.
+"""
+
 QUALITY_PROMPT = """\
 You are the quality expert of GigaBrain. Your only job is to check the classification of a draft
 requirement: functional (FR) or non-functional (NFR) and, if NFR, the subtype. Use the rules and
@@ -121,15 +129,18 @@ class Expert(Agent):
     # ------------------------------------------------------------------ creation
 
     @classmethod
-    def create(cls, ctx, topic: str, description: str, created_by: str = LEADER) -> Expert:
+    def create(cls, ctx, topic: str, description: str, created_by: str = LEADER, language: str | None = None) -> Expert:
+        """`language`: the PO's, in a conversation; the file is written in it."""
         id_ = slug(topic)
         data = ctx.db.create_expert(id_, topic, description, knowledge.path(ctx.knowledge_folder, id_))
         new = cls(ctx, data)
-        answer = new.call_llm("expert_create", CREATE_PROMPT, [{"role": "user", "content": as_json({
+        answer = new.call_llm("expert_create", CREATE_PROMPT + (KNOWLEDGE_LANGUAGE_NOTE if language else ""),
+                              [{"role": "user", "content": as_json({
             "topic": topic,
             "description": description,
             "template": knowledge.initial_template(topic, description),
             "topic_requirements": new.topic_requirements(),
+            **({"language": language} if language else {}),
         })}])
         md = answer.get("knowledge_markdown") or knowledge.initial_template(topic, description)
         new._store(md, "creation", {"created_by": created_by})
@@ -170,13 +181,15 @@ class Expert(Agent):
             return None
         return self._store(md, "manual edit", {"file": self.file})
 
-    def update(self, trigger: dict, reason: str) -> int | None:
+    def update(self, trigger: dict, reason: str, language: str | None = None) -> int | None:
         self.sync()
-        answer = self.call_llm("expert_update", UPDATE_PROMPT, [{"role": "user", "content": as_json({
+        answer = self.call_llm("expert_update", UPDATE_PROMPT + (KNOWLEDGE_LANGUAGE_NOTE if language else ""),
+                               [{"role": "user", "content": as_json({
             "current_knowledge": self.read_knowledge(),
             "trigger": trigger,
             "topic_requirements": self.topic_requirements(),
             "max_chars": knowledge.MAX_CHARS,
+            **({"language": language} if language else {}),
         })}])
         md = answer.get("knowledge_markdown")
         if not md:
