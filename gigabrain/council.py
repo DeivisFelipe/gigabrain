@@ -93,7 +93,7 @@ class Council:
                     decision = {"action": "ask", "message_to_po": decision.get("message_to_po", ""), "requirements": []}
                 break
             query = decision.get("query") or {}
-            answer = self.leader.consult(query.get("question") or text, query.get("topics") or [])
+            answer = self.leader.consult(query.get("question") or text, query.get("topics") or [], self.twin.language)
             self._keep_sources(answer)
             consultations += 1
             decision = self.twin.hear_leader(answer)

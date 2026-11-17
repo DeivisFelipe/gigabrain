@@ -26,6 +26,10 @@ to code: only to your knowledge file and the requirements of your topic. Answer 
 question using only that material. If you do not know, say so and turn the gap into a question
 for the PO.
 
+LANGUAGE: write "answer", "conflicts" and "questions_for_po" in the language given in "language",
+even when the question or your knowledge file is in another one. When no "language" comes, use
+the language of the question.
+
 Answer with a single JSON object:
 {
   "answer": "what you know that matters for the question",
@@ -260,13 +264,14 @@ class Expert(Agent):
 
     # ------------------------------------------------------------------ queries in a conversation
 
-    def answer(self, question: str) -> dict:
+    def answer(self, question: str, language: str | None = None) -> dict:
         self.sync()
         self.ctx.db.count_consultation(self.id)
         answer = self.call_llm("expert_answer", ANSWER_PROMPT, [{"role": "user", "content": as_json({
             "question": question,
             "knowledge": self.read_knowledge(),
             "topic_requirements": self.topic_requirements(),
+            **({"language": language} if language else {}),
         })}])
         result = {
             "expert_id": self.id,

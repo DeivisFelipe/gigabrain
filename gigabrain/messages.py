@@ -62,6 +62,8 @@ KINDS = {
                          "the scores of each competency for what the agent produced",
     "validation_return": "Critic -> Agent. {stage, round, artefacts, failed_dimensions, text}: "
                          "an artefact that did not pass goes back to the agent that wrote it",
+    "language_retry": "Twin -> System. {text}: its answer was not in the language of the PO, so it is asked once more",
+    "language_off": "Twin -> System. {text}: asked again, the answer is still not in that language",
     "llm_call": "Agent -> LLM. {role, duration_ms, tokens?}",
     "error": "Any -> System. {error}",
 }
