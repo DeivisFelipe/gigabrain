@@ -79,7 +79,7 @@ class Leader(Agent):
 
         answers, without_expert = [], []
         for sub in subqueries:
-            exp = self._get_or_create(sub)
+            exp = self._get_or_create(sub, language)
             if not exp:
                 without_expert.append(sub["topic"])
                 continue
@@ -144,7 +144,7 @@ class Leader(Agent):
         self.send(REGISTRY, "expert_created", {"expert_id": QUALITY_ID, "topic": QUALITY_ID, "description": QUALITY_DESCRIPTION})
         return Expert.create_fixed(self.ctx, QUALITY_ID, QUALITY_ID, QUALITY_DESCRIPTION, knowledge.NFR_TAXONOMY)
 
-    def _get_or_create(self, sub: dict) -> Expert | None:
+    def _get_or_create(self, sub: dict, language: str | None = None) -> Expert | None:
         id_ = sub.get("expert_id") or slug(sub["topic"])
         existing = Expert.load(self.ctx, id_)
         if existing:
@@ -156,4 +156,4 @@ class Leader(Agent):
         # Announce before creating: creation already records the first knowledge version.
         description = sub.get("description") or f"Requirements about {sub['topic']}"
         self.send(REGISTRY, "expert_created", {"expert_id": slug(sub["topic"]), "topic": sub["topic"], "description": description})
-        return Expert.create(self.ctx, sub["topic"], description)
+        return Expert.create(self.ctx, sub["topic"], description, language=language)

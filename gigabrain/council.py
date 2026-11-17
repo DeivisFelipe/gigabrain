@@ -164,9 +164,10 @@ class Council:
                     _record(self.ctx, LEADER, REGISTRY, "pending", {"motive": "approved requirement in a topic without an expert", "topic": topic})
                     continue
                 # A new expert reads the topic requirements when it is born, including this one.
-                Expert.create(self.ctx, topic, f"Business rules and requirements about {topic}.", created_by=SYSTEM)
+                Expert.create(self.ctx, topic, f"Business rules and requirements about {topic}.", created_by=SYSTEM,
+                              language=self.twin.language)
                 continue
-            exp.update(trigger, f"{req['id']} v{req['current_version']} approved")
+            exp.update(trigger, f"{req['id']} v{req['current_version']} approved", self.twin.language)
 
 
 def feed_expert(ctx: Context, expert_id: str, document_name: str, text: str) -> int | None:

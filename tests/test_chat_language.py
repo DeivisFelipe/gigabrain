@@ -10,6 +10,7 @@ import json
 import tempfile
 import unittest
 
+from gigabrain.agents.leader import Leader
 from gigabrain.council import Council, open_context
 from gigabrain.language import phrase, spoken_language, written_in
 from gigabrain.providers import SimulatedProvider
@@ -218,3 +219,26 @@ class TestIdentifiersAreNotWords(unittest.TestCase):
 
     def test_only_ids_say_nothing(self):
         self.assertTrue(written_in("R1 v2, R3 v1, POSIX IEEE 1003.1-2024, expert:nomes, c-20261104-144648", "English"))
+
+
+class TestKnowledgeFiles(Conversation):
+    """listagem.md, edicao.md and exclusao.md were written in English in a conversation in Portuguese."""
+
+    def test_an_expert_born_in_the_conversation_writes_in_its_language(self):
+        provider = Script()
+        self.talk(provider, REQUEST_PT, REQUEST_PT, "aprovado")
+        for role in ("expert_create", "expert_update"):
+            for received in provider.received.get(role, []):
+                with self.subTest(role):
+                    self.assertEqual(received["language"], "Portuguese")
+        self.assertIn("expert_create", provider.received)
+
+    def test_a_meeting_keeps_its_prompts(self):
+        provider = Script()
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        ctx = open_context(tmp.name, provider, validation=False)
+        self.addCleanup(ctx.db.close)
+        Leader(ctx).consult_draft({"topic": "accounts", "statement": "The system shall export reports.", "class": "FR",
+                                   "subtype": None, "turns": []}, {})
+        self.assertNotIn("language", provider.received["expert_create"][0])
