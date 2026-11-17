@@ -28,6 +28,7 @@ What these checks can and cannot decide:
 
 from __future__ import annotations
 
+import re
 from typing import Iterable
 
 from ...database import LINK_KINDS
@@ -37,9 +38,68 @@ from ..ports import NullTraceabilityProvider
 from ..registry import CheckContext, item_check
 from ..text import containment, coverage, jaccard, language_of, normalize
 from ._requires import requires_sources
+from ._sources import said_by_someone
 
 #: Claims carried as links that the repository does not store as links.
 CLAIM_KINDS = ("base", "duplicates")
+#: Sources that record what someone said, as opposed to what the system wrote (expert knowledge, requirements).
+SPOKEN_KINDS = ("turn", "conversation", "need", "transcript")
+
+#: A number written with digits ("2", "1.5", "1003.1"), not part of an identifier (R2, v1).
+#: A full stop or a comma after it ends the sentence or the clause, not the number: "até 5." and
+#: "IEEE 1003.1, versões" have the numbers 5 and 1003.1 (17/11/2026; before, a number at the end of a
+#: sentence was neither read from the statement nor found in the source, which made a false alarm).
+_NOT_AFTER = r"(?!\w)(?![.,]\d)"
+_DIGITS_RE = re.compile(rf"(?<![\w.,])\d+(?:[.,]\d+)?{_NOT_AFTER}")
+#: The numbers a source may have spelled out instead.
+_SPELLED = {"1": "one|um|uma", "2": "two|dois|duas", "3": "three|tres", "4": "four|quatro", "5": "five|cinco",
+            "6": "six|seis", "7": "seven|sete", "8": "eight|oito", "9": "nine|nove", "10": "ten|dez"}
+
+
+def _number_in(number: str, said: str) -> bool:
+    if re.search(rf"(?<![\w.,]){re.escape(number)}{_NOT_AFTER}", said):
+        return True
+    spelled = _SPELLED.get(number)
+    return bool(spelled and re.search(rf"\b(?:{spelled})\b", said))
+
+
+@item_check(
+    id="grounding.number_supported",
+    dimension=Dimension.CORRECTNESS,
+    severity=Severity.MAJOR,
+    description=(
+        "Every number written with digits in the statement is in a cited source, in digits or "
+        "spelled out (one to ten). A number nobody gave is the writer's assumption."
+    ),
+    weight=1.5,
+    requires="Looks at statements with digits whose cited sources could be read; skipped when the run has no sources.",
+    applies=requires_sources,
+)
+def number_supported(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
+    """Layer 1 is blind to a number added to a real requirement (0 of 24 on 02/11); this is the
+    lexical part of that blindness, measured on 16/11: 23 of 24 inserted numbers, 0 false alarms in
+    119 real statements of the meetings. What the sources say is what someone said, so a saved
+    requirement does not vouch for its own number through the knowledge of the expert it cites."""
+    numbers = sorted(set(_DIGITS_RE.findall(normalize(artifact.statement, keep_punct=True))))
+    if not numbers:
+        return
+    cited = [ctx.envelope.source(ref.source_id) for ref in artifact.evidence]
+    said = normalize("\n".join(said_by_someone(source) for source in cited if source is not None), keep_punct=True)
+    if not said.strip():
+        return  # nothing to compare with: evidence_present and evidence_resolvable say so
+    missing = [n for n in numbers if not _number_in(n, said)]
+    if missing:
+        yield Finding(
+            check_id="grounding.number_supported",
+            dimension=Dimension.CORRECTNESS,
+            severity=Severity.MAJOR,
+            level=Level.ITEM,
+            target_id=artifact.id,
+            locator="statement",
+            excerpt=", ".join(missing),
+            message=f"The statement gives a number the cited sources do not: {', '.join(missing)}.",
+            suggestion="A number nobody gave is an assumption. Ask the PO for it, or leave it out; do not keep it as a guess.",
+        )
 
 
 @item_check(
@@ -136,16 +196,16 @@ def quote_supported(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
     dimension=Dimension.CORRECTNESS,
     severity=Severity.MAJOR,
     description=(
-        "When the artefact cites sources without quoting them, its statement shares enough "
-        "content words with the cited text."
+        "The statement shares enough content words with the sources it cites. A literal quote "
+        "that is really in the source does not vouch for a statement that shares nothing with it."
     ),
     weight=2.0,
-    requires="Looks at artefacts whose references carry no quote; skipped when the run has no sources.",
+    requires="Looks at artefacts whose cited sources could be read; skipped when the run has no sources.",
     applies=requires_sources,
 )
 def statement_supported(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
     claim = artifact.headline().strip()
-    if not claim or any((ref.quote or "").strip() for ref in artifact.evidence):
+    if not claim:
         return
     cited = [ctx.envelope.source(ref.source_id) for ref in artifact.evidence]
     cited = [source for source in cited if source is not None]
@@ -156,7 +216,10 @@ def statement_supported(artifact: Artifact, ctx: CheckContext) -> Iterable[Findi
     score = coverage(claim, said, stopwords=STOPWORDS)
     if score < threshold:
         names = ", ".join(source.id for source in cited[:5])
-        written, source_language = language_of(claim), language_of(said)
+        # The language of whoever asked is the language of what was said (a turn, the conversation),
+        # not of an expert's knowledge file, which the system may have written in the other one.
+        spoken = "\n".join(source.text for source in cited if source.kind in SPOKEN_KINDS)
+        written, source_language = language_of(claim), (language_of(spoken) if spoken else None)
         if written and source_language and written != source_language:
             # Words of two languages cannot be compared, and "keep the words" does not tell the agent what happened.
             yield Finding(

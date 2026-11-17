@@ -66,6 +66,12 @@ class TestConsistency(DocumentCheckCase):
         denies = user_story("REQ-002", story="Como moderador do fórum, quero não agrupar denúncias do mesmo tópico, para que eu decida uma vez.")
         self.assertIn("consistency.negation_conflict", check_ids(self.findings_for(envelope(states, denies))))
 
+    def test_a_contraction_is_a_negation(self):
+        # "won't unlock" did not count as a negation in the keepass meetings (D-019, 02/11/2026).
+        states = artifact("R1", statement="The master password will unlock the database from now on.", ears_pattern="ubiquitous")
+        denies = artifact("R2", statement="The master password won't unlock the database from now on.", ears_pattern="ubiquitous")
+        self.assertEqual(self.severities(self.findings_for(envelope(states, denies)), "consistency.negation_conflict"), [Severity.MINOR])
+
     def test_same_requirement_with_another_value(self):
         fast = artifact("R1", statement="The review queue shall load the first page within 2 seconds.", ears_pattern="ubiquitous")
         slow = artifact("R2", statement="The review queue shall load the first page within 4 seconds.", ears_pattern="ubiquitous")

@@ -106,6 +106,22 @@ class TestSummary(unittest.TestCase):
 
 
 class TestAgentFeedback(unittest.TestCase):
+    def test_a_feedback_line_quotes_the_words_next_to_the_locator(self):
+        # "acceptance_criteria[1]" counts from one; the excerpt says which criterion it is (16/11/2026).
+        from gigabrain.validation.model import Dimension, Finding, Severity
+        from gigabrain.validation.report import feedback_lines
+        finding = Finding(check_id="verifiability.criterion_observable", dimension=Dimension.VERIFIABLE,
+                          severity=Severity.MAJOR, message="The acceptance criterion states no observable effect and no quantity.",
+                          target_id="P1", locator="acceptance_criteria[1].then", excerpt="o sistema termina com código de saída 1")
+        [line] = feedback_lines([finding])
+        self.assertIn('P1 (acceptance_criteria[1].then) "o sistema termina com código de saída 1":', line)
+        # A long excerpt is cut, and one the message already quotes (the judge's) is not repeated.
+        long = Finding(check_id="x", dimension=Dimension.VERIFIABLE, severity=Severity.MAJOR, message="m", target_id="P1", excerpt="w " * 80)
+        self.assertLess(len(feedback_lines([long])[0]), 120)
+        judged = Finding(check_id="judge.unsupported_content", dimension=Dimension.CORRECTNESS, severity=Severity.MAJOR,
+                         message='LLM judge: "only administrators" is not said in the sources (rule).', target_id="P1", excerpt="only administrators")
+        self.assertEqual(feedback_lines([judged])[0].count("only administrators"), 1)
+
     def test_with_no_findings_it_says_there_is_nothing_to_fix(self):
         self.assertIn("nothing to fix", to_agent_feedback(ValidationEngine().validate(envelope())))
 

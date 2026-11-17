@@ -6,10 +6,10 @@ already states the ruler ("every 'then' must be verifiable: no fast, easy,
 user-friendly without a number") and these checks apply it from outside.
 
 A criterion counts as observable when it brings (a) an observable effect of the
-system or (b) a measurable quantity; a plain-text criterion may also bring (c) a
-conditional structure. In a Gherkin criterion the structure is given, so what is
-looked at is the Then clause: "then the system behaves as described" has the
-form of a criterion and tests nothing.
+system, (b) a measurable quantity or (c) a literal expected value; a plain-text
+criterion may also bring (d) a conditional structure. In a Gherkin criterion the
+structure is given, so what is looked at is the Then clause: "then the system
+behaves as described" has the form of a criterion and tests nothing.
 """
 
 from __future__ import annotations
@@ -60,9 +60,57 @@ _STATED_ACTION_RE = re.compile(
 )
 
 
+#: The same in Portuguese (16/11/2026). In the real conversations the Twin wrote "o sistema termina
+#: com código de saída 1", "o sistema encerra sem executar", "é utilizada", "não oferece", and the
+#: lexicon had none of these verbs. Three forms: passive voice ("é exibido", "são listados", "fica
+#: registado"), a negated verb ("não altera"), and a subject of the system type followed by a verb in
+#: the third person ("o sistema termina"). The endings are those of the present and of the preterite;
+#: the words that take the same position without being an action (adverbs, determiners, the state and
+#: auxiliary verbs) are listed, as are the participles that state an expectation ("é suportado",
+#: "é considerado", "é declarado"), which are the vague ones.
+_PT_SUBJECTS = ("sistema|site|aplicacao|app|servidor|servico|plataforma|software|ferramenta|api|pagina|"
+                "modulo|componente|solucao|programa|interface|banco")
+_PT_NOT_AN_ACTION = ("considerad|esperad|previst|descrit|especificad|exigid|requerid|suportad|declarad|garantid|"
+                     "atendid|basead|relacionad|definid|desejad|pretendid|dad")
+_PT_NOT_A_VERB = ("esta|estao|era|foi|fica|ficam|tem|possui|pode|deve|precisa|necessita|funciona|opera|comporta|"
+                  "atua|garante|assegura|parece|que|essa|esse|este|nesse|nessa|neste|nesta|dele|dela|deste|desta|"
+                  "sempre|nunca|ainda|apenas|somente|tambem|agora|entao|como|conforme|segundo|sobre|entre|para|"
+                  "desde|durante|antes|cada|toda|mesma|outra|alguma|nenhuma")
+_PT_VERB = rf"(?!(?:{_PT_NOT_A_VERB})\b)\w{{3,}}(?:a|e|am|em|ou|iu|eu)\b"
+_PT_STATED_ACTION_RE = re.compile(
+    rf"\b(?:nao\s+|nunca\s+)?(?:e|sao|esta|estao|foi|foram|fica|ficam|sera|serao)\s+(?!(?:{_PT_NOT_AN_ACTION})[oa]s?\b)\w+(?:ad|id)[oa]s?\b"
+    rf"|\b(?:nao|nunca|jamais)\s+{_PT_VERB}"
+    rf"|\b[oa]\s+(?:{_PT_SUBJECTS})\s+(?:nao\s+|nunca\s+)?(?:ainda\s+|tambem\s+|so\s+|apenas\s+|entao\s+|sempre\s+)?{_PT_VERB}"
+)
+
+#: A literal expected value (16/11/2026): the test compares what it sees with the value, so the
+#: criterion closes whatever the verb. A quoted text ('a linha 1 é "Ana"'), or a number written with
+#: digits that is not a reference to a part of a document ("exit code 0", "line 1", "HTTP 404"; not
+#: "section 3.2", "step 2", "version 1.1"). A number with a unit is already a measurable quantity.
+_QUOTED_RE = re.compile(r"[\"“”«][^\"“”«»]{1,120}[\"“”»]|(?<!\w)['‘][^'‘’]{1,120}['’](?!\w)")
+_REFERENCE_NOUNS = frozenset(
+    "section secao item step passo version versao chapter capitulo appendix apendice anexo figure figura "
+    "table tabela page pagina requirement requisito clause clausula paragraph paragrafo part parte note nota "
+    "phase fase sprint release".split()
+)
+_NUMBER_RE = re.compile(r"(?<![\w.,])\d+(?:[.,]\d+)?(?![\w.,])")
+
+
+def _has_literal_value(text: str) -> bool:
+    if _QUOTED_RE.search(text or ""):
+        return True
+    canon = normalize(text, keep_punct=True)
+    for match in _NUMBER_RE.finditer(canon):
+        before = canon[:match.start()].split()
+        if not before or before[-1].strip(".,;:()") not in _REFERENCE_NOUNS:
+            return True
+    return False
+
+
 def _has_effect(text: str) -> bool:
     plain = _FILLER_RE.sub(" ", normalize(text))
-    return bool(OBSERVABLE_RE.search(plain) or _STATED_ACTION_RE.search(plain)) or has_measurable_quantity(text)
+    stated = OBSERVABLE_RE.search(plain) or _STATED_ACTION_RE.search(plain) or _PT_STATED_ACTION_RE.search(plain)
+    return bool(stated) or has_measurable_quantity(text) or _has_literal_value(text)
 
 
 def _then_clauses(artifact: Artifact) -> list[tuple[int, str, str]]:
@@ -85,8 +133,8 @@ def _then_clauses(artifact: Artifact) -> list[tuple[int, str, str]]:
     dimension=Dimension.VERIFIABLE,
     severity=Severity.MAJOR,
     description=(
-        "Each acceptance criterion describes something observable: an effect of the system "
-        "or a measurable quantity (for a Gherkin criterion, in its Then clause)."
+        "Each acceptance criterion describes something observable: an effect of the system, "
+        "a measurable quantity or a literal expected value (for a Gherkin criterion, in its Then clause)."
     ),
     weight=1.5,
 )

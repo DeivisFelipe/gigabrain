@@ -117,12 +117,16 @@ def find_terms(text: str, terms: tuple[str, ...] | list[str]) -> list[tuple[str,
     found = [(term, m.start(), m.end()) for term in terms for m in _cached_regex(term).finditer(hay)]
     hits: list[tuple[str, str]] = []
     seen: set[str] = set()
+    spans: set[tuple[int, int]] = set()
     for term, start, end in found:
-        if term in seen:
+        if term in seen or (start, end) in spans:
+            # The same words twice: "simples" is both the English "simple" with its plural and the
+            # Portuguese "simples", and one word is one hit (16/11/2026).
             continue
         if any(s <= start and end <= e and e - s > end - start for _, s, e in found):
             continue  # inside a longer hit ("friendly" in "user-friendly"): one hit, not two
         seen.add(term)
+        spans.add((start, end))
         hits.append((term, hay[max(0, start - 30):min(len(hay), end + 30)].strip()))
     return hits
 
@@ -183,9 +187,14 @@ def light_stem(word: str) -> str:
     return w
 
 
+#: A hyphen inside a word joins it: "e-mail" and "email" are the same word (16/11/2026; the
+#: spelling alone moved the support of a correct requirement from 31% to 23%).
+_INNER_HYPHEN_RE = re.compile(r"(?<=\w)-(?=\w)")
+
+
 @lru_cache(maxsize=8192)
 def _tokens(text: str, stem: bool) -> frozenset[str]:
-    return frozenset((light_stem(w) if stem else w) for w in words(text) if len(w) > 1)
+    return frozenset((light_stem(w) if stem else w) for w in words(_INNER_HYPHEN_RE.sub("", text)) if len(w) > 1)
 
 
 @lru_cache(maxsize=64)
@@ -237,18 +246,30 @@ def language_of(text: str) -> str | None:
     return first if counts[first] >= 3 and counts[first] >= 3 * counts[second] else None
 
 
+#: A word of the claim also counts as present when the source has a word with the same first
+#: letters: "altera" for "alteração", "exclusão" for "excluir", "regista" for "registados".
+#: light_stem does not touch verb inflection, and in the real conversations the PO names the
+#: action by a noun and the Twin writes it as a verb (16/11/2026). Five letters is the shortest
+#: prefix that still told the invented requirements of the 02/11 measurement apart (24 of 24).
+STEM_PREFIX = 5
+
+
 def coverage(claim: str, source: str, *, stopwords: frozenset[str] = frozenset()) -> float:
     """How much of the claim's content appears in the source, in [0, 1].
 
     It is the measure used when an agent cites a source without quoting it: the
-    share of the content words of the statement that the cited text also uses.
-    A paraphrase keeps most of them; an invented requirement keeps almost none.
-    An empty claim (only stopwords) counts as fully covered.
+    share of the content words of the statement that the cited text also uses,
+    exactly or by their first STEM_PREFIX letters. A paraphrase keeps most of
+    them; an invented requirement keeps almost none. An empty claim (only
+    stopwords) counts as fully covered.
     """
     wanted = token_set(claim, stopwords=stopwords)
     if not wanted:
         return 1.0
-    return len(wanted & token_set(source, stopwords=stopwords)) / len(wanted)
+    have = token_set(source, stopwords=stopwords)
+    heads = {t[:STEM_PREFIX] for t in have if len(t) >= STEM_PREFIX}
+    found = sum(1 for t in wanted if t in have or (len(t) >= STEM_PREFIX and t[:STEM_PREFIX] in heads))
+    return found / len(wanted)
 
 
 def sequence_ratio(a: str, b: str) -> float:

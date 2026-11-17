@@ -229,8 +229,11 @@ CONJUNCTION_TERMS: tuple[str, ...] = (
 # --------------------------------------------------------------------------
 
 #: A statement that carries one of these says the opposite of the same statement without it.
+#: The contractions come split by `normalize` ("won't" -> "won t"); without them "won't unlock"
+#: did not count as a negation in the keepass meetings (D-019, 02/11/2026).
 NEGATION_RE = re.compile(
-    r"(?<!\w)(not|never|no longer|cannot|cant|without|prevent\w*|forbid\w*|prohibit\w*|disallow\w*|"
+    r"(?<!\w)(not|never|no longer|cannot|cant|can t|won t|wont|doesn t|don t|isn t|aren t|wasn t|"
+    r"shouldn t|mustn t|wouldn t|couldn t|without|prevent\w*|forbid\w*|prohibit\w*|disallow\w*|"
     r"nao|jamais|nunca|sem que|imped\w*|proib\w*|bloque\w*)(?!\w)"
 )
 
