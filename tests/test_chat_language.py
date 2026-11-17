@@ -203,3 +203,18 @@ class TestFixedTexts(Conversation):
         self.assertEqual(phrase("nothing_to_approve", "French"), "There is no proposal to approve yet.")
         self.assertEqual(phrase("nothing_to_approve", None), "There is no proposal to approve yet.")
         self.assertEqual(phrase("nothing_to_approve", "Brazilian Portuguese"), "Ainda não há proposta para aprovar.")
+
+
+class TestIdentifiersAreNotWords(unittest.TestCase):
+    # The Twin's question to the Council in a real run in Portuguese: asked again twice for nothing.
+    QUERY = ("Quais pontos concretos estão a impedir a aprovação dos requisitos P3 (listagem de nomes em ordem alfabética) e P5 "
+             "(exclusão de nome registado), sobretudo a falta de suporte face às fontes citadas (c-20261104-144648, "
+             "expert:gestao-de-nomes-e-identificadores, expert:portabilidade-e-ambientes-posix)? Que sugestões de correção "
+             "permitem elevar o suporte acima de 30% sem alterar o âmbito?")
+
+    def test_a_question_full_of_ids_is_still_portuguese(self):
+        self.assertTrue(written_in(self.QUERY, "Portuguese"))
+        self.assertFalse(written_in(self.QUERY, "English"))
+
+    def test_only_ids_say_nothing(self):
+        self.assertTrue(written_in("R1 v2, R3 v1, POSIX IEEE 1003.1-2024, expert:nomes, c-20261104-144648", "English"))

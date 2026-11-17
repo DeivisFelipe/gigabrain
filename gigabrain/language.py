@@ -25,7 +25,8 @@ MARKERS = {
     ),
     "Portuguese": frozenset(
         """um uma uns umas os da das na nas em com ao aos pelo pela sao nao quando deve devem sobre qual quais voce seu
-        sua preciso precisa quero mas existe existem alguma algum tem para esse essa isso ja somente tambem""".split()
+        sua preciso precisa quero mas existe existem alguma algum tem para esse essa isso ja somente tambem
+        sem estao ainda pelos pelas apos entao""".split()
     ),
 }
 MIN_MARKERS = 2  # "the date" says nothing; "it shows the date" does
@@ -51,8 +52,13 @@ def phrase(key: str, language: str | None, **values) -> str:
     return PHRASES[key][family].format(**values)
 
 
+# Ids, versions, numbers, acronyms and names like "expert:gestao-de-nomes": in no language. Counted as words,
+# they made a question in Portuguese with three source names fall under MIN_SHARE.
+NOT_WORDS = re.compile(r"\S*[\d:_/@]\S*|\S+-\S+-\S+|\b[A-Z]{2,}\b")
+
+
 def _words(text: str) -> list[str]:
-    plain = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
+    plain = "".join(c for c in unicodedata.normalize("NFD", NOT_WORDS.sub(" ", text)) if not unicodedata.combining(c))
     return re.findall(r"\w+", plain.lower())
 
 
