@@ -27,6 +27,7 @@ from typing import TYPE_CHECKING
 from .agents import Context, DigitalTwin, Expert, Leader
 from .approval import is_approval
 from .database import Database, slug
+from .language import phrase
 from .log import Recorder
 from .messages import LEADER, PO, REGISTRY, REPOSITORY, SYSTEM, TWIN, Message
 
@@ -116,7 +117,7 @@ class Council:
 
     def approve(self) -> dict:
         if not self.pending_proposal:
-            return {"action": "ask", "message_to_po": "There is no proposal to approve yet.", "requirements": []}
+            return {"action": "ask", "message_to_po": phrase("nothing_to_approve", self.twin.language), "requirements": []}
 
         saved = []
         for proposed in self.pending_proposal:
@@ -135,7 +136,7 @@ class Council:
             saved.append(result)
 
         self.pending_proposal = None
-        text = "Saved: " + ", ".join(f"{s['requirement_id']} v{s['version']}" for s in saved) + "."
+        text = phrase("saved", self.twin.language, ids=", ".join(f"{s['requirement_id']} v{s['version']}" for s in saved))
         _record(self.ctx, TWIN, PO, "confirmation", {"text": text, "saved": [s["requirement_id"] for s in saved]})
         self.end("approved")
         return {"action": "approved", "message_to_po": text, "saved": saved, "requirements": []}

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from .. import knowledge
 from ..database import slug
+from ..language import phrase
 from ..messages import LEADER, REGISTRY, TWIN, expert
 from .base import Agent, as_json
 from .expert import Expert
@@ -87,10 +88,7 @@ class Leader(Agent):
 
         consolidated = self._consolidate(question, answers, language)
         if without_expert:
-            consolidated["questions_for_po"].append(
-                "There is no expert yet for: " + ", ".join(without_expert)
-                + ". It will be created after the meeting; what do you already know about it?"
-            )
+            consolidated["questions_for_po"].append(phrase("no_expert_yet", language, topics=", ".join(without_expert)))
         consolidated["sources"] = [{"kind": "expert", "ref": a["expert_id"], "version": a["knowledge_version"]} for a in answers]
         self.send(TWIN, "consolidated_answer", consolidated)
         return consolidated

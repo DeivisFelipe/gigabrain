@@ -11,7 +11,7 @@ import tempfile
 import unittest
 
 from gigabrain.council import Council, open_context
-from gigabrain.language import spoken_language, written_in
+from gigabrain.language import phrase, spoken_language, written_in
 from gigabrain.providers import SimulatedProvider
 
 REQUEST_EN = "I need a requirement that allows registered users to change their email, but only once every 30 days"
@@ -186,3 +186,20 @@ class TestTheTwinIsChecked(Conversation):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestFixedTexts(Conversation):
+    """What the code itself says to the PO follows the conversation too: "Saved: R1 v1." came in English in Portuguese."""
+
+    def test_the_confirmation_in_portuguese(self):
+        _, answers = self.talk(SimulatedProvider(), REQUEST_PT, REQUEST_PT, "aprovado")
+        self.assertTrue(answers[-1]["message_to_po"].startswith("Requisitos gravados: R1 v1"), answers[-1]["message_to_po"])
+
+    def test_the_confirmation_in_english(self):
+        _, answers = self.talk(SimulatedProvider(), REQUEST_EN, REQUEST_EN, "approved")
+        self.assertTrue(answers[-1]["message_to_po"].startswith("Saved: R1 v1"), answers[-1]["message_to_po"])
+
+    def test_a_language_without_the_text_gets_english(self):
+        self.assertEqual(phrase("nothing_to_approve", "French"), "There is no proposal to approve yet.")
+        self.assertEqual(phrase("nothing_to_approve", None), "There is no proposal to approve yet.")
+        self.assertEqual(phrase("nothing_to_approve", "Brazilian Portuguese"), "Ainda não há proposta para aprovar.")

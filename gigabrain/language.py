@@ -34,6 +34,23 @@ LONG_ENOUGH = 8  # below this many words, a text does not show its language
 MIN_SHARE = 0.05
 
 
+# What the code itself says to the PO. Other languages get the English text.
+PHRASES = {
+    "saved": {"English": "Saved: {ids}.", "Portuguese": "Requisitos gravados: {ids}."},
+    "nothing_to_approve": {"English": "There is no proposal to approve yet.", "Portuguese": "Ainda não há proposta para aprovar."},
+    "no_expert_yet": {
+        "English": "There is no expert yet for: {topics}. It will be created after the meeting; what do you already know about it?",
+        "Portuguese": "Ainda não há especialista para: {topics}. Ele será criado depois da reunião; o que já se sabe sobre isso?",
+    },
+}
+
+
+def phrase(key: str, language: str | None, **values) -> str:
+    """A fixed text in `language` ("Portuguese", "Brazilian Portuguese"...), in English when there is none for it."""
+    family = next((name for name in PHRASES[key] if language and name in language), "English")
+    return PHRASES[key][family].format(**values)
+
+
 def _words(text: str) -> list[str]:
     plain = "".join(c for c in unicodedata.normalize("NFD", text) if not unicodedata.combining(c))
     return re.findall(r"\w+", plain.lower())
