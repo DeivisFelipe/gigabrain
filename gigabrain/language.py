@@ -26,9 +26,12 @@ MARKERS = {
     "Portuguese": frozenset(
         """um uma uns umas os da das na nas em com ao aos pelo pela sao nao quando deve devem sobre qual quais voce seu
         sua preciso precisa quero mas existe existem alguma algum tem para esse essa isso ja somente tambem
-        sem estao ainda pelos pelas apos entao""".split()
+        sem estao ainda pelos pelas apos entao o""".split()
     ),
 }
+# "o" is the most common word of Portuguese, so criteria like "o usuário tenta alterar 'Ana' para..." are
+# recognized; it is also "or" in Spanish and Italian, so it cannot be the only evidence.
+WEAK = {"Portuguese": frozenset({"o"})}
 MIN_MARKERS = 2  # "the date" says nothing; "it shows the date" does
 LONG_ENOUGH = 8  # below this many words, a text does not show its language
 # Measured on real answers: at least 8% in the language asked for, at most 4% in Italian, French or Spanish.
@@ -81,4 +84,5 @@ def written_in(text: str, language: str) -> bool:
         return True
     ours = _count(found, language)
     others = max(_count(found, other) for other in MARKERS if other != language)
-    return ours >= others and ours >= MIN_SHARE * len(found)
+    strong = ours - sum(w in WEAK.get(language, ()) for w in found)
+    return ours >= others and ours >= MIN_SHARE * len(found) and strong >= 1

@@ -242,3 +242,24 @@ class TestKnowledgeFiles(Conversation):
         Leader(ctx).consult_draft({"topic": "accounts", "statement": "The system shall export reports.", "class": "FR",
                                    "subtype": None, "turns": []}, {})
         self.assertNotIn("language", provider.received["expert_create"][0])
+
+
+class TestAcceptanceCriteria(unittest.TestCase):
+    # Criteria of real proposals in Portuguese, joined as the Twin's check joins them: each one was asked again
+    # for nothing, because the words Portuguese shares with Spanish and Italian do not count. "o" now does.
+    CRITERIA_PT = [
+        "a lista contém 'Ana' o usuário tenta alterar 'Ana' para 'Ana Maria' o sistema rejeita a alteração e a lista "
+        "continua contendo 'Ana' a lista contém 'Ana' o usuário exclui 'Ana' e registra 'Ana Maria' a lista passa a conter 'Ana Maria'",
+        "que o usuário informa o nome \"Ana\" confirma o cadastro o sistema registra \"Ana\" e ele passa a aparecer na listagem "
+        "que o campo nome está vazio tenta confirmar o cadastro o sistema recusa o cadastro e exibe mensagem de que o nome é obrigatório",
+    ]
+    SPANISH = "Cuando el usuario registra un nombre, el sistema debe almacenar el nombre informado o rechazarlo si está vacío."
+
+    def test_criteria_in_portuguese_are_portuguese(self):
+        for text in self.CRITERIA_PT:
+            with self.subTest(text[:30]):
+                self.assertTrue(written_in(text, "Portuguese"))
+                self.assertFalse(written_in(text, "English"))
+
+    def test_one_shared_word_does_not_make_spanish_portuguese(self):
+        self.assertFalse(written_in(self.SPANISH, "Portuguese"))
