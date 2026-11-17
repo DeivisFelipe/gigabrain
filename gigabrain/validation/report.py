@@ -200,13 +200,25 @@ def _actionable(report: ValidationReport) -> list[Finding]:
     ]
 
 
+#: Longest excerpt repeated in a feedback line.
+EXCERPT_IN_FEEDBACK = 80
+
+
 def feedback_lines(findings: list[Finding], *, max_items: int = 12) -> list[str]:
-    """Numbered, actionable lines for a list of findings (already in the order to show)."""
+    """Numbered, actionable lines for a list of findings (already in the order to show).
+
+    The excerpt goes next to the locator (16/11/2026): "acceptance_criteria[1]" counts from one,
+    which an agent reading its own JSON list may take for the second item. The words leave no doubt.
+    """
     lines = []
     for index, finding in enumerate(findings[:max_items], start=1):
         where = finding.target_id or "document"
         if finding.locator:
             where = f"{where} ({finding.locator})"
+        excerpt = finding.excerpt.strip()
+        if excerpt and excerpt[:40] not in finding.message:
+            short = excerpt if len(excerpt) <= EXCERPT_IN_FEEDBACK else excerpt[:EXCERPT_IN_FEEDBACK - 1] + "…"
+            where = f'{where} "{short}"'
         entry = f"{index}. [{finding.severity.label}] {where}: {finding.message}"
         if finding.suggestion:
             entry += f" {finding.suggestion}"

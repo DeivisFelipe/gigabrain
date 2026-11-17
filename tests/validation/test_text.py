@@ -68,6 +68,12 @@ class TestTermRegex(unittest.TestCase):
 
 
 class TestFindTerms(unittest.TestCase):
+    def test_one_word_is_one_hit_even_when_two_terms_spell_it(self):
+        # "simples" is the English "simple" with its plural and the Portuguese "simples" (16/11/2026):
+        # the real conversation of 04/11 got two major findings for one word.
+        from gigabrain.validation.lexicons import VAGUE_TERMS
+        self.assertEqual(len(find_terms("O cadastro deve ser simples.", VAGUE_TERMS)), 1)
+
     def test_finds_an_inflected_term(self):
         hits = find_terms("A fila deve ser rápida se possível", ["rápido", "se possível"])
         self.assertEqual({t for t, _ in hits}, {"rápido", "se possível"})
@@ -102,6 +108,17 @@ class TestContainment(unittest.TestCase):
 
 
 class TestCoverage(unittest.TestCase):
+    def test_a_word_in_another_inflection_counts_as_said(self):
+        # The PO names the action by a noun and the Twin writes a verb (16/11/2026): "exclusão" for
+        # "excluir", "registro" for "registrar". Five letters in common is enough; "solicitar" stays unmatched.
+        from gigabrain.validation.lexicons import STOPWORDS
+        claim = "Quando o usuário solicitar a exclusão de um nome, o sistema deve excluir o registro."
+        self.assertAlmostEqual(coverage(claim, "quero excluir nomes e registrar nomes", stopwords=STOPWORDS), 0.8)
+
+    def test_a_hyphen_inside_a_word_does_not_separate_spellings(self):
+        from gigabrain.validation.lexicons import STOPWORDS
+        self.assertEqual(coverage("The system shall send an e-mail to the manager.", "please send email to the manager", stopwords=STOPWORDS), 1.0)
+
     """Support of a statement by a source that is cited without being quoted."""
 
     UTTERANCE = "Uh, I'd like the the system to export monthly reports to PDF for the finance team."

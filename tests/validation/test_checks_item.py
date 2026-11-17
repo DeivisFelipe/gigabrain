@@ -270,6 +270,47 @@ class TestVerifiability(ItemCheckCase):
                 findings = self.findings_for(artifact(criteria=[crit, CLEAN_CRITERIA[1]]))
                 self.assertIn("verifiability.criterion_observable", check_ids(findings))
 
+    def test_portuguese_action_stated_by_the_grammar(self):
+        # Regression, 16/11/2026: in the real conversation of 04/11 none of these had a verb of the
+        # lexicon, every proposal was returned, and the PO approved with two requirements rejected.
+        for then in ("o sistema termina com código de saída diferente de zero",
+                     "o sistema encerra sem executar as funções de cadastro, listagem, edição e exclusão de nomes",
+                     "o sistema não oferece nenhuma operação de edição de nomes",
+                     "nenhuma dependência fora do escopo da última versão POSIX é utilizada",
+                     "o nome fica registado e passa a constar da listagem",
+                     "a aplicação inicia e executa as operações de registro sem erro de incompatibilidade"):
+            with self.subTest(then=then):
+                crit = Criterion("Fluxo", "um ambiente POSIX", "o sistema é iniciado", then)
+                self.assertNotIn("verifiability.criterion_observable",
+                                 check_ids(self.findings_for(artifact(criteria=[crit, CLEAN_CRITERIA[1]]))))
+
+    def test_portuguese_state_or_expectation_is_not_an_action(self):
+        for then in ("o sistema não é suportado nesse ambiente", "o sistema não é declarado suportado",
+                     "a compatibilidade é declarada apenas para POSIX", "o sistema não é suportado e pode falhar ao iniciar",
+                     "o sistema não garante a execução das operações", "o sistema sempre funciona nesse ambiente",
+                     "o sistema que foi descrito", "o resultado é considerado correto"):
+            with self.subTest(then=then):
+                crit = Criterion("Fluxo", "um ambiente", "o sistema é iniciado", then)
+                self.assertIn("verifiability.criterion_observable",
+                              check_ids(self.findings_for(artifact(criteria=[crit, CLEAN_CRITERIA[1]]))))
+
+    def test_a_literal_expected_value_is_observable(self):
+        # The test compares what it sees with the value, whatever the verb (16/11/2026).
+        for then in ('a linha 1 da saída padrão é "Ana"', "the exit code is 0", "the response status is HTTP 404",
+                     "as linhas são 'Ana', 'Bruno' e 'Carlos', por esta ordem", "o sistema termina cada uma das 4 operações com código de saída 0"):
+            with self.subTest(then=then):
+                crit = Criterion("Flow", "three names", "the user lists them", then)
+                self.assertNotIn("verifiability.criterion_observable",
+                                 check_ids(self.findings_for(artifact(criteria=[crit, CLEAN_CRITERIA[1]]))))
+
+    def test_a_number_that_refers_to_a_document_is_not_a_value(self):
+        for then in ("the system behaves as described in section 3.2", "o sistema se comporta conforme o requisito 4",
+                     "the result is as in step 2 of version 1.1", "the user's needs and the admin's needs are met"):
+            with self.subTest(then=then):
+                crit = Criterion("Flow", "a page", "the user opens it", then)
+                self.assertIn("verifiability.criterion_observable",
+                              check_ids(self.findings_for(artifact(criteria=[crit, CLEAN_CRITERIA[1]]))))
+
     def test_criterion_with_a_subjective_term(self):
         vague = Criterion("Speed", "a reported topic", "the moderator opens it", "the system answers fast")
         findings = self.findings_for(artifact(criteria=[vague, CLEAN_CRITERIA[1]]))
@@ -283,8 +324,73 @@ class TestVerifiability(ItemCheckCase):
         self.assertEqual(self.severities(findings, "verifiability.criterion_restates"), [Severity.MINOR])
 
 
+class TestNumberSupported(ItemCheckCase):
+    """A number written with digits in the statement must be in a cited source (16/11/2026)."""
+
+    def test_a_number_the_source_does_not_give_is_major(self):
+        art = artifact(statement="When a topic receives the third report, the system shall create one item in the review queue within 2 seconds.")
+        findings = self.findings_for(art)
+        self.assertEqual(self.severities(findings, "grounding.number_supported"), [Severity.MAJOR])
+        self.assertEqual([f.excerpt for f in findings if f.check_id == "grounding.number_supported"], ["2"])
+
+    def test_a_number_the_source_gives_in_digits_or_in_words(self):
+        said = source(text="We need the queue to show the item within 2 seconds, and at most ten items per page.")
+        art = artifact(statement="When a topic is reported, the system shall show the item within 2 seconds, 10 items per page.")
+        self.assertNotIn("grounding.number_supported", check_ids(self.findings_for(art, sources=[said])))
+
+    def test_a_saved_requirement_does_not_vouch_for_its_own_number(self):
+        # The expert's knowledge records saved requirements ("R1 (NFR) — ..."); those lines were written by the system.
+        own = source("expert:queue", text="Rules of the queue.\nR1 (NFR) — The queue shall load within 2 seconds.", kind="expert")
+        art = artifact(statement="The queue shall load within 2 seconds.", evidences=[evidence("expert:queue")])
+        self.assertIn("grounding.number_supported", check_ids(self.findings_for(art, sources=[own])))
+
+    def test_a_number_at_the_end_of_a_sentence_is_read_in_the_source_and_in_the_statement(self):
+        # 17/11/2026, live run: the expert wrote "(ex.: IEEE 1003.1, versões)" and the statement
+        # "(IEEE 1003.1-2017)" was returned for a number the source has.
+        said = source(text="The queue must show the item within 2. And the standard is IEEE 1003.1, any edition.")
+        art = artifact(statement="The system shall show the item within 2 seconds, as IEEE 1003.1-2017 says.")
+        self.assertEqual([f.excerpt for f in self.findings_for(art, sources=[said])
+                          if f.check_id == "grounding.number_supported"], ["2017"])
+        art = artifact(statement="When a topic is reported, the system shall show the item within 3.")
+        self.assertEqual([f.excerpt for f in self.findings_for(art, sources=[said])
+                          if f.check_id == "grounding.number_supported"], ["3"])
+
+    def test_an_identifier_is_not_a_number(self):
+        art = artifact(statement="When a topic receives the third report, the system shall create one item in the review queue, as R2 and v1 say.")
+        self.assertNotIn("grounding.number_supported", check_ids(self.findings_for(art)))
+
+
+class TestStatementSupportedLanguage(ItemCheckCase):
+    """The language of the source is the language of what was said (16/11/2026)."""
+
+    PT_TURN = "Preciso que o sistema avise o moderador uma vez por tópico, quando a terceira denúncia chegar."
+    EN_KNOWLEDGE = "The moderator of the forum wants to be told once per topic when the third report of the topic arrives. " * 3
+
+    def test_an_expert_file_in_the_other_language_does_not_set_the_language(self):
+        sources = [source("T2", text=self.PT_TURN), source("expert:forum", text=self.EN_KNOWLEDGE, kind="expert")]
+        art = artifact(statement="O sistema deve exportar o relatório mensal para o gerente da loja.", evidences=[evidence("T2"), evidence("expert:forum")])
+        [finding] = [f for f in self.findings_for(art, sources=sources) if f.check_id == "grounding.statement_supported"]
+        self.assertIn("not supported", finding.message)
+        self.assertNotIn("is in Portuguese and its source", finding.message)
+
+    def test_a_statement_in_another_language_than_the_turn_says_so(self):
+        sources = [source("T2", text=self.PT_TURN), source("expert:forum", text=self.EN_KNOWLEDGE, kind="expert")]
+        art = artifact(statement="The system shall export the monthly report of the store to the manager of the store.",
+                       evidences=[evidence("T2"), evidence("expert:forum")])
+        [finding] = [f for f in self.findings_for(art, sources=sources) if f.check_id == "grounding.statement_supported"]
+        self.assertIn("is in English and its source", finding.message)
+
+
 class TestGroundingWithAQuote(ItemCheckCase):
     """An artefact that quotes its source: the quote must be in the source."""
+
+    def test_a_true_quote_does_not_vouch_for_a_statement_that_shares_nothing_with_the_source(self):
+        # 16/11/2026: the quote used to switch statement_supported off, so an invented requirement
+        # with a real quote passed the correctness competency.
+        art = user_story(statement="O gerente exporta o relatório mensal em planilha para a contabilidade.", evidences=[quote()])
+        findings = self.findings_for(art)
+        self.assertNotIn("grounding.quote_supported", check_ids(findings))
+        self.assertEqual(self.severities(findings, "grounding.statement_supported"), [Severity.MAJOR])
 
     def test_no_source(self):
         self.assertIn("grounding.evidence_present", check_ids(self.findings_for(user_story(evidences=[]))))

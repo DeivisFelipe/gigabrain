@@ -39,8 +39,14 @@ from .registry import CheckRegistry
 #: statement in another language than its source says so. 2.3 (02/11/2026): "available"
 #: and its Portuguese forms are an observable effect. 2.4 (02/11/2026): an action stated by the
 #: grammar is an observable effect, whatever the verb (contaminates 2008-peering and
-#: 2008-keepass for measurement).
-RULESET_VERSION = "2.4"
+#: 2008-keepass for measurement). 2.5 (16/11/2026, tuned on the real conversations of the chat,
+#: not on a meeting project): an action stated by the Portuguese grammar and a literal expected
+#: value are observable effects; a word of the statement counts as said when the source has it
+#: in another inflection (first five letters) or spelling (inner hyphen); the language of the
+#: source is that of what was said; a quote no longer switches the support of the statement off;
+#: contractions count as negation; a number the sources do not give is a finding
+#: (grounding.number_supported); one word is one vague term.
+RULESET_VERSION = "2.5"
 
 #: Range of the ReqInOne questionnaire.
 LIKERT_MIN = 1.0

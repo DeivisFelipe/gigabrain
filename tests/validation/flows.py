@@ -21,8 +21,9 @@ from gigabrain.providers import SimulatedProvider, _structured
 
 LOGIN = "Users must log in with their email and a password of at least 8 characters."
 BACKUP = "The database must be backed up every 24 hours to an external server."
-#: What the end user says about search: plain, nothing vague in it.
-SEARCH = "The search page should list the results for everyone who searches."
+#: What the end user says about search: plain, nothing vague in it. The number is said here so that
+#: the fix of TwinFixesDraft keeps to what was said (grounding.number_supported, 16/11/2026).
+SEARCH = "The search page should list the results within two seconds for everyone who searches."
 #: The draft the Twin makes of it (MeetingTwin): two subjective words the end user never said.
 #: Vagueness the source itself has is only information; the defect these
 #: tests need, the one that goes back to the writer, has to be the writer's.
