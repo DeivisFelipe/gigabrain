@@ -233,6 +233,7 @@ class Expert(Agent):
         `feedback` is what the Critic said about a previous recommendation for the same draft.
         """
         self.sync()
+        self.ctx.db.count_consultation(self.id)
         payload = {
             "topic": self.topic,
             "language": language,
@@ -263,6 +264,7 @@ class Expert(Agent):
 
     def review_quality(self, draft: dict) -> dict:
         """Recommend the class (FR/NFR) and the subtype of the draft."""
+        self.ctx.db.count_consultation(self.id)
         answer = self.call_llm("expert_quality", QUALITY_PROMPT, [{"role": "user", "content": as_json({
             "knowledge": self.read_knowledge(),
             "draft": {k: draft[k] for k in ("statement", "class", "subtype")},

@@ -1,4 +1,6 @@
 openai>=1.0.0
 fastapi>=0.110
 uvicorn>=0.28
+python-multipart>=0.0.9  # files attached to a message
+pypdf>=4.0  # text of attached PDFs
 httpx>=0.27,<0.28  # only for the API tests (0.28 breaks the TestClient of older Starlette)

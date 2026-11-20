@@ -366,6 +366,8 @@ class Artifact:
     ears_pattern: str = ""
     links: list[LinkRef] = field(default_factory=list)
     topics: list[str] = field(default_factory=list)
+    # The constraint card of a non-functional requirement: {"quality", "scope", "measure"}.
+    constraint: dict | None = None
 
     def body_text(self) -> str:
         """Free text of the artefact, used by the lexical checks."""

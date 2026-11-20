@@ -35,6 +35,7 @@ _REQUIREMENT = {
     "statement": _Needed(str),
     "ears_pattern": str,
     "story": _Nullable({"role": str, "goal": str, "benefit": str}),
+    "constraint": _Nullable({"quality": str, "scope": str, "measure": str}),
     "acceptance_criteria": [{"scenario": str, "given": str, "when": str, "then": str}],
     "class": str,
     "subtype": _Nullable(str),
@@ -44,12 +45,16 @@ _REQUIREMENT = {
     "base": _Nullable(str),
     "links": [_LINK],
     "reason": str,
+    "draft_id": _Nullable(str),
+    "replaces": _Nullable(str),
 }
 
 SHAPES = {
-    "twin": {"action": str, "message_to_po": str, "query": _Nullable({"question": str, "topics": [str]}), "requirements": [_REQUIREMENT]},
+    "twin": {"action": str, "message_to_po": str, "query": _Nullable({"question": str, "topics": [str]}), "requirements": [_REQUIREMENT],
+             "remove_drafts": [str]},
     "twin_draft": {"requirements": [_REQUIREMENT]},
     "twin_revise": {"requirement": _REQUIREMENT},
+    "twin_epics": {"epics": [{"title": str, "description": str, "requirements": [str]}]},
     "twin_decide": {"save": bool, "statement": str, "class": str, "subtype": _Nullable(str), "links": [_LINK], "motive": str},
     "plain_llm": {"requirements": [{"text": _Needed(str), "class": str, "subtype": _Nullable(str), "turns": [str]}]},
     "leader_decompose": {"subqueries": [{"expert_id": _Nullable(str), "topic": _Needed(str), "description": str, "question": _Needed(str)}]},

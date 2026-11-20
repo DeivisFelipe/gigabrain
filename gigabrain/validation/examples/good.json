@@ -60,7 +60,7 @@
       "title": "Load time of the review queue",
       "statement": "While 500 topics are waiting, the review queue shall load the first page within 2 seconds.",
       "ears_pattern": "state",
-      "story": { "role": "forum moderator", "goal": "the review queue to open without waiting", "benefit": "I keep using it during peak hours" },
+      "constraint": { "quality": "performance", "scope": "the first page of the review queue", "measure": "loads within 2 seconds while 500 topics are waiting" },
       "acceptance_criteria": [
         { "scenario": "Full queue", "given": "500 topics waiting in the review queue", "when": "a moderator opens the queue", "then": "the first page is displayed within 2 seconds" },
         { "scenario": "Slow load", "given": "500 topics waiting in the review queue", "when": "the first page takes more than 2 seconds", "then": "the system logs the load time" }

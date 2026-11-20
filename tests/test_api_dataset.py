@@ -101,7 +101,7 @@ class TestApiWithDataset(unittest.TestCase):
                 approved = self.client.post(f"/projects/{project}/conversations/{cid}/approve").json()
                 self.assertEqual(approved["action"], "approved")
                 self.assertTrue(approved["saved"])
-                self.assertFalse(approved["conversation_active"])
+                self.assertTrue(approved["conversation_active"])  # approving does not end the conversation
 
                 # Repository: the saved requirements, each with versions, trace and validation.
                 listed = self.client.get(f"/projects/{project}/requirements").json()
@@ -121,9 +121,10 @@ class TestApiWithDataset(unittest.TestCase):
                 if "query" in kinds:  # a real model does not always consult the experts
                     self.assertTrue(self.client.get(f"/projects/{project}/experts").json())
 
-                # A finished conversation takes no more messages or approvals.
-                self.assertEqual(self.client.post(f"/projects/{project}/conversations/{cid}/messages", json={"text": "hi"}).status_code, 409)
+                # Nothing is left to approve; closing the conversation is what stops it.
                 self.assertEqual(self.client.post(f"/projects/{project}/conversations/{cid}/approve").status_code, 409)
+                self.client.post(f"/projects/{project}/conversations/{cid}/close")
+                self.assertEqual(self.client.post(f"/projects/{project}/conversations/{cid}/messages", json={"text": "hi"}).status_code, 409)
 
     def test_projects_stay_apart(self):
         a, b = self.new_project("a"), self.new_project("b")

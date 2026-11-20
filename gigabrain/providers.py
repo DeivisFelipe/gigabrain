@@ -167,11 +167,19 @@ def _structured(sentence: str, role: str, topic: str) -> dict:
         "title": sentence[:70],
         "statement": statement,
         "ears_pattern": "event" if re.match(r"^(when|quando)\b", sentence, re.I) else "ubiquitous",
-        "story": {"role": role, "goal": _lower_first(sentence.rstrip(".")), "benefit": "the need raised in the meeting is met"},
+        "story": None if cls == "NFR" else {"role": role, "goal": _lower_first(sentence.rstrip(".")),
+                                             "benefit": "the need raised in the meeting is met"},
+        "constraint": {"quality": NFR_QUALITY.get(subtype, "quality"), "scope": "the whole system",
+                       "measure": _lower_first(statement)} if cls == "NFR" else None,
         "acceptance_criteria": [{"scenario": "Main flow", "given": "the system is in normal operation",
                                  "when": "the situation described by the requirement happens", "then": _lower_first(statement)}],
         "class": cls, "subtype": subtype, "topic": topic,
     }
+
+
+NFR_QUALITY = {"PE": "performance", "SE": "security", "US": "usability", "LF": "look and feel", "A": "availability",
+               "SA": "safety", "PO": "portability", "MN": "maintainability", "SC": "scalability", "L": "legal compliance",
+               "FT": "fault tolerance", "OT": "quality"}
 
 
 def _last(messages: list[dict]) -> dict:
@@ -206,6 +214,16 @@ class SimulatedProvider:
         if last.get("reason") == "language":  # rules cannot translate: the same answer goes back
             return self._twin(messages[:-1])
 
+        if last.get("from") == "system" and messages[-2:-1] and messages[-2]["role"] == "assistant":
+            previous = json.loads(messages[-2]["content"])
+            if previous.get("action") == "propose":  # returned by the Critic: rules cannot fix it, it goes back as it was
+                return previous
+
+        if last.get("from") == "po" and last.get("drafts"):
+            edit = self._edit_drafts(last)
+            if edit:
+                return edit
+
         if last.get("from") == "po" and not leader_answers:
             return {"action": "consult", "message_to_po": "I will consult the experts before proposing anything.",
                     "query": {"question": last["text"], "topics": _guess_topics(" ".join(po_texts))}, "requirements": []}
@@ -217,7 +235,36 @@ class SimulatedProvider:
                     "query": None, "requirements": []}
 
         related = [r for a in leader_answers for r in a.get("related_requirements", [])]
-        return self._proposal(po_texts, related)
+        # After a proposal, the next one is about what the PO said since then.
+        last_po = max((i for i, m in enumerate(messages) if m["role"] == "user"
+                       and json.loads(m["content"]).get("from") == "po"), default=len(messages))
+        last_proposal = max((i for i, m in enumerate(messages[:last_po]) if m["role"] == "assistant"
+                             and json.loads(m["content"]).get("action") == "propose"), default=-1)
+        since = [json.loads(m["content"]).get("text") for m in messages[last_proposal + 1:]
+                 if m["role"] == "user" and json.loads(m["content"]).get("from") == "po"]
+        return self._proposal([t for t in since if t] or po_texts, related)
+
+    def _edit_drafts(self, last: dict) -> dict | None:
+        """Rules for the working list: "reject D2" drops it, "in D3 ..." changes it, and a message
+        that names no draft changes the last one proposed in the chat."""
+        text = last["text"]
+        cited = [d for d in last["drafts"] if re.search(rf"\b{d['draft_id']}\b", text, re.I)]
+        if cited and re.search(r"\b(reject|remove|drop|delete|rejeit|remov|tir)", text, re.I):
+            return {"action": "propose", "message_to_po": "Removed: " + ", ".join(d["draft_id"] for d in cited),
+                    "query": None, "requirements": [], "remove_drafts": [d["draft_id"] for d in cited]}
+        if cited:
+            target = cited[0]
+            change = re.sub(rf"^.*?\b{target['draft_id']}\b[:,]?\s*", "", text, flags=re.I).strip().rstrip(".")
+            requirement = {**target, "statement": f"{target['statement'].rstrip('.')}, and {_lower_first(change)}.",
+                           "draft_id": target["draft_id"]}
+            return {"action": "propose", "message_to_po": f"Changed {target['draft_id']}.", "query": None,
+                    "requirements": [requirement]}
+        chat = [d for d in last["drafts"] if d.get("origin") == "chat"]
+        if chat:  # a correction of the proposal in the chat, as before the drafts existed
+            proposal = self._proposal([chat[-1]["statement"].removeprefix("The system shall ").rstrip("."), text], [])
+            proposal["requirements"][0]["draft_id"] = chat[-1]["draft_id"]
+            return proposal
+        return None
 
     def _proposal(self, po_texts: list[str], related: list[str]) -> dict:
         everything = " ".join(po_texts)
@@ -244,6 +291,8 @@ class SimulatedProvider:
             "statement": f"The system shall {_lower_first(main)}.",
             "ears_pattern": "ubiquitous",
             "story": {"role": "user", "goal": _lower_first(main), "benefit": "my request is met"},
+            "constraint": {"quality": NFR_QUALITY.get(_classify(everything)[1], "quality"), "scope": "the whole system",
+                           "measure": " ".join(po_texts)},
             "acceptance_criteria": criteria,
             "class": _classify(everything)[0], "subtype": _classify(everything)[1],
             "kind": "business",
@@ -272,7 +321,27 @@ class SimulatedProvider:
         if speaker == "Analyst" or re.search(r"\b(sorry|on mute|hear me|connection)\b", text, re.I):
             return {"requirements": []}
         role = SPEAKER_ROLE.get(speaker, "user")
-        return {"requirements": [_structured(s, role, topic) for s in re.split(r"(?<=[.!?])\s+", _clean(text)) if len(s.split()) >= 6]}
+        requirements = [_structured(s, role, topic) for s in re.split(r"(?<=[.!?])\s+", _clean(text)) if len(s.split()) >= 6]
+        # In a conversation, a sentence that changes a pending draft (same subject, another number) replaces it.
+        from .evaluation import similarity
+        numbers = lambda t: set(re.findall(r"\d+", t or ""))
+        for requirement in requirements:
+            for saved in data.get("already_saved", []):
+                if (str(saved.get("id", "")).startswith("D") and similarity(requirement["statement"], saved["statement"]) >= 0.6
+                        and numbers(requirement["statement"]) != numbers(saved["statement"])):
+                    requirement["replaces"] = saved["id"]
+        return {"requirements": requirements}
+
+    def _twin_epics(self, messages: list[dict]) -> dict:
+        """One epic per topic; the NFRs with no topic of their own go to "Platform qualities"."""
+        epics: dict[str, list[str]] = {}
+        for r in _last(messages)["requirements"]:
+            topic = (r.get("topics") or ["general"])[0]
+            if r.get("class") == "NFR" and topic == "general":
+                topic = "platform qualities"
+            epics.setdefault(topic, []).append(r["id"])
+        return {"epics": [{"title": t.capitalize(), "description": f"Requirements about {t}.", "requirements": ids}
+                          for t, ids in epics.items()]}
 
     def _twin_revise(self, messages: list[dict]) -> dict:
         """The Critic returned a draft. Rules cannot improve a requirement: the draft goes back as it is."""

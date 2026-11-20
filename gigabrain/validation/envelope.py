@@ -181,6 +181,7 @@ def _parse_artifact(data: dict, index: int) -> Artifact:
         provenance=_parse_provenance(data.get("provenance")),
         raw=str(data.get("raw", "")),
         story_parts=story_parts,
+        constraint=data.get("constraint") if isinstance(data.get("constraint"), dict) else None,
         criteria=criteria,
         ears_pattern=str(data.get("ears_pattern") or ""),
         links=as_links(data.get("links"), data.get("base")),
@@ -287,6 +288,8 @@ def _artifact_to_dict(artifact: Artifact) -> dict:
         data["story"] = {"role": parts.role, "goal": parts.goal, "benefit": parts.benefit}
     elif artifact.story:
         data["story"] = artifact.story
+    if artifact.constraint:
+        data["constraint"] = dict(artifact.constraint)
     if artifact.rationale:
         data["rationale"] = artifact.rationale
     if artifact.criteria:

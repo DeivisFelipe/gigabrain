@@ -160,6 +160,34 @@ def cmd_requirements(args) -> None:
         print(f"      {link['source_id']} {link['kind']} {link['target_id']}")
 
 
+def cmd_epics(args) -> None:
+    from gigabrain import epics
+    provider = SimulatedProvider() if getattr(args, "simulated", False) else create_provider("deepseek")
+    ctx = open_context(args.data, provider, validation=False)
+    epics.organize(ctx)
+    for epic in epics.view(ctx.db):
+        print(f"{epic['id']}  {epic['title']}: {epic['description']}")
+        for s in epic["stories"]:
+            print(f"     story       {s['id']}  {s['statement']}")
+        for c in epic["constraints"]:
+            print(f"     constraint  {c['id']}  {c['statement']}")
+
+
+def cmd_quality(args) -> None:
+    ctx = open_context(args.data, SimulatedProvider(), validation=False)
+    report = requirement_format.summarize(ctx.db.list_requirements(only_active=True))
+    print(f"{report['requirements']} active requirements ({report['fr']} FR, {report['nfr']} NFR)")
+    labels = {"ears": "EARS statement", "card": "story (FR) / constraint card (NFR)", "gherkin": "Given/When/Then criteria",
+              "not_vague": "no vague terms"}
+    for name, label in labels.items():
+        rate = report["rates"][name]
+        failing = report["failing"][name]
+        print(f"  {label:<36} {'-' if rate is None else f'{rate:.0%}':>5}" + (f"   missing: {', '.join(failing[:15])}" if failing else ""))
+    print("  EARS patterns: " + ", ".join(f"{k} {v}" for k, v in sorted(report["ears_patterns"].items())))
+    if report["nfr_with_story"]:
+        print("  NFR written as a story (should be a constraint card): " + ", ".join(report["nfr_with_story"]))
+
+
 def cmd_trace(args) -> None:
     ctx = open_context(args.data, SimulatedProvider(), validation=False)
     for step in ctx.db.trace(args.requirement):
@@ -362,6 +390,10 @@ def main() -> None:
     p.set_defaults(func=cmd_dashboard)
 
     sub.add_parser("requirements", help="list the requirements").set_defaults(func=cmd_requirements)
+    sub.add_parser("quality", help="how the requirements follow the structure (EARS, story/constraint card, Gherkin)").set_defaults(func=cmd_quality)
+    p = sub.add_parser("epics", help="group the requirements into epics (stories and constraint cards)")
+    p.add_argument("--simulated", action="store_true", help="group by topic, without the LLM")
+    p.set_defaults(func=cmd_epics)
     p = sub.add_parser("trace", help="how a requirement came to be")
     p.add_argument("requirement")
     p.set_defaults(func=cmd_trace)
