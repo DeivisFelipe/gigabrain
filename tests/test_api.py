@@ -7,7 +7,7 @@ import unittest
 
 from fastapi.testclient import TestClient
 
-from gigabrain.api import create_app
+from gigabrain.api import MAX_MESSAGE_CHARS, create_app
 from gigabrain.providers import SimulatedProvider
 
 
@@ -82,6 +82,11 @@ class TestApi(unittest.TestCase):
     def test_validation_and_token(self):
         self.assertEqual(self.client.post("/api/v1/projects/p/conversations/x/messages", json={"text": ""}).status_code, 422)
         self.assertEqual(self.client.post("/api/v1/projects/p/conversations/missing/messages", json={"text": "hi"}).status_code, 409)
+        # A whole meeting fits in one message (it passes validation and reaches the route); beyond the limit, 422.
+        meeting = "Client: the report shall be exported to PDF.\n" * 500  # ~23 thousand characters
+        self.assertEqual(self.client.post("/api/v1/projects/p/conversations/missing/messages", json={"text": meeting}).status_code, 409)
+        too_long = "x" * (MAX_MESSAGE_CHARS + 1)
+        self.assertEqual(self.client.post("/api/v1/projects/p/conversations/missing/messages", json={"text": too_long}).status_code, 422)
 
         protected = TestClient(create_app(self.tmp.name, SimulatedProvider, token="secret"))
         self.assertEqual(protected.get("/api/v1/projects/p/requirements").status_code, 401)

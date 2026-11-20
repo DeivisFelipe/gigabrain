@@ -243,6 +243,9 @@ It runs on `http://127.0.0.1:8000`. Interactive docs at `/docs`.
 | `--origins` | all | CORS, e.g. `http://localhost:5173` |
 | `--token` | none | requires `Authorization: Bearer <token>` |
 
+A PO message may have up to 50,000 characters, enough to paste a whole meeting. To change it,
+set `GIGABRAIN_MAX_MESSAGE_CHARS` before starting the API. Longer messages get 422.
+
 ### Routes
 
 Base: `/api/v1`
