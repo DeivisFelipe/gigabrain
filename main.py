@@ -374,7 +374,7 @@ def main() -> None:
     p.set_defaults(func=cmd_feed)
 
     p = sub.add_parser("dataset", help="list the projects of the test dataset")
-    p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER, help="folder of the EntradasGigabrain repository")
+    p.add_argument("--dataset", default=dataset.DEFAULT_FOLDER, help="folder of the gigabrain-dataset repository")
     p.add_argument("--variant", default=dataset.DEFAULT_VARIANT, help="variant of the dataset (default: v1-original)")
     p.set_defaults(func=cmd_dataset)
 

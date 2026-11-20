@@ -1,7 +1,7 @@
-"""Reads the test dataset (repository EntradasGigabrain).
+"""Reads the test dataset (repository ProjectGigaBrain/gigabrain-dataset, formerly EntradasGigabrain).
 
 The dataset comes in variants with growing noise (index column "variante", or
-EntradasGigabrain/README.md): v1-original, the reference, and rules-* and llm-*. A copy of the
+gigabrain-dataset/README.md): v1-original, the reference, and rules-* and llm-*. A copy of the
 dataset without variants (tag v1.0) is read as v1-original.
 
 Each project of v1-original is a folder with:
@@ -30,13 +30,14 @@ import os
 import re
 
 _PROJECT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-# The dataset is looked for next to the project and, if it is not there, inside it.
-_BESIDE = os.path.join(os.path.dirname(_PROJECT), "EntradasGigabrain")
-_INSIDE = os.path.join(_PROJECT, "EntradasGigabrain")
+# The dataset is looked for next to the project and, if it is not there, inside it. The old
+# name of the repository (EntradasGigabrain) still works for clones made before the rename.
+_NAMES = ("gigabrain-dataset", "EntradasGigabrain")
+_CANDIDATES = [os.path.join(base, name) for base in (os.path.dirname(_PROJECT), _PROJECT) for name in _NAMES]
 
 DEFAULT_FOLDER = os.environ.get(
     "GIGABRAIN_DATASET",
-    _INSIDE if os.path.isdir(_INSIDE) and not os.path.isdir(_BESIDE) else _BESIDE,
+    next((c for c in _CANDIDATES if os.path.isdir(c)), _CANDIDATES[0]),
 )
 INDEX_FILE = "indice_documentos.csv"
 TRANSCRIPT_FILE = "transcricao_reuniao.txt"
@@ -53,8 +54,8 @@ def _read_index(folder: str) -> list[dict]:
     index = os.path.join(folder, INDEX_FILE)
     if not os.path.exists(index):
         raise FileNotFoundError(
-            f"Dataset not found in {folder}. Clone https://github.com/schaumann-byte/EntradasGigabrain "
-            "next to gigabrain or set GIGABRAIN_DATASET."
+            f"Dataset not found in {folder}. Clone https://github.com/ProjectGigaBrain/gigabrain-dataset "
+            "next to gigabrain-api or set GIGABRAIN_DATASET."
         )
     with open(index, encoding="utf-8") as f:
         return list(csv.DictReader(f))
