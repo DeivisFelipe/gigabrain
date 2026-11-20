@@ -56,6 +56,8 @@ KINDS = {
     "knowledge_updated": "Expert -> Registry. {expert_id, version, motive}",
     "decision": "Twin -> Twin. {draft, save, motive}: the final vote of the Deliberative Council",
     "transcript": "System -> Twin. {project, title, turns}",
+    "meeting": "PO -> Twin. {text, title, part, turns}: a meeting (or the next part of one) sent in a conversation",
+    "draft_board": "Twin -> PO. {drafts}: the requirements of the conversation not yet approved, approved or rejected",
     "utterance": "System -> Twin. {turn, speaker, text}: the next utterance of the meeting",
     "drafts": "Twin -> Twin. {turn, requirements: [drafts taken from that utterance]}",
     "validation_report": "Critic -> Agent. {stage, verdict, passed, failed_dimensions, items, document, findings, summary, report}: "
@@ -64,6 +66,7 @@ KINDS = {
                          "an artefact that did not pass goes back to the agent that wrote it",
     "language_retry": "Twin -> System. {text}: its answer was not in the language of the PO, so it is asked once more",
     "language_off": "Twin -> System. {text}: asked again, the answer is still not in that language",
+    "epics_organized": "Twin -> Repository. {text, epics: [{id, title, requirements}]}: the requirements grouped into epics",
     "llm_call": "Agent -> LLM. {role, duration_ms, tokens?}",
     "error": "Any -> System. {error}",
 }

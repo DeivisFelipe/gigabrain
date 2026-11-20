@@ -170,6 +170,8 @@ def ears_statement(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
 def story_format(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
     if artifact.kind not in (ArtifactKind.REQUIREMENT, ArtifactKind.USER_STORY):
         return
+    if artifact.kind is ArtifactKind.REQUIREMENT and artifact.req_type is RequirementType.NON_FUNCTIONAL:
+        return  # an NFR is a constraint card, not a story (structure.constraint_card)
 
     def missing(label: str, locator: str, excerpt: str) -> Finding:
         return Finding(
@@ -227,6 +229,47 @@ def story_format(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
     for label in ("role", "goal", "benefit"):
         if len((match.group(label) or "").strip()) < 3:
             yield missing(label, f"story.{label}", story[:160])
+
+
+@item_check(
+    id="structure.constraint_card",
+    dimension=Dimension.CONFORMING,
+    severity=Severity.MAJOR,
+    description=(
+        "A non-functional requirement is a constraint card, not a user story: the quality it "
+        "constrains, what it applies to and how it is measured."
+    ),
+    weight=1.2,
+    requires="Applies to artefacts of kind requirement whose class is NFR.",
+)
+def constraint_card(artifact: Artifact, ctx: CheckContext) -> Iterable[Finding]:
+    if artifact.kind is not ArtifactKind.REQUIREMENT or artifact.req_type is not RequirementType.NON_FUNCTIONAL:
+        return
+    card = artifact.constraint or {}
+    if not card:
+        yield Finding(
+            check_id="structure.constraint_card",
+            dimension=Dimension.CONFORMING,
+            severity=Severity.MAJOR,
+            level=Level.ITEM,
+            target_id=artifact.id,
+            locator="constraint",
+            message="The non-functional requirement has no constraint card.",
+            suggestion="Say which quality it constrains, what it applies to and how it is measured.",
+        )
+        return
+    for label in ("quality", "scope", "measure"):
+        if len(str(card.get(label) or "").strip()) < 3:
+            yield Finding(
+                check_id="structure.constraint_card",
+                dimension=Dimension.CONFORMING,
+                severity=Severity.MINOR,
+                level=Level.ITEM,
+                target_id=artifact.id,
+                locator=f"constraint.{label}",
+                message=f"The '{label}' of the constraint card is empty or too short.",
+                suggestion=f"State the {label} explicitly instead of leaving it implicit.",
+            )
 
 
 @item_check(

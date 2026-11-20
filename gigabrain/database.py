@@ -54,7 +54,8 @@ CREATE TABLE IF NOT EXISTS log.conversation (
     started_at  TEXT NOT NULL,
     ended_at    TEXT,
     mode        TEXT NOT NULL,           -- after_meeting | in_meeting | meeting_<mode>
-    status      TEXT NOT NULL            -- open | approved | closed
+    status      TEXT NOT NULL,           -- open | approved | closed
+    title       TEXT                     -- name the PO gave it (optional)
 );
 
 CREATE TABLE IF NOT EXISTS main.requirement (
@@ -86,6 +87,14 @@ CREATE TABLE IF NOT EXISTS main.requirement_link (
     target_id        TEXT NOT NULL REFERENCES requirement(id),
     reason           TEXT,
     conversation_id  TEXT,
+    created_at       TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS main.epic (
+    id               TEXT PRIMARY KEY,   -- E1, E2, ...
+    title            TEXT NOT NULL,
+    description      TEXT NOT NULL,
+    requirements     TEXT NOT NULL,      -- JSON: ["R1", "R4"]
     created_at       TEXT NOT NULL
 );
 
@@ -162,6 +171,11 @@ class Database:
             self.con.execute(f"PRAGMA {alias}.journal_mode = WAL")
             self.con.execute(f"PRAGMA {alias}.synchronous = NORMAL")
         self.con.executescript(SCHEMA)
+        # Folders made before a column existed get it here.
+        columns = {row["name"] for row in self.con.execute("PRAGMA log.table_info(conversation)")}
+        if "title" not in columns:
+            with self.con:
+                self.con.execute("ALTER TABLE log.conversation ADD COLUMN title TEXT")
 
     def close(self) -> None:
         self.con.close()
@@ -172,6 +186,25 @@ class Database:
     def _one(self, sql: str, params: tuple = ()) -> dict | None:
         row = self.con.execute(sql, params).fetchone()
         return dict(row) if row else None
+
+    # ------------------------------------------------------------------ epics
+
+    def replace_epics(self, epics: list[dict]) -> list[dict]:
+        """Store a new grouping of the requirements (the previous one stays only in the log)."""
+        stored = [{"id": f"E{i}", "title": e["title"], "description": e.get("description", ""),
+                   "requirements": list(e["requirements"]), "created_at": now()} for i, e in enumerate(epics, start=1)]
+        with self.con:
+            self.con.execute("DELETE FROM epic")
+            for e in stored:
+                self.con.execute("INSERT INTO epic (id, title, description, requirements, created_at) VALUES (?, ?, ?, ?, ?)",
+                                 (e["id"], e["title"], e["description"], json.dumps(e["requirements"]), e["created_at"]))
+        return stored
+
+    def list_epics(self) -> list[dict]:
+        rows = self._all("SELECT * FROM epic ORDER BY CAST(SUBSTR(id, 2) AS INTEGER)")
+        for row in rows:
+            row["requirements"] = json.loads(row["requirements"])
+        return rows
 
     # ------------------------------------------------------------------ conversations
 
@@ -192,6 +225,24 @@ class Database:
     def end_conversation(self, id_: str, status: str) -> None:
         with self.con:
             self.con.execute("UPDATE conversation SET ended_at = ?, status = ? WHERE id = ?", (now(), status, id_))
+
+    def set_conversation_status(self, id_: str, status: str) -> None:
+        """Change the status of a conversation that goes on (e.g. approved, and the PO keeps talking)."""
+        with self.con:
+            self.con.execute("UPDATE conversation SET status = ? WHERE id = ?", (status, id_))
+
+    def get_conversation(self, id_: str) -> dict | None:
+        return self._one("SELECT * FROM conversation WHERE id = ?", (id_,))
+
+    def rename_conversation(self, id_: str, title: str | None) -> None:
+        with self.con:
+            self.con.execute("UPDATE conversation SET title = ? WHERE id = ?", (title, id_))
+
+    def delete_conversation(self, id_: str) -> None:
+        """Remove a conversation and its log. Only for one that saved nothing (see api.py)."""
+        with self.con:
+            self.con.execute("DELETE FROM event WHERE conversation_id = ?", (id_,))
+            self.con.execute("DELETE FROM conversation WHERE id = ?", (id_,))
 
     def list_conversations(self) -> list[dict]:
         return self._all(

@@ -519,7 +519,7 @@ const METRICS = [
 ];
 const METRICS_STRUCTURE = [
   ["ears", "EARS statement", "statement follows an EARS pattern"],
-  ["story", "Full story", "role, goal and benefit filled in"],
+  ["story", "Full card", "FR: story with role, goal and benefit · NFR: constraint card with quality, scope and measure"],
   ["gherkin", "Gherkin criteria", "every criterion has Given, When and Then"],
   ["not_vague", "No vague terms", "no 'fast', 'easy', 'user-friendly'… without a number"],
 ];
@@ -999,7 +999,7 @@ function drawMap() {
 function qualityChecks(q) {
   if (!q) return "";
   const check = (ok, txt) => `<span class="badge ${ok ? "ok" : "warn"}">${ok ? "✓" : "✗"} ${txt}</span>`;
-  return `<div class="checks">${check(q.ears, "EARS" + (q.ears_pattern ? " · " + q.ears_pattern : ""))}${check(q.story_complete, "full story")}
+  return `<div class="checks">${check(q.ears, "EARS" + (q.ears_pattern ? " · " + q.ears_pattern : ""))}${check(q.card_complete ?? q.story_complete, q.card === "constraint" ? "full constraint card" : "full story")}
     ${check(q.criteria_gherkin, `Given/When/Then (${q.criteria_count})`)}${check(!q.vague_terms.length, q.vague_terms.length ? "vague: " + q.vague_terms.join(", ") : "no vague terms")}</div>`;
 }
 
@@ -1021,6 +1021,11 @@ function validationBlock(v) {
 function storyBlock(story) {
   if (!story || !(story.role || story.goal)) return "";
   return `<h3>User story</h3><div class="block"><b>As a</b> ${esc(story.role)}, <b>I want</b> ${esc(story.goal)}, <b>so that</b> ${esc(story.benefit)}.</div>`;
+}
+
+function constraintBlock(constraint) {
+  if (!constraint || !(constraint.quality || constraint.measure)) return "";
+  return `<h3>Constraint card</h3><div class="block"><b>Quality:</b> ${esc(constraint.quality)}<br><b>Applies to:</b> ${esc(constraint.scope)}<br><b>Measure:</b> ${esc(constraint.measure)}</div>`;
 }
 
 function criteriaBlock(criteria) {
@@ -1051,7 +1056,7 @@ async function showRequirement() {
     ${qualityChecks(r.quality)}
     ${validationBlock(r.validation)}
     <h3>Statement${c.ears_pattern ? ` · EARS ${esc(c.ears_pattern)}` : ""}</h3><div class="block" style="font-size:16px">${esc(c.statement)}</div>
-    ${storyBlock(c.story)}
+    ${storyBlock(c.story)}${constraintBlock(c.constraint)}
     ${criteriaBlock(c.acceptance_criteria)}
     ${c.turns?.length ? `<h3>Where it was said</h3><div>${c.turns.map((t) => `<span class="tag mono">${esc(t)}</span>`).join("")}</div>` : ""}
     <h3>Links</h3>${links ? `<ul class="plain">${links}</ul>` : '<div class="muted">none</div>'}

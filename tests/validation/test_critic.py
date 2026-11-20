@@ -68,7 +68,8 @@ class TestProposalGate(Flow):
         ])
         kinds = [e["kind"] for e in events(council.ctx)]
         self.assertEqual(kinds.count("proposal"), 1)  # the PO never sees the version that was returned
-        self.assertEqual(kinds[-2:], ["validation_report", "proposal"])
+        # After the proposal, only the board of drafts the PO reviews.
+        self.assertEqual(kinds[-3:], ["validation_report", "proposal", "draft_board"])
 
         check = answer["validation"]
         self.assertEqual((check["verdict"], check["passed"], check["failed_dimensions"]), ("rejected", False, ["verifiable"]))

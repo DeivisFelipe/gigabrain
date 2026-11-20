@@ -43,7 +43,7 @@ DECIDED_BY = {
     "single_agent": "twin (single agent, no council)",
     "plain_llm": "plain llm (baseline, no council)",
 }
-REQUIREMENT_FIELDS = ("title", "statement", "ears_pattern", "story", "acceptance_criteria", "class", "subtype", "kind")
+REQUIREMENT_FIELDS = ("title", "statement", "ears_pattern", "story", "constraint", "acceptance_criteria", "class", "subtype", "kind")
 
 
 def _record(ctx: Context, sender: str, recipient: str, kind: str, content: dict) -> None:
@@ -163,12 +163,13 @@ def _process_meetings(ctx: Context, project: dict, mode: str) -> dict:
 
 
 def _structure_metrics(predicted: list[dict]) -> dict:
-    """Share of saved requirements with an EARS statement, a full story, Gherkin criteria and no vague terms."""
+    """Share of saved requirements with an EARS statement, a full card (story for an FR, constraint
+    card for an NFR), Gherkin criteria and no vague terms."""
     n = len(predicted)
     rate = lambda f: round(sum(1 for p in predicted if f(p["quality"])) / n, 4) if n else None
     return {
         "ears": rate(lambda q: q["ears"]),
-        "story": rate(lambda q: q["story_complete"]),
+        "story": rate(lambda q: q["card_complete"]),
         "gherkin": rate(lambda q: q["criteria_gherkin"]),
         "not_vague": rate(lambda q: not q["vague_terms"]),
     }

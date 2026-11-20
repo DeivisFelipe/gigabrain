@@ -89,6 +89,7 @@ def artifact_from_requirement(
         ears_pattern=str(content.get("ears_pattern") or ""),
         story=story_text,
         story_parts=story_parts,
+        constraint=content.get("constraint") if isinstance(content.get("constraint"), dict) else None,
         rationale=str(rationale if rationale is not None else content.get("reason") or ""),
         acceptance_criteria=criteria_text,
         criteria=criteria_parts,

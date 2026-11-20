@@ -40,24 +40,32 @@ class TestApi(unittest.TestCase):
         self.assertTrue(r["proposed_requirements"][0]["quality"]["ears"])
 
         r = c.post(f"/api/v1/projects/p/conversations/{cid}/approve").json()
-        self.assertEqual((r["action"], r["saved"], r["conversation_active"]), ("approved", ["R1"], False))
+        # Approving saves and the conversation goes on.
+        self.assertEqual((r["action"], r["saved"], r["conversation_active"]), ("approved", ["R1"], True))
+        self.assertEqual([(d["draft_id"], d["status"], d["saved_as"]) for d in r["drafts"]], [("D1", "approved", "R1")])
         self.assertIn("requirement_saved", {b["kind"] for b in r["behind_the_scenes"]})
-
-        # After approval, the conversation accepts no more messages.
-        self.assertEqual(c.post(f"/api/v1/projects/p/conversations/{cid}/messages", json={"text": "hi"}).status_code, 409)
 
         # Conversation history, as the PO sees it.
         h = c.get(f"/api/v1/projects/p/conversations/{cid}").json()
-        self.assertEqual(h["status"], "approved")
+        self.assertEqual((h["status"], h["active"]), ("approved", True))
         self.assertEqual([m["author"] for m in h["messages"]], ["po", "twin", "po", "twin", "po", "twin"])
         self.assertEqual(h["messages"][-1]["kind"], "confirmation")
         self.assertEqual(h["saved_requirements"], ["R1"])
+        self.assertEqual(h["drafts"][0]["saved_as"], "R1")
+
+        # After approval the PO can keep talking in the same conversation.
+        r = c.post(f"/api/v1/projects/p/conversations/{cid}/messages", json={"text": "I also want a monthly report of declined payments"}).json()
+        self.assertEqual((r["action"], [d["draft_id"] for d in r["proposed_requirements"]]), ("propose", ["D2"]))
+        self.assertIn("declined payments", r["proposed_requirements"][0]["statement"])
 
         # Requirements repository and behind the scenes.
         self.assertEqual([r["id"] for r in c.get("/api/v1/projects/p/requirements").json()], ["R1"])
         self.assertEqual(c.get("/api/v1/projects/p/requirements", params={"search": "payment"}).json()[0]["id"], "R1")
         detail = c.get("/api/v1/projects/p/requirements/R1").json()
         self.assertEqual(len(detail["versions"]), 1)
+        listed = c.get("/api/v1/projects/p/requirements").json()[0]
+        self.assertIn("ears", listed["quality"])  # completeness in the list, not only in the detail
+        self.assertTrue(listed["experts"])  # who contributed
         self.assertTrue(detail["trace"])
         self.assertIn("ears", detail["quality"])
         self.assertEqual(c.get("/api/v1/projects/p/requirements/R99").status_code, 404)

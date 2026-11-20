@@ -41,6 +41,14 @@ MIN_SHARE = 0.05
 # What the code itself says to the PO. Other languages get the English text.
 PHRASES = {
     "saved": {"English": "Saved: {ids}.", "Portuguese": "Requisitos gravados: {ids}."},
+    "meeting_read": {
+        "English": "I read {utterances} utterances: {new} new drafts, {changed} changed and {discarded} left out "
+                   "(repeated or not requirements). {pending} drafts are waiting for your review: approve, reject or "
+                   "tell me what to change.",
+        "Portuguese": "Li {utterances} falas: {new} rascunhos novos, {changed} alterados e {discarded} deixados de fora "
+                      "(repetidos ou que não eram requisitos). {pending} rascunhos esperam sua revisão: aprove, rejeite "
+                      "ou diga o que mudar.",
+    },
     "nothing_to_approve": {"English": "There is no proposal to approve yet.", "Portuguese": "Ainda não há proposta para aprovar."},
     "no_expert_yet": {
         "English": "There is no expert yet for: {topics}. It will be created after the meeting; what do you already know about it?",

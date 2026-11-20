@@ -25,12 +25,28 @@ from .base import Agent, as_json
 
 # The requirement structure every prompt asks for (see requirement_format.py).
 REQUIREMENT_FORMAT = """\
+Classes of requirement:
+- FR (functional): WHAT the system does. A function, an input, an output, a calculation, a business
+  rule, what the user can do. Ex.: "The system shall export the monthly report to PDF."
+- NFR (non-functional): HOW WELL the system does it. A quality or a constraint on all or part of the
+  system: performance, security, usability, availability, portability, legal... Ex.: "The search
+  shall return results within 2 seconds."
+- A rule about what the system does with data (e.g. "the password has at least 8 characters") is
+  FR; it is NFR only when it demands a quality (encryption, response time, uptime). In doubt, FR.
+
+An FR is told as a user story. An NFR is NOT a user story: it is a constraint card, the limit the
+stories it applies to must respect, and how it is measured. So an FR has "story" and
+"constraint": null; an NFR has "constraint" and "story": null.
+
 Requirement structure:
 {
   "title": "short title",
   "statement": "one 'shall' sentence following an EARS pattern",
   "ears_pattern": "ubiquitous" | "event" | "state" | "unwanted" | "optional" | "complex",
-  "story": {"role": "who benefits", "goal": "what they want", "benefit": "why"},
+  "story": FR only, {"role": "who benefits", "goal": "what they want", "benefit": "why"}; null for NFR,
+  "constraint": NFR only, {"quality": "the quality constrained (e.g. response time)",
+                "scope": "what it applies to (e.g. every search)",
+                "measure": "how it is measured, with the number (e.g. 95% of searches under 2 s)"}; null for FR,
   "acceptance_criteria": [
     {"scenario": "name", "given": "initial context", "when": "action or event", "then": "observable result"}
   ],
@@ -82,6 +98,15 @@ You receive JSON messages:
   (summary, conflicts, questions_for_po, related_requirements)
 - {{"from": "system", "notice": "..."}}                    a system notice
 
+Drafts: a PO message may bring "drafts", the requirements already proposed in this conversation
+(by you or read from a meeting the PO sent) that the PO has not approved yet, each with a
+"draft_id" (D1, D2...). They are the working list the PO is reviewing:
+- to change a draft, return it whole in "requirements" with its "draft_id";
+- a requirement without "draft_id" is a new draft;
+- to drop drafts the PO rejects, list their ids in "remove_drafts";
+- drafts you do not mention stay as they are, so return only what changes.
+Approved requirements are no longer drafts: they are in the Repository (R1, R2...).
+
 If the Leader returns questions_for_po, take them to the PO before proposing.
 If there are conflicts, show them to the PO and let the PO decide.
 
@@ -97,10 +122,12 @@ Always answer with a single JSON object:
   "requirements": [
     {{ ...requirement structure..., "kind": "business" | "enabler", "topics": ["payments"],
       "base": null or "R<n>", "links": [{{"kind": "refines", "target": "R<n>", "reason": "..."}}],
-      "reason": "why this requirement (or this new version) exists" }}
-  ]
+      "reason": "why this requirement (or this new version) exists",
+      "draft_id": null or "D<n>" }}
+  ],
+  "remove_drafts": ["D<n>", ...]
 }}
-"query" is filled only with "action": "consult"; "requirements" only with "action": "propose".
+"query" is filled only with "action": "consult"; "requirements" and "remove_drafts" only with "action": "propose".
 Be direct and concise. Do not repeat what the PO already said.
 """
 
@@ -130,6 +157,15 @@ Rules:
 {REQUIREMENT_FORMAT}
 Answer with a single JSON object:
 {{"requirements": [{{ ...requirement structure..., "topic": "..." }}]}}
+"""
+
+# Added to DRAFT_PROMPT only for a meeting the PO sends in a conversation (the prompt above,
+# used in the evaluation, is left as it is).
+DRAFTS_NOTE = """
+In this conversation, items of "already_saved" whose id starts with D are drafts the PO has
+not approved yet. When the utterance changes one of them (another value, a new restriction, a
+correction), do not draft a new requirement: return the whole corrected requirement with
+"replaces": "D<n>".
 """
 
 # "Plain LLM" baseline: a minimal request, without the Twin's rules and without the council.
@@ -205,7 +241,7 @@ class DigitalTwin(Agent):
         decision = self._think(data)
         # A proposal passes the Critic before the PO sees it; what does not pass comes
         # back here, through _think, as a system notice (see agents/critic.py).
-        if self.ctx.critic and decision["action"] == "propose":
+        if self.ctx.critic and decision["action"] == "propose" and decision["requirements"]:
             decision = self.ctx.critic.gate_proposal(self, decision, self._think)
         self._announce(decision)
         return decision
@@ -219,11 +255,12 @@ class DigitalTwin(Agent):
         decision["requirements"] = decision.get("requirements") or []
         if decision.get("action") not in ("ask", "consult", "propose"):
             decision["action"] = "ask"
-        if decision["action"] == "propose" and not decision["requirements"]:
+        decision["remove_drafts"] = [d for d in (decision.get("remove_drafts") or []) if isinstance(d, str)]
+        if decision["action"] == "propose" and not decision["requirements"] and not decision["remove_drafts"]:
             decision["action"] = "ask"
         decision["message_to_po"] = decision.get("message_to_po") or NOTHING_TO_SAY
         decision["requirements"] = [
-            {**requirement_format.normalize(r), **{k: r.get(k) for k in ("base", "links", "reason") if k in r},
+            {**requirement_format.normalize(r), **{k: r.get(k) for k in ("base", "links", "reason", "draft_id") if r.get(k)},
              "topics": r.get("topics") or ["general"]}
             for r in decision["requirements"]
         ]
@@ -251,9 +288,10 @@ class DigitalTwin(Agent):
         else:
             self.send(PO, "question_to_po", {"text": decision.get("message_to_po", "")})
 
-    def hear_po(self, text: str) -> dict:
+    def hear_po(self, text: str, drafts: list[dict] | None = None) -> dict:
+        """`drafts`: the requirements of the conversation the PO has not approved yet."""
         self.language = spoken_language(text) or self.language  # a short "yes" keeps the language of the conversation
-        return self._decide({"from": "po", "text": text})
+        return self._decide({"from": "po", "text": text, **({"drafts": drafts} if drafts else {})})
 
     def hear_leader(self, consolidated_answer: dict) -> dict:
         return self._decide({"from": "leader", "consolidated_answer": consolidated_answer})
@@ -263,12 +301,16 @@ class DigitalTwin(Agent):
 
     # ------------------------------------------------------------------ meeting in batch
 
-    def draft(self, project: dict, utterance_index: int, already_saved: list[dict], next_index: int) -> list[dict]:
-        """Read ONE utterance of the meeting (with the previous ones as context) and return its drafts."""
+    def draft(self, project: dict, utterance_index: int, already_saved: list[dict], next_index: int,
+              note: str | None = None) -> list[dict]:
+        """Read ONE utterance of the meeting (with the previous ones as context) and return its drafts.
+
+        `note` is added to the prompt (DRAFTS_NOTE in a conversation); the evaluation sends none.
+        """
         turns = project["turns"]
         utterance = turns[utterance_index]
         line = lambda t: f"[{t['id']}] {t['speaker']}: {t['text']}"
-        answer = self.call_llm("twin_draft", DRAFT_PROMPT, [{"role": "user", "content": as_json({
+        answer = self.call_llm("twin_draft", DRAFT_PROMPT + (note or ""), [{"role": "user", "content": as_json({
             "project": project["title"],
             "language": project.get("language", "en"),
             "context": [line(t) for t in turns[max(0, utterance_index - CONTEXT_UTTERANCES):utterance_index]],
@@ -281,7 +323,7 @@ class DigitalTwin(Agent):
             if not req["statement"]:
                 continue
             drafts.append({**req, "index": next_index + len(drafts), "topic": raw.get("topic") or "general",
-                           "turns": [utterance["id"]]})
+                           "turns": [utterance["id"]], **({"replaces": raw["replaces"]} if raw.get("replaces") else {})})
         if drafts:
             self.send(TWIN, "drafts", {"turn": utterance["id"], "requirements": drafts})
         return drafts

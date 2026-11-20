@@ -58,6 +58,8 @@ It is for testing the flow, not for measuring quality.
 | `python main.py experts` | list the experts |
 | `python main.py feed payments minutes.md` | give a document to an expert |
 | `python main.py validate` | score the saved requirements with the Critic (no LLM) |
+| `python main.py quality` | how the saved requirements follow the format (EARS, story or constraint card, Gherkin) |
+| `python main.py epics` | group the saved requirements into epics (`--simulated`: by topic, no LLM) |
 | `python main.py evaluate ...` | evaluation with the dataset (see below) |
 | `python main.py annotation ...` | manual annotation of the links (see below) |
 | `python -m unittest discover tests` | tests (offline) |
@@ -88,6 +90,20 @@ PO ──▶ Digital Twin ──▶ Leader ──▶ Experts (one per topic: pay
 
 Nothing is saved without an explicit approval. "Approved, but change the deadline" does not approve.
 
+### Drafts: a conversation is a working list
+
+What the Twin proposes is a **draft** (D1, D2...) until the PO approves it. The PO can:
+
+- **send a meeting** (or the next part of one): it is read one utterance at a time, as in the
+  evaluation. Each requirement becomes a draft after the expert of its topic and the quality
+  expert review it. A later part that corrects a draft ("the password has at least 12
+  characters") changes that draft; one that repeats it is left out;
+- **talk about the drafts**: "in D3 the limit is 5", "reject D2", or anything new;
+- **approve or reject one by one**, or approve all at once, and restore a rejected draft.
+
+Approving saves the draft in the Repository and the conversation goes on: the PO keeps talking,
+sends more of the meeting and approves again. Only closing ends a conversation.
+
 ## Requirement format
 
 There is no single standard for writing requirements, so GigaBrain combines the most used ones.
@@ -96,9 +112,19 @@ Each one answers a different question:
 | Field | Format | Answers | Source |
 |---|---|---|---|
 | `statement` | "shall" sentence in an EARS pattern | what the system must do, without ambiguity | ISO/IEC/IEEE 29148, EARS |
-| `story` | As a *role*, I want *goal*, so that *benefit* | who wants it and why | agile user stories |
+| `story` (FR) | As a *role*, I want *goal*, so that *benefit* | who wants it and why | agile user stories |
+| `constraint` (NFR) | constraint card: *quality*, *scope*, *measure* | which limit the stories must respect, and how to measure it | constraint cards (Cohn, 2004) |
 | `acceptance_criteria` | Given / When / Then | how to test it | BDD (Gherkin) |
 | `class`, `subtype` | FR or NFR; NFR subtype from ISO/IEC 25010 | what kind of requirement it is | PROMISE/PURE |
+
+- **FR (functional)**: *what* the system does. A function, an input, an output, a business
+  rule. "The system shall export the monthly report to PDF."
+- **NFR (non-functional)**: *how well* it does it. Performance, security, usability,
+  availability... "The search shall return results within 2 seconds."
+
+An NFR is **not** a user story: nobody wants a response time for its own sake. It is a
+constraint card that limits the stories it applies to. So an FR has `story` and no
+`constraint`, and an NFR has `constraint` and no `story`.
 
 ### EARS patterns
 
@@ -114,22 +140,40 @@ EARS (Easy Approach to Requirements Syntax, Mavin et al., 2009) uses five senten
 
 A mix of them (e.g. "While ..., when ...") is `complex`.
 
-### Example of a saved requirement
+### Examples of saved requirements
+
+A functional requirement, with its user story:
 
 ```json
 {
   "title": "Payment confirmation email",
-  "statement": "When the payment is confirmed, the system shall email the customer within 1 minute.",
+  "statement": "When the payment is confirmed, the system shall email the customer.",
   "ears_pattern": "event",
   "story": {"role": "customer", "goal": "to be told my payment went through", "benefit": "I know the order is done"},
+  "constraint": null,
   "acceptance_criteria": [
     {"scenario": "Confirmed payment", "given": "an order waiting for payment",
-     "when": "the payment is confirmed", "then": "the customer receives an email within 1 minute"}
+     "when": "the payment is confirmed", "then": "the customer receives an email"}
   ],
-  "class": "NFR",
-  "subtype": "PE",
-  "kind": "business",
-  "topics": ["payments", "notifications"]
+  "class": "FR", "subtype": null, "kind": "business", "topics": ["payments", "notifications"]
+}
+```
+
+A non-functional requirement, with its constraint card:
+
+```json
+{
+  "title": "Confirmation email time",
+  "statement": "The system shall send the payment confirmation email within 1 minute.",
+  "ears_pattern": "ubiquitous",
+  "story": null,
+  "constraint": {"quality": "performance", "scope": "every payment confirmation email",
+                 "measure": "sent within 1 minute of the confirmation, in 99% of the payments"},
+  "acceptance_criteria": [
+    {"scenario": "Peak hour", "given": "1,000 payments confirmed in an hour",
+     "when": "each payment is confirmed", "then": "99% of the emails leave within 1 minute"}
+  ],
+  "class": "NFR", "subtype": "PE", "kind": "business", "topics": ["notifications"]
 }
 ```
 
@@ -141,7 +185,7 @@ dashboard show them next to the requirement:
 | Check | OK when |
 |---|---|
 | `ears` | the statement has "shall"/"must" and fits a pattern |
-| `story_complete` | role, goal and benefit are filled in |
+| `card_complete` | FR: the story has role, goal and benefit · NFR: the constraint card has quality, scope and measure |
 | `criteria_gherkin` | every criterion has given, when and then |
 | `vague_terms` | empty: no "fast", "easy", "user-friendly"... without a number |
 
@@ -163,6 +207,20 @@ Each requirement has an id (R1, R2...), versions (none is ever deleted) and link
 | `conflicts_with` | contradicts it | the PO decides |
 
 Read it as "source *link* target": "R3 supersedes R1".
+
+## Epics
+
+Once the list grows, the Twin organizes it one level up: the requirements about the same theme
+go into an **epic**, and each epic shows its user stories (the FRs) and its constraint cards
+(the NFRs that limit them). Every active requirement is in exactly one epic. Organizing again
+replaces the epics: the requirements are the source of truth, the epics a view of them.
+
+```bash
+python main.py epics              # with DeepSeek
+python main.py epics --simulated  # one epic per topic, without the LLM
+```
+
+In the API: `POST /epics` organizes, `GET /epics` reads them.
 
 ## Validation
 
@@ -221,7 +279,7 @@ Three SQLite files in the data folder:
 
 | File | Content |
 |---|---|
-| `requirements.db` | requirements, versions and links |
+| `requirements.db` | requirements, versions, links and epics |
 | `experts.db` | experts and every version of their knowledge |
 | `log.db` | conversations and every message exchanged by the agents (JSON) |
 
@@ -248,30 +306,47 @@ set `GIGABRAIN_MAX_MESSAGE_CHARS` before starting the API. Longer messages get 4
 
 ### Routes
 
-Base: `/api/v1`
+Base: `/api/v1`. Projects are at `/projects`; everything else lives inside a project:
+`/api/v1/projects/{project}/...`
 
 | Method | Route | What it does |
 |---|---|---|
-| POST | `/conversations` | open a conversation. Optional body: `{"mode": "after_meeting"}` |
-| POST | `/conversations/{id}/messages` | the PO talks. Body: `{"text": "..."}` |
-| POST | `/conversations/{id}/approve` | approve the pending proposal |
-| POST | `/conversations/{id}/close` | close without approving |
-| GET | `/conversations` | list the conversations |
-| GET | `/conversations/{id}` | messages of the conversation (PO and Twin) |
+| GET, POST | `/projects` | list and create projects. Body: `{"name": "...", "description": "..."}` |
+| GET, PATCH | `/projects/{project}` | read and rename a project |
+| POST | `/conversations` | open a conversation. Optional body: `{"mode": "after_meeting", "title": "..."}` |
+| POST | `/conversations/{id}/messages` | the PO talks. JSON `{"text": "..."}`, or a form with `text` and up to 5 `files` |
+| POST | `/conversations/{id}/meeting` | the PO sends a meeting or its next part. Body: `{"text": "Speaker: ...", "title": "..."}` |
+| POST | `/conversations/{id}/approve` | approve the pending drafts. Optional body: `{"draft_ids": ["D1", "D3"]}` |
+| POST | `/conversations/{id}/drafts/{draft}/approve` | approve one draft |
+| DELETE | `/conversations/{id}/drafts/{draft}` | reject one draft |
+| POST | `/conversations/{id}/drafts/{draft}/restore` | undo a rejection |
+| PATCH | `/conversations/{id}` | rename. Body: `{"title": "..."}` (empty removes it) |
+| POST | `/conversations/{id}/close` | close: it keeps the history and stops accepting messages |
+| DELETE | `/conversations/{id}` | delete a conversation that saved nothing (409 if it saved requirements) |
+| DELETE | `/conversations` | delete every conversation where the PO never wrote |
+| GET | `/conversations` | list the conversations (`title`, `status`, `active`) |
+| GET | `/conversations/{id}` | messages, drafts, saved requirements and how many times each expert answered |
 | GET | `/conversations/{id}/events` | everything the agents exchanged |
-| GET | `/requirements?status=&topic=&search=` | list the requirements |
-| GET | `/requirements/{id}` | requirement with versions, links, sources, checks and trace |
+| GET | `/requirements?status=&topic=&search=` | list the requirements, with format checks, sources and contributing experts |
+| GET | `/requirements/{id}` | requirement with versions, links, sources, checks, validation and trace |
+| GET | `/quality` | how the requirements follow the format (share that passes each check) |
+| GET, POST | `/epics` | read the epics; organize them again |
 | GET | `/links` | all links |
-| GET | `/experts` and `/experts/{id}` | experts and their knowledge |
-| GET | `/health` | status (no token needed) |
+| GET | `/experts` and `/experts/{id}` | experts (with `consultations`) and their knowledge |
+| GET | `/health` | status and limits (no token needed) |
 
-### Answer to a message
+### Answer of the Twin
+
+Messages, meetings and the draft buttons all answer the same way:
 
 ```json
 {
   "action": "propose",
   "message": "text to show the PO",
-  "proposed_requirements": [{"title": "...", "statement": "...", "story": {}, "acceptance_criteria": [], "quality": {}, "validation": {}}],
+  "proposed_requirements": [{"draft_id": "D2", "status": "pending", "statement": "...", "story": {}, "constraint": null,
+                             "acceptance_criteria": [], "sources": [], "quality": {}, "validation": {}}],
+  "drafts": [{"draft_id": "D1", "status": "approved", "saved_as": "R4", "...": "..."},
+             {"draft_id": "D2", "status": "pending", "...": "..."}],
   "validation": {"verdict": "approved_with_remarks", "passed": true, "failed_dimensions": [], "findings": [], "rounds": 0},
   "saved": [],
   "pending_proposal": true,
@@ -281,20 +356,25 @@ Base: `/api/v1`
 ```
 
 - `action = ask`: show the message and wait for the PO.
-- `action = propose`: show the requirements and the Approve button.
-- `action = approved`: the conversation is over. `saved` has the saved ids.
-- `behind_the_scenes`: what the agents did to answer. Optional on screen.
-- `validation`: the Critic's report on the proposal (verdict, competencies that did not pass,
-  findings, how many times it went back to the Twin). `null` when it is not a proposal or the
-  API runs with `--no-validation`.
+- `action = propose`: there are drafts to review (`proposed_requirements`, the pending ones).
+- `action = approved`: drafts were saved; `saved` has their ids. The conversation goes on.
+- `drafts`: every draft of the conversation and its status: `pending`, `approved` (with
+  `saved_as`) or `rejected`. `origin` says whether it came from the chat or from a meeting.
+- `sources` of a draft: the utterances it came from (`turn`) and the experts that reviewed it
+  (`expert`, with `action`: `keep` or `fix` when the expert changed it).
+- `validation`: the Critic's report on the proposal. `null` when it does not apply or the API
+  runs with `--no-validation`.
 
 ### Notes
 
-- A message may take up to ~1 minute. Use a 120 s timeout.
-- Open conversations live in the API memory. If it restarts, they answer 409 and the PO
-  opens a new one. The history is not lost.
-- Errors: 401 token, 404 not found, 409 inactive conversation, 422 invalid body, 502 model
-  failure. The body has `{"detail": "..."}`.
+- A message may take up to ~1 minute; a meeting, several minutes (one utterance at a time).
+- Limits: 50,000 characters per message (`GIGABRAIN_MAX_MESSAGE_CHARS`), 200,000 per meeting
+  part (`GIGABRAIN_MAX_MEETING_CHARS`), 5 files of up to 10 MB (.txt, .md, .csv, .json, .docx,
+  .pdf). `GET /health` returns them.
+- Open conversations live in the API memory. If it restarts, a conversation is brought back
+  from the log on its next message, with its drafts.
+- Errors: 401 token, 404 not found, 409 closed conversation or nothing to approve, 422 invalid
+  body, 502 model failure. The body has `{"detail": "..."}`.
 
 ### JavaScript example
 
@@ -304,11 +384,13 @@ const post = (route, body) => fetch(API + route, {
   method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body ?? {}),
 }).then((r) => r.json());
 
-const { id } = await post("/conversations");
-let r = await post(`/conversations/${id}/messages`, { text: "I want to notify the customer when the payment is confirmed" });
-r = await post(`/conversations/${id}/messages`, { text: "By email, within 1 minute" });
-r = await post(`/conversations/${id}/approve`);          // r.saved -> ["R1"]
-const requirements = await fetch(API + "/requirements").then((x) => x.json());
+const P = "/projects/my-project";
+const { id } = await post(`${P}/conversations`, { title: "Kick-off" });
+let r = await post(`${P}/conversations/${id}/meeting`, { text: "Analyst: How should login work?\nClient: Users must log in with their email." });
+r = await post(`${P}/conversations/${id}/messages`, { text: "In D1 the password has at least 12 characters" });
+r = await post(`${P}/conversations/${id}/drafts/D1/approve`);   // r.saved -> ["R1"]
+r = await post(`${P}/conversations/${id}/messages`, { text: "I also need a monthly sales report" });
+const requirements = await fetch(API + `${P}/requirements`).then((x) => x.json());
 ```
 
 ## Dashboard
@@ -407,7 +489,7 @@ returns nothing, so they stay baselines.
 | subtype | NFR subtype correct |
 | trace | cited the utterance the requirement came from |
 | unsupported | requirement not backed by the cited utterance |
-| ears, story, gherkin, not_vague | share of requirements that pass each format check |
+| ears, story, gherkin, not_vague | share of requirements that pass each format check (`story`: the story of an FR or the constraint card of an NFR) |
 | valid | share of saved requirements that pass the Critic's five item competencies |
 | repetitions_avoided | `sessions` scenario only |
 | changes_linked | `sessions` scenario only |
@@ -470,7 +552,10 @@ The draft of the evaluation method for the paper is in `docs/evaluation-method.m
 | `gigabrain/agents/` | Twin, Leader, Expert and Critic |
 | `gigabrain/validation/` | the checks, the gate and the report the Critic uses |
 | `gigabrain/validation_read.py` | the scores of a saved requirement, for the API and the dashboard |
-| `gigabrain/council.py` | conversation with the PO |
+| `gigabrain/council.py` | conversation with the PO: messages, meetings and drafts |
+| `gigabrain/transcript.py` | turns a pasted meeting into utterances |
+| `gigabrain/documents.py` | text of the files attached in the chat |
+| `gigabrain/epics.py` | requirements grouped into epics |
 | `gigabrain/meeting.py` | meeting processed one utterance at a time |
 | `gigabrain/log.py` | records the messages |
 | `gigabrain/api.py` | REST API |
