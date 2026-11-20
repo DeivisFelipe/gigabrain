@@ -16,6 +16,7 @@ dados-avaliacao/
 *.pem
 *.bundle
 runs/
+gigabrain-dataset/
 EntradasGigabrain/
 # local design notes of the validation layer
 docs/validation/

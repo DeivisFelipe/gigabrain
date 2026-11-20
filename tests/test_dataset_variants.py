@@ -58,7 +58,7 @@ def _write_meeting(path: str, meeting_id: str, utterances) -> list[dict]:
 
 
 def make_variants_dataset(folder: str) -> None:
-    """The layout of EntradasGigabrain: v1-original, variante_A/rules-demo, one index for both."""
+    """The layout of gigabrain-dataset: v1-original, variante_A/rules-demo, one index for both."""
     v1 = os.path.join(folder, "v1-original", "test-project")
     os.makedirs(v1)
     with open(os.path.join(v1, dataset.TRANSCRIPT_FILE), "w", encoding="utf-8") as f:
@@ -226,7 +226,7 @@ class TestWhatSchema2Measures(unittest.TestCase):
 
 
 @unittest.skipUnless(os.path.exists(os.path.join(dataset.DEFAULT_FOLDER, dataset.INDEX_FILE)),
-                     "EntradasGigabrain dataset not cloned next to the project")
+                     "gigabrain-dataset dataset not cloned next to the project")
 class TestRealVariants(unittest.TestCase):
     def test_every_project_of_every_variant_loads(self):
         for variant in dataset.list_variants():

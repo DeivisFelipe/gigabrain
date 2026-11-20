@@ -34,7 +34,7 @@ to the FR/NFR class and the subtype.
 
 ## Data
 
-- **Meeting dataset** (EntradasGigabrain): 18 simulated transcripts derived from PURE, with
+- **Meeting dataset** (gigabrain-dataset): 18 simulated transcripts derived from PURE, with
   gold standard requirements, FR/NFR class, NFR subtype and source turns. One project
   (2005-microcare) has an empty gold standard and was excluded; 17 projects and [820]
   requirements remain.

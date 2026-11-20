@@ -1,6 +1,6 @@
 """Automated test of the whole flow through the REST API, with meetings of the test dataset.
 
-The PO's messages are real turns of the dataset (EntradasGigabrain). By default the API runs in the
+The PO's messages are real turns of the dataset (gigabrain-dataset). By default the API runs in the
 test process with the simulated provider (no network, no key). To test an API that is already running:
 
     GIGABRAIN_API_URL=http://127.0.0.1:8000/api/v1 [GIGABRAIN_API_TOKEN=...] [GIGABRAIN_LLM_KEY=...] \\
@@ -45,7 +45,7 @@ def _po_messages(variant: str) -> list[str]:
     return [t["text"][:1500] for t in turns if t["text"] and not t["context"]][:MAX_TURNS]
 
 
-@unittest.skipUnless(_dataset_available(), "dataset EntradasGigabrain not found (set GIGABRAIN_DATASET)")
+@unittest.skipUnless(_dataset_available(), "dataset gigabrain-dataset not found (set GIGABRAIN_DATASET)")
 class TestApiWithDataset(unittest.TestCase):
     def setUp(self):
         if LIVE_URL:

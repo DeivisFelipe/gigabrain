@@ -44,7 +44,7 @@ SESSION_GOLD = [
 
 
 def make_dataset(folder: str, utterances=UTTERANCES, gold=GOLD) -> None:
-    """Build a minimal project in the same format as EntradasGigabrain (Portuguese file names)."""
+    """Build a minimal project in the same format as gigabrain-dataset (Portuguese file names)."""
     base = os.path.join(folder, "test-project")
     os.makedirs(base)
     text, segments = "", []
@@ -232,7 +232,7 @@ class TestAnnotation(TempFolder):
 
 
 @unittest.skipUnless(os.path.exists(os.path.join(dataset.DEFAULT_FOLDER, dataset.INDEX_FILE)),
-                     "EntradasGigabrain dataset not cloned next to the project")
+                     "gigabrain-dataset dataset not cloned next to the project")
 class TestRealDataset(unittest.TestCase):
     def test_every_project_loads(self):
         for p in dataset.list_projects():

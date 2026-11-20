@@ -2,7 +2,7 @@
 
 evaluation.evaluate pairs predictions with what should come out (precision, recall, F1). Here,
 with the same similarity and the same threshold, come the measures of the dataset's README
-(EntradasGigabrain, section 5) that GigaBrain can answer:
+(gigabrain-dataset, section 5) that GigaBrain can answer:
 
 - distractor_hits, rejected_hits, omitted_hits   predictions without a pair that match a losing
                                                  proposal, a withdrawn requirement or one nobody
