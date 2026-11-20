@@ -132,6 +132,13 @@ class Council:
         """Add a draft, or change a pending one. Returns (draft id, whether it changed an existing one)."""
         existing = self._draft(draft_id)
         if existing and existing["status"] == "pending":
+            # The Twin sees a summary of each draft, so a change may come without the story or the
+            # criteria: what it did not send stays as it was.
+            requirement.update({k: v for k, v in existing["requirement"].items() if requirement.get(k) in (None, "", [], {})})
+            if requirement.get("class") == "NFR":
+                requirement["story"] = None
+            else:
+                requirement["constraint"] = None
             requirement["draft_id"] = existing["draft_id"]
             existing["requirement"] = requirement
             existing["sources"] = existing["sources"] + [s for s in sources if s not in existing["sources"]]

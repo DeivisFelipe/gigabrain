@@ -158,6 +158,9 @@ class TestTalkingAboutDrafts(ApiCase):
         r = self.client.post(self.url(cid, "/messages"), json={"text": "In D2 the report also goes to the board"}).json()
         drafts = {d["draft_id"]: d for d in r["drafts"]}
         self.assertIn("the report also goes to the board", drafts["D2"]["statement"])
+        # The Twin only sees a summary of the draft: what it did not change stays.
+        self.assertTrue(drafts["D2"]["story"] and drafts["D2"]["acceptance_criteria"])
+        self.assertEqual(drafts["D2"]["turns"], ["T4"])
         self.assertEqual(len(drafts), 2)  # changed, not added
 
         r = self.client.post(self.url(cid, "/messages"), json={"text": "Reject D1, we use single sign-on"}).json()
