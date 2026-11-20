@@ -265,7 +265,8 @@ class Council:
                     discarded += 1
                     continue
                 requirement = {**requirement_format.normalize({**draft, "statement": final["statement"], "class": final["class"],
-                                                               "subtype": final["subtype"]}),
+                                                               "subtype": final["subtype"],
+                                                               **{k: final[k] for k in ("story", "constraint") if final.get(k)}}),
                                "topics": [draft["topic"]], "turns": draft["turns"], "links": final.get("links") or [],
                                "reason": final.get("motive") or "drafted from the meeting"}
                 if guidance:

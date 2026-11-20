@@ -189,10 +189,14 @@ Follow the recommendation when the utterances support it; reject it when it cont
 was said. Discard as duplicate when the draft says the same as a saved requirement, even in
 other words; save it and link it with "refines" only when it brings new information.
 LANGUAGE: keep "statement" in the language given in "language". Never translate.
+When the class you vote for is not the class of the draft, rewrite its card: an NFR has no user
+story but a constraint card {"quality", "scope", "measure"}; an FR has a story {"role", "goal",
+"benefit"} and no constraint card. Otherwise leave both null.
 
 Answer with a single JSON object:
 {"save": true, "statement": "...", "class": "FR" | "NFR", "subtype": null,
- "links": [{"kind": "depends_on", "target": "R2", "reason": "..."}], "motive": "why you decided this"}
+ "links": [{"kind": "depends_on", "target": "R2", "reason": "..."}], "motive": "why you decided this",
+ "constraint": null, "story": null}
 """
 
 # The Critic returned a draft: fix only what it lists (see agents/critic.py).
@@ -388,6 +392,11 @@ class DigitalTwin(Agent):
                 "links": [l for l in (answer.get("links") or []) if isinstance(l, dict) and l.get("target")],
                 "motive": answer.get("motive", ""),
             }
+            # A new class needs the other card (an NFR is a constraint card, an FR a story).
+            if cls != draft["class"]:
+                card = answer.get("constraint") if cls == "NFR" else answer.get("story")
+                if isinstance(card, dict):
+                    decision["constraint" if cls == "NFR" else "story"] = card
         self.send(TWIN, "decision", {
             "draft": draft["index"], "save": decision["save"], "recommendation": recommendation["action"],
             "text": ("save: " if decision["save"] else "discard: ") + decision["motive"],

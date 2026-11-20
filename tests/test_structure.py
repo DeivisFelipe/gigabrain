@@ -64,6 +64,59 @@ class TestConstraintCards(unittest.TestCase):
         self.assertTrue(findings(fr, "structure.story_format"))  # an FR still needs its story
 
 
+class Scripted(SimulatedProvider):
+    """Answers some roles the way the real model did in the DeepSeek run of 2026-11-20."""
+
+    def __init__(self, answers: dict):
+        super().__init__()
+        self.answers = {role: list(items) for role, items in answers.items()}
+        self.calls = []
+
+    def complete_json(self, role, system, messages, temperature=None):
+        self.calls.append(role)
+        if self.answers.get(role):
+            return self.answers[role].pop(0)
+        return super().complete_json(role, system, messages, temperature)
+
+
+class TestWhatTheRealModelDid(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+
+    def context(self, provider):
+        from gigabrain.council import open_context
+        ctx = open_context(self.tmp.name, provider, validation=False)
+        self.addCleanup(ctx.db.close)
+        return ctx
+
+    def test_a_draft_reclassified_as_nfr_gets_its_constraint_card(self):
+        from gigabrain.agents import DigitalTwin
+        provider = Scripted({"twin_decide": [{"save": True, "statement": "The system shall keep the data encrypted.",
+                                              "class": "NFR", "subtype": "SE", "links": [], "motive": "security quality",
+                                              "constraint": CONSTRAINT, "story": None}]})
+        twin = DigitalTwin(self.context(provider))
+        draft = {"index": 0, "statement": "The system shall keep the data encrypted.", "class": "FR", "subtype": None,
+                 "turns": ["T2"]}
+        decision = twin.decide(draft, {"action": "fix", "class": "NFR", "subtype": "SE", "links": [], "motive": "m"}, {"T2": "x"})
+        self.assertEqual((decision["class"], decision["constraint"]), ("NFR", CONSTRAINT))
+        self.assertNotIn("story", decision)
+
+    def test_epics_in_another_language_are_asked_again(self):
+        from gigabrain import epics
+        german = {"epics": [{"title": "Sichere Datenbankverwaltung", "description": "Die Datenbank wird sicher verwaltet und "
+                             "gespeichert, mit einem Hauptpasswort und allen Gruppen und Untergruppen", "requirements": ["R1"]}]}
+        english = {"epics": [{"title": "Secure database", "description": "The database is kept safe with the master password "
+                              "and it can be opened and saved by the user", "requirements": ["R1"]}]}
+        provider = Scripted({"twin_epics": [german, english]})
+        ctx = self.context(provider)
+        ctx.db.save_requirement({"title": "Encrypt", "statement": "The system shall keep the data encrypted when it is stored.",
+                                 "kind": "business", "topics": ["security"], "class": "NFR"}, None)
+        stored = epics.organize(ctx)
+        self.assertEqual(provider.calls.count("twin_epics"), 2)
+        self.assertEqual(stored[0]["title"], "Secure database")
+
+
 class TestEpicsAndReport(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()

@@ -54,7 +54,8 @@ def _save(ctx: Context, project: dict, draft: dict, final: dict, recommendation:
           check: dict | None = None) -> tuple[dict, dict]:
     content = {k: draft.get(k) for k in REQUIREMENT_FIELDS}
     content.update({"statement": final["statement"], "class": final["class"], "subtype": final["subtype"],
-                    "topics": [draft["topic"]], "turns": draft["turns"]})
+                    "topics": [draft["topic"]], "turns": draft["turns"],
+                    **{k: final[k] for k in ("story", "constraint") if final.get(k)}})
     content = {**requirement_format.normalize(content), "topics": [draft["topic"]], "turns": draft["turns"]}
     sources = [{"kind": "conversation", "ref": ctx.conversation_id}]
     sources += [{"kind": "turn", "ref": t, "project": project["id"]} for t in draft["turns"]]

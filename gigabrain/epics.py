@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from .agents.base import Agent, as_json
 from .database import Database
+from .language import spoken_language, written_in
 from .messages import REPOSITORY, TWIN
 
 ORGANIZE_PROMPT = """\
@@ -29,7 +30,8 @@ Rules:
   epic of its own, like "Platform qualities".
 - Prefer few, meaningful epics: between 2 and 9 for most projects; one requirement alone is an
   epic only when it fits no other.
-- LANGUAGE: write "title" and "description" in the language of the requirements.
+- LANGUAGE: write "title" and "description" in the language given in "language" (the language of
+  the requirements). Never translate.
 
 Answer with a single JSON object:
 {"epics": [{"title": "short name", "description": "the capability in one sentence",
@@ -43,9 +45,16 @@ class EpicOrganizer(Agent):
     def organize(self, requirements: list[dict]) -> list[dict]:
         """Ask the model for the epics, then make sure every requirement is in exactly one."""
         known = [r["id"] for r in requirements]
-        answer = self.call_llm("twin_epics", ORGANIZE_PROMPT, [{"role": "user", "content": as_json({"requirements": [
+        language = spoken_language(" ".join(r["content"].get("statement") or "" for r in requirements)) or "English"
+        request = [{"role": "user", "content": as_json({"language": language, "requirements": [
             {"id": r["id"], "title": r["title"], "statement": r["content"].get("statement"), "class": r["content"].get("class"),
-             "subtype": r["content"].get("subtype"), "topics": r["topics"]} for r in requirements]})}])
+             "subtype": r["content"].get("subtype"), "topics": r["topics"]} for r in requirements]})}]
+        answer = self.call_llm("twin_epics", ORGANIZE_PROMPT, request)
+        titles = " ".join(f"{e.get('title', '')}. {e.get('description', '')}" for e in answer.get("epics") or [])
+        if titles.strip() and not written_in(titles, language):  # once more, as the Twin does in a conversation
+            answer = self.call_llm("twin_epics", ORGANIZE_PROMPT, request + [
+                {"role": "assistant", "content": as_json(answer)},
+                {"role": "user", "content": f"The titles and descriptions are not in {language}. Give the same epics in {language}."}])
         epics, placed = [], set()
         for raw in answer.get("epics") or []:
             ids = [i for i in (raw.get("requirements") or []) if i in known and i not in placed]
