@@ -30,6 +30,7 @@ new one; the history is still available.
 
 from __future__ import annotations
 
+import os
 import threading
 from contextlib import asynccontextmanager
 from dataclasses import dataclass, field
@@ -51,6 +52,9 @@ from .validation_read import validation_of
 # Messages the PO sees on screen; the rest happens behind the scenes (agents talking).
 CONVERSATION_KINDS = ("po_request", "approval", "question_to_po", "proposal", "confirmation")
 CONVERSATION_MODES = ("after_meeting", "in_meeting")
+# Longest PO message, in characters. A whole meeting of the dataset has up to ~21 thousand,
+# so the default fits two long meetings pasted at once.
+MAX_MESSAGE_CHARS = int(os.environ.get("GIGABRAIN_MAX_MESSAGE_CHARS", "50000"))
 
 
 # ---------------------------------------------------------------------------- models
@@ -71,7 +75,8 @@ class NewConversation(BaseModel):
 
 
 class NewMessage(BaseModel):
-    text: str = Field(..., min_length=1, max_length=8000, description="What the PO wrote.",
+    text: str = Field(..., min_length=1, max_length=MAX_MESSAGE_CHARS,
+                      description=f"What the PO wrote (up to {MAX_MESSAGE_CHARS} characters).",
                       examples=["I want to notify the customer when the payment is confirmed"])
 
 
